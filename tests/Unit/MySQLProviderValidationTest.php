@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\StorageException;
 use App\Providers\MySQLProvider;
 
 /**
@@ -15,17 +16,17 @@ $baseConfig = [
     'database' => 'qualquer',
     'user'     => 'qualquer',
     'password' => 'x',
-    'table'    => 'entries',
+    'table'    => 'executions',
 ];
 
 it('rejeita nome de tabela com caractere inválido', function () use ($baseConfig) {
-    new MySQLProvider([...$baseConfig, 'table' => 'entries; DROP TABLE x']);
-})->throws(RuntimeException::class, 'Nome de tabela MySQL inválido');
+    new MySQLProvider([...$baseConfig, 'table' => 'executions; DROP TABLE x']);
+})->throws(StorageException::class, 'Nome de tabela MySQL inválido');
 
 it('rejeita nome de tabela vazio', function () use ($baseConfig) {
     new MySQLProvider([...$baseConfig, 'table' => '']);
-})->throws(RuntimeException::class);
+})->throws(StorageException::class);
 
 it('exige database e user na configuração', function () use ($baseConfig) {
     new MySQLProvider([...$baseConfig, 'database' => '', 'user' => '']);
-})->throws(RuntimeException::class, 'Configuração do MySQL incompleta');
+})->throws(StorageException::class, 'Configuração do MySQL incompleta');

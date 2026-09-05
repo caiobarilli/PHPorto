@@ -11,10 +11,7 @@
     </testsuites>
     <source>
         <include>
-            <directory>config</directory>
-            <directory>providers</directory>
-            <directory>services</directory>
-            <directory>exceptions</directory>
+            <directory>src</directory>
         </include>
     </source>
 </phpunit>

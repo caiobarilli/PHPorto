@@ -3,11 +3,18 @@
 # outra máquina instale exatamente as mesmas versões.
 /vendor/
 
-# Configuração local com credenciais. O .env.example é o versionado.
+# Configuração local com credenciais e caminhos da máquina de quem usa.
+# O .env.example é o versionado.
 /.env
 
-# Banco do provider padrão (SQLite): arquivo de dados, não código.
+# O banco: contém TUDO que foi executado nesta máquina — comandos, saídas e
+# caminhos reais, em texto puro. Nunca entra no repositório.
 /storage/*.sqlite
+
+# Pasta de trabalho do motor: o cmd.sh descartável guarda o último comando
+# executado, e os .tmp guardam a saída.
+/files/*
+!/files/.gitkeep
 
 # Caches das ferramentas.
 /.phpstan-cache/

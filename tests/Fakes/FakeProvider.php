@@ -4,53 +4,51 @@ declare(strict_types=1);
 
 namespace Tests\Fakes;
 
-use App\Exceptions\DuplicateEntryException;
+use App\Domain\Execution;
 use App\Providers\DatabaseProviderInterface;
 
 /**
- * Provider em memória para testes unitários do EntryService.
+ * Provider em memória para os testes de unidade do ExecutionLogService.
  *
  * Implementa o mesmo contrato dos providers reais sem nenhuma dependência de
- * rede ou banco. Guarda os valores inseridos para inspeção nos testes e
- * permite forçar respostas/erros para exercitar os caminhos do serviço.
+ * rede ou banco, e guarda o que recebeu para inspeção.
  */
 final class FakeProvider implements DatabaseProviderInterface
 {
-    /** @var list<string> valores efetivamente inseridos via insertEntry() */
+    /** @var list<Execution> na ordem em que chegaram */
     public array $inserted = [];
 
-    /** Quantas vezes entryExists() foi chamado. */
-    public int $existsCalls = 0;
+    public int $clearCalls = 0;
 
-    /**
-     * @param list<string> $existing valores que já "existem" na base
-     */
-    public function __construct(private array $existing = [])
+    /** Carimba o created_at como um banco faria, para o teste ver o retorno. */
+    public function insert(Execution $execution): Execution
     {
-    }
-
-    public function insertEntry(string $entry): void
-    {
-        if (in_array($entry, $this->existing, true)) {
-            throw new DuplicateEntryException('Este registro já existe.');
-        }
-
-        $this->inserted[] = $entry;
-        $this->existing[] = $entry;
-    }
-
-    public function entryExists(string $entry): bool
-    {
-        $this->existsCalls++;
-
-        return in_array($entry, $this->existing, true);
-    }
-
-    public function findAll(): array
-    {
-        return array_map(
-            static fn (string $entry): array => ['entry' => $entry, 'created_at' => null],
-            $this->existing
+        $stored = new Execution(
+            command: $execution->command,
+            output: $execution->output,
+            exitCode: $execution->exitCode,
+            durationMs: $execution->durationMs,
+            kind: $execution->kind,
+            timedOut: $execution->timedOut,
+            createdAt: $execution->createdAt ?? gmdate(DATE_ATOM),
         );
+
+        $this->inserted[] = $stored;
+
+        return $stored;
+    }
+
+    public function recent(int $limit = 100): array
+    {
+        return array_slice(array_reverse($this->inserted), 0, $limit);
+    }
+
+    public function clear(): int
+    {
+        $this->clearCalls++;
+        $n = count($this->inserted);
+        $this->inserted = [];
+
+        return $n;
     }
 }

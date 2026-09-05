@@ -1,0 +1,221 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Providers;
+
+use App\Domain\Execution;
+use App\Domain\ExecutionKind;
+use App\Exceptions\StorageException;
+use DateTimeImmutable;
+use DateTimeZone;
+use PDO;
+use PDOException;
+
+/**
+ * Implementação MySQL (PDO) do registro de execuções.
+ *
+ * Espelha o contrato dos outros dois: todo detalhe do driver fica confinado
+ * aqui e, para fora, só a DatabaseProviderInterface e a StorageException.
+ */
+final class MySQLProvider implements DatabaseProviderInterface
+{
+    private PDO $pdo;
+
+    /** Nome da tabela, já validado contra a whitelist de identificadores. */
+    private string $table;
+
+    /**
+     * @param array{host: string, port: string, database: string, user: string, password: string, table: string} $config
+     */
+    public function __construct(array $config)
+    {
+        if ($config['database'] === '' || $config['user'] === '') {
+            throw new StorageException('Configuração do MySQL incompleta (database/user).');
+        }
+
+        $this->table = $this->sanitizeIdentifier($config['table']);
+
+        $dsn = sprintf(
+            'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
+            $config['host'],
+            $config['port'],
+            $config['database']
+        );
+
+        try {
+            $this->pdo = new PDO($dsn, $config['user'], $config['password'], [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES   => false,
+            ]);
+            $this->ensureTable();
+        } catch (PDOException $e) {
+            throw new StorageException('Falha ao inicializar o MySQL: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    public function insert(Execution $execution): Execution
+    {
+        try {
+            $stmt = $this->pdo->prepare(
+                "INSERT INTO `{$this->table}`
+                    (command, output, exit_code, duration_ms, kind, timed_out)
+                 VALUES (:command, :output, :exit_code, :duration_ms, :kind, :timed_out)"
+            );
+            $stmt->execute([
+                'command'     => $execution->command,
+                'output'      => $execution->output,
+                'exit_code'   => $execution->exitCode,
+                'duration_ms' => $execution->durationMs,
+                'kind'        => $execution->kind->value,
+                'timed_out'   => $execution->timedOut ? 1 : 0,
+            ]);
+
+            // Pelo id, não pelo conteúdo: dois registros idênticos no mesmo
+            // segundo são legítimos aqui.
+            return $this->readBack((int) $this->pdo->lastInsertId(), $execution);
+        } catch (PDOException $e) {
+            throw new StorageException('Falha ao gravar a execução: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * Devolve o registro com o created_at que o banco atribuiu. Falha na
+     * leitura de volta devolve o que foi gravado: o dado ESTÁ no banco, e
+     * perder a data é menos grave que perder a confirmação da gravação.
+     */
+    private function readBack(int $id, Execution $fallback): Execution
+    {
+        $stmt = $this->pdo->prepare("SELECT created_at FROM `{$this->table}` WHERE id = :id");
+        $stmt->execute(['id' => $id]);
+        $createdAt = $this->formatDate($stmt->fetchColumn());
+
+        if ($createdAt === null) {
+            return $fallback;
+        }
+
+        return new Execution(
+            command: $fallback->command,
+            output: $fallback->output,
+            exitCode: $fallback->exitCode,
+            durationMs: $fallback->durationMs,
+            kind: $fallback->kind,
+            timedOut: $fallback->timedOut,
+            createdAt: $createdAt,
+        );
+    }
+
+    public function recent(int $limit = 100): array
+    {
+        try {
+            $stmt = $this->pdo->prepare(
+                "SELECT command, output, exit_code, duration_ms, kind, timed_out, created_at
+                   FROM `{$this->table}`
+                  ORDER BY created_at DESC, id DESC
+                  LIMIT :limit"
+            );
+            $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $rows = [];
+            foreach ($stmt->fetchAll() as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+
+                // O PDO devolve chaves mistas para o analisador; normaliza para
+                // string antes de entregar ao hydrate, que trabalha por nome.
+                $assoc = [];
+                foreach ($row as $key => $value) {
+                    $assoc[(string) $key] = $value;
+                }
+
+                $rows[] = $this->hydrate($assoc);
+            }
+
+            return $rows;
+        } catch (PDOException $e) {
+            throw new StorageException('Falha ao listar as execuções: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    public function clear(): int
+    {
+        try {
+            return (int) $this->pdo->exec("DELETE FROM `{$this->table}`");
+        } catch (PDOException $e) {
+            throw new StorageException('Falha ao limpar as execuções: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function hydrate(array $row): Execution
+    {
+        $command  = $row['command'] ?? '';
+        $output   = $row['output'] ?? '';
+        $exitRaw  = $row['exit_code'] ?? null;
+        $duration = $row['duration_ms'] ?? 0;
+        $timedOut = $row['timed_out'] ?? 0;
+
+        return new Execution(
+            command: is_string($command) ? $command : '',
+            output: is_string($output) ? $output : '',
+            // O nulo é preservado como nulo: 0 significa sucesso, null significa
+            // que não houve código de saída. Um cast cru colapsaria os dois.
+            exitCode: is_numeric($exitRaw) ? (int) $exitRaw : null,
+            durationMs: is_numeric($duration) ? (int) $duration : 0,
+            kind: ExecutionKind::fromStorage($row['kind'] ?? null),
+            timedOut: is_numeric($timedOut) ? (int) $timedOut === 1 : $timedOut === true,
+            createdAt: $this->formatDate($row['created_at'] ?? null),
+        );
+    }
+
+    /** Cria a tabela se não existir. Idempotente. Sem UNIQUE: ver a interface. */
+    private function ensureTable(): void
+    {
+        $this->pdo->exec(
+            "CREATE TABLE IF NOT EXISTS `{$this->table}` (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                command MEDIUMTEXT NOT NULL,
+                output MEDIUMTEXT NOT NULL,
+                exit_code INT NULL,
+                duration_ms INT NOT NULL DEFAULT 0,
+                kind VARCHAR(16) NOT NULL DEFAULT 'comando',
+                timed_out TINYINT(1) NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_created_at (created_at, id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+    }
+
+    /**
+     * Converte o created_at do MySQL ('YYYY-MM-DD HH:MM:SS', UTC) em ISO 8601.
+     * Tolera ausência.
+     */
+    private function formatDate(mixed $value): ?string
+    {
+        if (!is_string($value) || $value === '') {
+            return null;
+        }
+
+        $date = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $value, new DateTimeZone('UTC'));
+
+        return $date ? $date->format(DATE_ATOM) : $value;
+    }
+
+    /**
+     * O nome da tabela vem de env e não pode ser bind param (identificador,
+     * não valor). Restringe a [A-Za-z0-9_] para evitar SQL injection.
+     */
+    private function sanitizeIdentifier(string $name): string
+    {
+        if ($name === '' || preg_match('/^[A-Za-z0-9_]+$/', $name) !== 1) {
+            throw new StorageException("Nome de tabela MySQL inválido: {$name}");
+        }
+
+        return $name;
+    }
+}

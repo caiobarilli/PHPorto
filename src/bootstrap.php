@@ -7,7 +7,7 @@ declare(strict_types=1);
  *
  * Responsável por: autoload do Composer, carregar o .env, montar a config
  * e instanciar o provider de banco a partir de DB_PROVIDER (factory). Tudo
- * acima dele (index.php) recebe um EntryService pronto.
+ * acima dele (index.php) recebe um ExecutionLogService pronto.
  */
 
 use App\Config\Config;
@@ -15,13 +15,13 @@ use App\Providers\DatabaseProviderInterface;
 use App\Providers\MongoProvider;
 use App\Providers\MySQLProvider;
 use App\Providers\SQLiteProvider;
-use App\Services\EntryService;
+use App\Services\ExecutionLogService;
 use Dotenv\Dotenv;
 
-require __DIR__.'/vendor/autoload.php';
+require dirname(__DIR__) . '/vendor/autoload.php';
 
 // Carrega o .env (não falha se ausente — produção pode usar env reais do SO).
-Dotenv::createImmutable(__DIR__)->safeLoad();
+Dotenv::createImmutable(dirname(__DIR__))->safeLoad();
 
 $config = Config::load();
 
@@ -47,5 +47,5 @@ return [
     'config' => $config,
     // Lazy: só conecta no banco quando chamado (no POST), para que CORS e
     // preflight OPTIONS respondam mesmo se o banco estiver indisponível.
-    'makeService' => static fn (): EntryService => new EntryService($makeProvider()),
+    'makeService' => static fn (): ExecutionLogService => new ExecutionLogService($makeProvider()),
 ];

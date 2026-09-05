@@ -1,0 +1,123 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * PHPorto — front controller.
+ *
+ * Recebe um comando pelo navegador, executa dentro da distro do WSL, devolve a
+ * saída e guarda o registro no banco.
+ *
+ * Sobe com:  php -S 127.0.0.1:4001 -t public public/router.php
+ *
+ * O -t public NÃO é detalhe da linha de comando: é a defesa principal. Este
+ * diretório é o ÚNICO servido pela web. src/, storage/, files/ e o .env ficam
+ * fora dele, então não existe URL que os alcance — o 404 vem de não haver o
+ * que servir, não de uma regra ter lembrado de proibir.
+ *
+ * Antes desta separação, o diretório servido era a raiz do projeto, e a única
+ * defesa era uma expressão regular acertar todos os casos: /src/Config/Config.php
+ * não é dotfile e passaria por qualquer regra escrita para dotfiles. Defende-se
+ * com geografia o que não se deve defender com regex.
+ *
+ * O router.php continua, como segunda camada e como despachante das rotas.
+ * O motivo completo está no docblock dele.
+ *
+ * E só 127.0.0.1. Nunca 0.0.0.0, nunca o IP da rede, nunca atrás de proxy:
+ * esta página executa comando arbitrário com os privilégios do usuário do WSL
+ * e não tem autenticação, por desenho. Exposta na rede, é acesso remoto
+ * irrestrito para quem alcançar a porta.
+ */
+
+use App\Http\Api;
+use App\Http\Pages;
+use App\Http\Respond;
+use App\Services\ExecutionLogService;
+use App\Wsl\Distro;
+
+/**
+ * A forma vem escrita por extenso porque um arquivo de script não tem onde
+ * pendurar um @phpstan-import-type — o alias AppConfig vive no docblock da
+ * classe Config. Se esta forma divergir de lá, o PHPStan acusa na primeira
+ * passagem, que é o comportamento desejado.
+ *
+ * @var array{
+ *     config: array{
+ *         db_provider: string,
+ *         cors_origin: string,
+ *         mongo: array{uri: string, database: string, collection: string},
+ *         mysql: array{host: string, port: string, database: string, user: string, password: string, table: string},
+ *         sqlite: array{path: string, table: string},
+ *         wsl: array{root: string, distro: string, timeout: int},
+ *         tz: string,
+ *         dashboard_enabled: bool,
+ *         api_enabled: bool
+ *     },
+ *     makeService: callable(): ExecutionLogService
+ * } $app
+ */
+$app = require dirname(__DIR__) . '/src/bootstrap.php';
+
+mb_internal_encoding('UTF-8');
+
+$config = $app['config'];
+
+date_default_timezone_set($config['tz']);
+
+// O router já resolveu e validou o caminho; o fallback existe para quem
+// executar o index.php diretamente (outro servidor, ou teste).
+$path = $_SERVER['PHPORTO_PATH'] ?? null;
+
+if (!is_string($path) || $path === '') {
+    $uri    = $_SERVER['REQUEST_URI'] ?? '/';
+    $parsed = parse_url(is_string($uri) ? $uri : '/', PHP_URL_PATH);
+    $path   = is_string($parsed) && $parsed !== '' ? $parsed : '/';
+
+    if ($path !== '/' && str_ends_with($path, '/')) {
+        $path = rtrim($path, '/');
+    }
+}
+
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$method = is_string($method) ? strtoupper($method) : 'GET';
+
+$filesDir    = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'files';
+$distro      = new Distro($config['wsl']['distro']);
+$makeService = Closure::fromCallable($app['makeService']);
+
+// --- API -------------------------------------------------------------------
+if (str_starts_with($path, '/api/')) {
+    if (!$config['api_enabled']) {
+        // 404 e não 403: a flag desligada não deve revelar que existe algo ali.
+        Respond::notFound();
+    }
+
+    $api = new Api(
+        wsl: $config['wsl'],
+        corsOrigin: $config['cors_origin'],
+        distroChecker: $distro,
+        makeService: $makeService,
+        filesDir: $filesDir,
+    );
+
+    $api->handle($path, $method);
+}
+
+// --- Telas -----------------------------------------------------------------
+if (!$config['dashboard_enabled']) {
+    Respond::notFound();
+}
+
+$pages = new Pages(
+    config: $config,
+    distroChecker: $distro,
+    makeService: $makeService,
+    filesDir: $filesDir,
+);
+
+match ($path) {
+    '/'       => $pages->home(),
+    '/config' => $pages->config(),
+    '/wsl'    => $pages->wsl($method),
+    default   => Respond::notFound(),
+};

@@ -15,14 +15,8 @@
     },
     "autoload": {
         "psr-4": {
-            "App\\": "."
-        },
-        "classmap": [
-            "config/",
-            "providers/",
-            "services/",
-            "exceptions/"
-        ]
+            "App\\": "src/"
+        }
     },
     "autoload-dev": {
         "psr-4": {
