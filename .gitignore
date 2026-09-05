@@ -1,0 +1,18 @@
+# Dependências instaladas pelo Composer. O composer.lock É versionado —
+# isto é aplicação (type: project), não biblioteca: o lock garante que
+# outra máquina instale exatamente as mesmas versões.
+/vendor/
+
+# Configuração local com credenciais. O .env.example é o versionado.
+/.env
+
+# Banco do provider padrão (SQLite): arquivo de dados, não código.
+/storage/*.sqlite
+
+# Caches das ferramentas.
+/.phpstan-cache/
+/.php-cs-fixer.cache
+
+# Estado local do Claude Code: as skills em .claude/skills/ SÃO versionadas
+# (são documentação do projeto), o estado de máquina não.
+/.claude/settings.local.json

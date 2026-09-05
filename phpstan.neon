@@ -1,0 +1,19 @@
+parameters:
+    level: max
+    phpVersion: 80500
+    paths:
+        - config
+        - providers
+        - services
+        - exceptions
+        - index.php
+        - router.php
+        - bootstrap.php
+    excludePaths:
+        - tests
+        - vendor
+        # mongodb/mongodb está em "suggest" (não instalado por padrão); sem a lib
+        # o PHPStan não resolve as classes MongoDB\*. A checagem class_exists() no
+        # construtor protege o runtime. Reincluir se a lib voltar ao require-dev.
+        - providers/MongoProvider.php
+    tmpDir: .phpstan-cache
