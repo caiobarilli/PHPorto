@@ -140,6 +140,53 @@ use App\Http\Respond;
   .kv dt { color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding-top: 2px; }
   .kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
   .provider { font: 600 22px/1 var(--sans); letter-spacing: -0.01em; }
+
+  /* ---- Interruptor da /config -------------------------------------------
+     Um checkbox de verdade por baixo: o rótulo continua clicável, o teclado
+     continua funcionando e o formulário continua enviando sem JS. O visual
+     é só a pintura do :checked. */
+  .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .switch .trilho {
+    width: 40px; height: 22px; border-radius: 999px; background: #d6d9de;
+    position: relative; transition: background .16s ease; flex: none;
+  }
+  .switch .trilho::after {
+    content: ""; position: absolute; top: 3px; left: 3px;
+    width: 16px; height: 16px; border-radius: 50%; background: #fff;
+    transition: transform .16s ease; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+  }
+  .switch input:checked + .trilho { background: #16a34a; }
+  .switch input:checked + .trilho::after { transform: translateX(18px); }
+  .switch input:focus-visible + .trilho { outline: 2px solid var(--btn); outline-offset: 2px; }
+  .switch .rotulo { font-size: 13px; }
+
+  .linha-acao { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+  .nota-estado { color: var(--mut); font-size: 12px; margin: 10px 0 0; }
+  .nota-estado strong { color: var(--ink); font-weight: 600; }
+
+  /* ---- Modal ------------------------------------------------------------
+     <dialog> nativo em vez de confirm(): o confirm() do navegador não cabe
+     texto de risco, não aceita uma segunda opção dentro dele, e trava a
+     página inteira enquanto está aberto. */
+  dialog {
+    border: 1px solid var(--line); border-radius: 12px; padding: 0;
+    max-width: 460px; width: calc(100% - 32px); color: var(--ink); background: var(--bg);
+    box-shadow: 0 12px 40px rgba(0,0,0,.18);
+  }
+  dialog::backdrop { background: rgba(15,17,21,.45); }
+  .modal-corpo { padding: 20px 20px 4px; }
+  .modal-corpo h3 { margin: 0 0 10px; font-size: 15px; }
+  .modal-corpo p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--mut); }
+  .modal-corpo p strong { color: var(--ink); }
+  .modal-corpo code { background: #f1f3f5; padding: 1px 5px; border-radius: 4px; font-family: var(--mono); font-size: 12px; }
+  .modal-opcao {
+    display: flex; gap: 9px; align-items: flex-start; font-size: 13px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; margin-bottom: 12px; cursor: pointer;
+  }
+  .modal-opcao input { margin: 2px 0 0; flex: none; }
+  .modal-opcao span { color: var(--mut); display: block; margin-top: 3px; font-size: 12px; }
+  .modal-acoes { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 20px 20px; }
 </style>
 </head>
 <body>

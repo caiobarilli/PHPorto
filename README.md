@@ -93,7 +93,7 @@ tests/
 | rota | o que faz |
 | --- | --- |
 | `/` | Home. Dois botões: configuração e WSL. O botão do WSL desabilita quando o WSL não está instalado ou a distro do `.env` não aparece em `wsl -l -q`, dizendo qual dos dois é. |
-| `/config` | Mostra o banco ativo. **Só leitura** — editar significaria escrever no `.env` pela web, num projeto que já executa comando arbitrário, para ganhar pouco: quem sobe a ferramenta tem o arquivo aberto no editor. |
+| `/config` | Mostra o banco ativo, alterna a API e restaura de fábrica. O `.env` **nunca é reescrito** pela web: o que a tela alterna vai para `storage/flags.json`. |
 | `/wsl` | O executor: entrada, saída, card de anexos e a tabela de registros. |
 
 O botão do WSL responde **"dá para usar"**, não "está rodando agora". A VM dormir
@@ -107,6 +107,34 @@ O botão do WSL responde **"dá para usar"**, não "está rodando agora". A VM d
 | `PHPORTO_API_ENABLED` | `false` | `/api/*` responde 404 |
 
 404 e não 403: 403 confirmaria que existe algo desligado ali.
+
+### Ligar pela tela, sem editar arquivo
+
+`PHPORTO_API_ENABLED` também se alterna em `/config`. O que a tela grava vai
+para `storage/flags.json`, e a precedência é:
+
+```
+storage/flags.json  vence  .env  vence  o padrão do código
+```
+
+O `.env` continua somente-leitura para o processo web — ele guarda credencial de
+banco, e uma escrita malsucedida ali custa caro demais para o que se ganha.
+Ligar abre um aviso explicando que a rota executa comando e que a proteção dela
+é só a checagem de origem; desligar não pergunta nada, porque desligar reduz
+superfície.
+
+Se o `flags.json` sumir ou corromper, tudo volta ao `.env` — e o `.env` do
+projeto traz a API desligada. A falha cai para o lado seguro por construção.
+
+### Restaurar configurações de fábrica
+
+Ainda em `/config`. Apaga o `flags.json`, e a configuração volta a ser
+exatamente o que o `.env` diz. No mesmo aviso há uma opção para **apagar também
+o arquivo do banco** — o `storage/database.sqlite` inteiro, com todo o
+histórico, sem desfazer. O app recria o banco vazio no acesso seguinte.
+
+A opção só aparece no sqlite: nos outros bancos "apagar" seria dropar um schema
+que a ferramenta não criou e que pode não ser só dela.
 
 ## A API
 

@@ -70,7 +70,12 @@ final class Config
             ],
             'tz'                => self::timezone(),
             'dashboard_enabled' => self::bool('PHPORTO_DASHBOARD_ENABLED', true),
-            'api_enabled'       => self::bool('PHPORTO_API_ENABLED', false),
+            // A tela pode alternar esta. Flags vence o .env, que vence o
+            // default — ver a nota de precedência em Flags.
+            'api_enabled'       => Flags::get(
+                'api_enabled',
+                self::bool('PHPORTO_API_ENABLED', false)
+            ),
         ];
     }
 
@@ -122,6 +127,18 @@ final class Config
      * coisa mantém o padrão do parâmetro. Assim um valor digitado errado não
      * liga silenciosamente uma superfície que nasce desligada.
      */
+    /**
+     * O que o .env sozinho diria sobre a API, ignorando o que a tela gravou.
+     *
+     * A /config mostra as duas respostas lado a lado: sem isso, uma chave
+     * ligada pela tela pareceria vir do arquivo, e a pessoa procuraria no
+     * .env um valor que não está lá.
+     */
+    public static function apiEnabledFromEnv(): bool
+    {
+        return self::bool('PHPORTO_API_ENABLED', false);
+    }
+
     private static function bool(string $key, bool $default): bool
     {
         $value = strtolower(self::env($key, ''));

@@ -11,6 +11,11 @@
 # caminhos reais, em texto puro. Nunca entra no repositório.
 /storage/*.sqlite
 
+# O que a tela de configuração alternou nesta máquina. É estado local, não
+# projeto: quem clona deve receber os padrões do .env.example, com a API
+# desligada, e não a decisão que alguém tomou em outro computador.
+/storage/flags.json
+
 # Pasta de trabalho do motor: o cmd.sh descartável guarda o último comando
 # executado, e os .tmp guardam a saída.
 /files/*

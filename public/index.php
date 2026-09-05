@@ -117,7 +117,7 @@ $pages = new Pages(
 
 match ($path) {
     '/'       => $pages->home(),
-    '/config' => $pages->config(),
+    '/config' => $pages->config($method),
     '/wsl'    => $pages->wsl($method),
     default   => Respond::notFound(),
 };

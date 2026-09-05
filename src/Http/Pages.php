@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http;
 
+use App\Config\Config;
+use App\Config\Flags;
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
 use App\Services\ExecutionLogService;
@@ -63,8 +65,12 @@ final class Pages
         Respond::html('PHPorto', Respond::render('home.php', $view));
     }
 
-    public function config(): never
+    public function config(string $method): never
     {
+        if ($method === 'POST') {
+            $this->handleConfigPost();
+        }
+
         $provider = $this->config['db_provider'];
         $details  = match ($provider) {
             'sqlite' => [
@@ -83,12 +89,109 @@ final class Pages
             default => [],
         };
 
+        // Só o sqlite mora em arquivo. Nos outros bancos "apagar" seria dropar
+        // um schema que a ferramenta não criou e pode não ser só dela — a tela
+        // esconde a opção em vez de oferecer um botão que recusa depois.
+        $dbPath = $provider === 'sqlite' ? $this->config['sqlite']['path'] : '';
+
         $view = new ConfigView(
             provider: $provider === '' ? 'desconhecido' : $provider,
             details: $details,
+            apiEnabled: $this->config['api_enabled'],
+            apiFromEnv: Config::apiEnabledFromEnv(),
+            apiOverridden: array_key_exists('api_enabled', Flags::all()),
+            corsOrigin: $this->config['cors_origin'],
+            dbPath: $dbPath,
+            dbExists: $dbPath !== '' && is_file($dbPath),
+            notice: $this->takeFlash(),
+            csrfToken: Csrf::token(),
+            csrfField: Csrf::fieldName(),
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view));
+    }
+
+    /**
+     * POST da /config: alternar a API e restaurar de fábrica.
+     *
+     * Mesmo contrato do /wsl — token de uso único e 303 — porque esta rota
+     * passou a ter efeito colateral, e um F5 sobre um POST que apaga banco é
+     * exatamente o acidente que o PRG existe para impedir.
+     */
+    private function handleConfigPost(): never
+    {
+        if (!Csrf::consume()) {
+            $this->flash(
+                'Requisição recusada: o token desta página já foi usado, ou está ausente. '
+                . 'Recarregue a página e tente de novo.'
+            );
+            Respond::redirect('/config');
+        }
+
+        $action = $_POST['acao'] ?? '';
+        $action = is_string($action) ? $action : '';
+
+        if ($action === 'api') {
+            $ligar = ($_POST['api_enabled'] ?? '') === '1';
+
+            if (!Flags::set('api_enabled', $ligar)) {
+                $this->flash(
+                    'Não foi possível gravar ' . Flags::path() . '. '
+                    . 'Verifique a permissão de escrita da pasta storage/.'
+                );
+                Respond::redirect('/config');
+            }
+
+            $this->flash(
+                $ligar
+                    ? 'API ligada. /api/executions passa a executar comandos, aceitando apenas a origem '
+                        . $this->config['cors_origin'] . '.'
+                    : 'API desligada. /api/executions volta a responder 404.'
+            );
+            Respond::redirect('/config');
+        }
+
+        if ($action === 'fabrica') {
+            $apagarBanco = ($_POST['apagar_banco'] ?? '') === '1';
+            $partes      = [];
+
+            $partes[] = Flags::reset()
+                ? 'configurações voltaram ao .env'
+                : 'FALHA ao apagar ' . Flags::path();
+
+            if ($apagarBanco) {
+                $partes[] = $this->dropSqliteFile();
+            }
+
+            $this->flash('Restauração de fábrica: ' . implode('; ', $partes) . '.');
+            Respond::redirect('/config');
+        }
+
+        $this->flash('Ação desconhecida.');
+        Respond::redirect('/config');
+    }
+
+    /**
+     * Apaga o arquivo do sqlite. Devolve a frase que vai para o aviso.
+     *
+     * Não fecha conexão antes porque não há: o service é lazy e este caminho
+     * nunca o instancia. O arquivo é recriado vazio no próximo acesso ao banco.
+     */
+    private function dropSqliteFile(): string
+    {
+        if ($this->config['db_provider'] !== 'sqlite') {
+            return 'banco não apagado (só o sqlite mora em arquivo)';
+        }
+
+        $path = $this->config['sqlite']['path'];
+
+        if (!is_file($path)) {
+            return 'não havia arquivo de banco para apagar';
+        }
+
+        return @unlink($path)
+            ? 'banco apagado (' . basename($path) . ')'
+            : 'FALHA ao apagar o banco: o arquivo pode estar aberto por outro processo';
     }
 
     public function wsl(string $method): never
