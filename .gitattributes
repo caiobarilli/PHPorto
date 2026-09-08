@@ -1,0 +1,12 @@
+# Uma regra só, de propósito. O repositório se apoia no core.autocrlf=true do
+# Windows, e uma regra ampla (text=auto) renormalizaria a árvore inteira.
+#
+# O .ps1 é o único arquivo versionado cujo FIM DE LINHA e BOM são requisito de
+# execução, não estilo: o PowerShell 5.1 — o único instalado nesta máquina, sem
+# pwsh — lê script sem BOM como ANSI, e acentuação vira lixo. Com -text o git
+# grava e devolve os bytes como estão, então o CRLF com BOM sobrevive a clone,
+# checkout e a quem tiver autocrlf diferente.
+#
+# É a regra INVERSA da do cmd.sh (LF, sem BOM), que não é versionado porque o
+# ScriptBuilder o gera a cada execução. Ver .claude/skills/php-wsl-interop.
+*.ps1 -text
