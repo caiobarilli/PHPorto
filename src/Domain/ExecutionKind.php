@@ -17,6 +17,20 @@ enum ExecutionKind: string
     case Anexo = 'anexo';
 
     /**
+     * Execução do lado Windows, via winutil-cli em PowerShell elevado.
+     *
+     * Mora na MESMA tabela dos outros dois: um comando no WSL e uma ação no
+     * Windows são o mesmo fato — algo foi executado nesta máquina, com saída,
+     * código de saída e duração. Duas tabelas obrigariam a tela a decidir de
+     * qual ler antes de saber o que aconteceu.
+     *
+     * O caso novo não invalida registro antigo: fromStorage() já tolerava
+     * valor desconhecido, e nenhum registro gravado antes deste caso existir
+     * carrega este valor.
+     */
+    case Windows = 'windows';
+
+    /**
      * Converte o que veio do banco, tolerando ausência.
      *
      * Registro gravado por versão anterior pode não ter o campo; nesse caso

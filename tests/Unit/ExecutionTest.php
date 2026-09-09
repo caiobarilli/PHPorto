@@ -23,7 +23,9 @@ it('distingue exit code 0 de exit code ausente', function () {
 it('ExecutionKind vai e volta pelo valor de armazenamento', function () {
     expect(ExecutionKind::Comando->value)->toBe('comando')
         ->and(ExecutionKind::Anexo->value)->toBe('anexo')
-        ->and(ExecutionKind::fromStorage('anexo'))->toBe(ExecutionKind::Anexo);
+        ->and(ExecutionKind::Windows->value)->toBe('windows')
+        ->and(ExecutionKind::fromStorage('anexo'))->toBe(ExecutionKind::Anexo)
+        ->and(ExecutionKind::fromStorage('windows'))->toBe(ExecutionKind::Windows);
 });
 
 it('ExecutionKind cai em Comando para valor ausente ou desconhecido', function (mixed $bruto) {

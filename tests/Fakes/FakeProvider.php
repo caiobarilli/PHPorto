@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Fakes;
 
 use App\Domain\Execution;
+use App\Domain\ExecutionKind;
 use App\Providers\DatabaseProviderInterface;
 
 /**
@@ -38,17 +39,42 @@ final class FakeProvider implements DatabaseProviderInterface
         return $stored;
     }
 
-    public function recent(int $limit = 100): array
+    /**
+     * Filtra ANTES de aplicar o limite, como os providers reais fazem na
+     * query. Um fake que limitasse primeiro e filtrasse depois passaria em
+     * teste e esconderia justamente o defeito que o filtro no banco evita.
+     */
+    public function recent(int $limit = 100, ?ExecutionKind $kind = null): array
     {
-        return array_slice(array_reverse($this->inserted), 0, $limit);
+        $todas = array_reverse($this->inserted);
+
+        if ($kind !== null) {
+            $todas = array_values(array_filter(
+                $todas,
+                static fn (Execution $e): bool => $e->kind === $kind
+            ));
+        }
+
+        return array_slice($todas, 0, $limit);
     }
 
-    public function clear(): int
+    public function clear(?ExecutionKind $kind = null): int
     {
         $this->clearCalls++;
-        $n = count($this->inserted);
-        $this->inserted = [];
 
-        return $n;
+        if ($kind === null) {
+            $n              = count($this->inserted);
+            $this->inserted = [];
+
+            return $n;
+        }
+
+        $antes          = count($this->inserted);
+        $this->inserted = array_values(array_filter(
+            $this->inserted,
+            static fn (Execution $e): bool => $e->kind !== $kind
+        ));
+
+        return $antes - count($this->inserted);
     }
 }

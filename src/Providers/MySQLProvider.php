@@ -106,16 +106,27 @@ final class MySQLProvider implements DatabaseProviderInterface
         );
     }
 
-    public function recent(int $limit = 100): array
+    public function recent(int $limit = 100, ?ExecutionKind $kind = null): array
     {
         try {
+            // Espelha o SQLite, inclusive na ausência de índice por tipo:
+            // aqui não existe CREATE INDEX IF NOT EXISTS, então criá-lo em
+            // tabela já existente exigiria consultar o INFORMATION_SCHEMA a
+            // cada abertura de conexão para um ganho que este volume não tem.
+            $where = $kind === null ? '' : ' WHERE kind = :kind';
+
             $stmt = $this->pdo->prepare(
                 "SELECT command, output, exit_code, duration_ms, kind, timed_out, created_at
-                   FROM `{$this->table}`
+                   FROM `{$this->table}`{$where}
                   ORDER BY created_at DESC, id DESC
                   LIMIT :limit"
             );
             $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+
+            if ($kind !== null) {
+                $stmt->bindValue('kind', $kind->value, PDO::PARAM_STR);
+            }
+
             $stmt->execute();
 
             $rows = [];
@@ -140,10 +151,19 @@ final class MySQLProvider implements DatabaseProviderInterface
         }
     }
 
-    public function clear(): int
+    public function clear(?ExecutionKind $kind = null): int
     {
         try {
-            return (int) $this->pdo->exec("DELETE FROM `{$this->table}`");
+            $where = $kind === null ? '' : ' WHERE kind = :kind';
+            $stmt  = $this->pdo->prepare("DELETE FROM `{$this->table}`{$where}");
+
+            if ($kind !== null) {
+                $stmt->bindValue('kind', $kind->value, PDO::PARAM_STR);
+            }
+
+            $stmt->execute();
+
+            return $stmt->rowCount();
         } catch (PDOException $e) {
             throw new StorageException('Falha ao limpar as execuções: ' . $e->getMessage(), 0, $e);
         }

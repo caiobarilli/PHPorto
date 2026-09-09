@@ -110,18 +110,32 @@ final class SQLiteProvider implements DatabaseProviderInterface
         );
     }
 
-    public function recent(int $limit = 100): array
+    public function recent(int $limit = 100, ?ExecutionKind $kind = null): array
     {
         try {
+            // O filtro entra na query e não depois: ver a nota na interface.
+            // Não há índice por (kind, created_at) de propósito — a consulta
+            // usa o índice de ordenação e descarta por tipo enquanto varre,
+            // parando no LIMIT, e num log local de uma pessoa isso não paga um
+            // segundo índice. No MySQL pagaria ainda menos: lá não existe
+            // CREATE INDEX IF NOT EXISTS, então criá-lo em tabela já existente
+            // exigiria consultar o INFORMATION_SCHEMA a cada abertura.
+            $where = $kind === null ? '' : ' WHERE kind = :kind';
+
             // Desempate por id: duas execuções no mesmo segundo compartilham o
             // created_at, e sem isso a ordem entre elas ficaria a critério do banco.
             $stmt = $this->pdo->prepare(
                 "SELECT command, output, exit_code, duration_ms, kind, timed_out, created_at
-                   FROM \"{$this->table}\"
+                   FROM \"{$this->table}\"{$where}
                   ORDER BY created_at DESC, id DESC
                   LIMIT :limit"
             );
             $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
+
+            if ($kind !== null) {
+                $stmt->bindValue('kind', $kind->value, PDO::PARAM_STR);
+            }
+
             $stmt->execute();
 
             $rows = [];
@@ -146,10 +160,22 @@ final class SQLiteProvider implements DatabaseProviderInterface
         }
     }
 
-    public function clear(): int
+    public function clear(?ExecutionKind $kind = null): int
     {
         try {
-            return (int) $this->pdo->exec("DELETE FROM \"{$this->table}\"");
+            // prepare() nos dois casos, e não exec() no caminho sem filtro: com
+            // parâmetro o exec() não serve, e manter dois mecanismos para a
+            // mesma operação é onde um deles fica para trás numa mudança futura.
+            $where = $kind === null ? '' : ' WHERE kind = :kind';
+            $stmt  = $this->pdo->prepare("DELETE FROM \"{$this->table}\"{$where}");
+
+            if ($kind !== null) {
+                $stmt->bindValue('kind', $kind->value, PDO::PARAM_STR);
+            }
+
+            $stmt->execute();
+
+            return $stmt->rowCount();
         } catch (PDOException $e) {
             throw new StorageException('Falha ao limpar as execuções: ' . $e->getMessage(), 0, $e);
         }

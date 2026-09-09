@@ -7,14 +7,17 @@ use App\Domain\ExecutionKind;
 use App\Services\ExecutionLogService;
 use Tests\Fakes\FakeProvider;
 
-function exec_(string $command = 'ls -la', int $durationMs = 12): Execution
-{
+function exec_(
+    string $command = 'ls -la',
+    int $durationMs = 12,
+    ExecutionKind $kind = ExecutionKind::Comando,
+): Execution {
     return new Execution(
         command: $command,
         output: "total 0\n",
         exitCode: 0,
         durationMs: $durationMs,
-        kind: ExecutionKind::Comando,
+        kind: $kind,
         timedOut: false,
     );
 }
@@ -100,4 +103,43 @@ it('record() preserva os demais campos no retorno', function () {
     expect($gravado->command)->toBe('git log')
         ->and($gravado->durationMs)->toBe(4321)
         ->and($gravado->exitCode)->toBe(0);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Repasse do filtro por tipo
+|--------------------------------------------------------------------------
+|
+| O serviço é o único caminho das telas até os providers: sem o repasse, o
+| filtro existiria nos três drivers e nenhuma tela alcançaria. Estes testes
+| rodam sempre — não dependem de banco nenhum.
+|
+*/
+
+it('recent() repassa o tipo ao provider e devolve só aquele tipo', function () {
+    $provider = new FakeProvider();
+    $service  = new ExecutionLogService($provider);
+    $service->record(exec_('um comando'));
+    $service->record(exec_('uma acao', 12, ExecutionKind::Windows));
+
+    $lidas = $service->recent(100, ExecutionKind::Windows);
+
+    expect($lidas)->toHaveCount(1)
+        ->and($lidas[0]->command)->toBe('uma acao')
+        ->and($service->recent(100))->toHaveCount(2);
+});
+
+it('recent() valida o limite mesmo com tipo informado', function () {
+    (new ExecutionLogService(new FakeProvider()))->recent(0, ExecutionKind::Windows);
+})->throws(InvalidArgumentException::class);
+
+it('clear() repassa o tipo e não leva os outros', function () {
+    $provider = new FakeProvider();
+    $service  = new ExecutionLogService($provider);
+    $service->record(exec_('um comando'));
+    $service->record(exec_('uma acao', 12, ExecutionKind::Windows));
+
+    expect($service->clear(ExecutionKind::Windows))->toBe(1)
+        ->and($service->recent(100))->toHaveCount(1)
+        ->and($service->recent(100)[0]->kind)->toBe(ExecutionKind::Comando);
 });

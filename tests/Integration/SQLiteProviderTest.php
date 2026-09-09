@@ -182,3 +182,114 @@ it('insert() devolve o registro certo mesmo com dois idênticos no mesmo segundo
         ->and($segundo->output)->toBe('saida B')
         ->and($p->recent())->toHaveCount(2);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Filtro por tipo
+|--------------------------------------------------------------------------
+|
+| Os três tipos moram na mesma tabela, e cada tela mostra a última execução
+| DELA. Estes testes exigem a separação nos dois sentidos: ler só o tipo
+| pedido, e apagar só o tipo pedido.
+|
+| O SQLite é o único dos três drivers com cobertura real nesta máquina — os
+| de MySQL e Mongo dependem de servidor e são pulados sem ele.
+|
+*/
+
+/** Grava um registro de cada tipo, do mais antigo para o mais novo. */
+function tresTipos(SQLiteProvider $p): void
+{
+    $p->insert(novaExecucao('um comando', kind: ExecutionKind::Comando));
+    $p->insert(novaExecucao('um anexo', kind: ExecutionKind::Anexo));
+    $p->insert(novaExecucao('uma acao do windows', kind: ExecutionKind::Windows));
+}
+
+it('recent() SEM filtro continua devolvendo todos os tipos', function () {
+    // Guarda de compatibilidade: quem já chamava recent($limit) não pode
+    // mudar de comportamento por causa do parâmetro novo.
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    tresTipos($p);
+
+    expect($p->recent())->toHaveCount(3);
+});
+
+it('recent() filtrado devolve só o tipo pedido', function (ExecutionKind $kind, string $esperado) {
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    tresTipos($p);
+
+    $lidas = $p->recent(100, $kind);
+
+    expect($lidas)->toHaveCount(1)
+        ->and($lidas[0]->command)->toBe($esperado)
+        ->and($lidas[0]->kind)->toBe($kind);
+})->with([
+    [ExecutionKind::Comando, 'um comando'],
+    [ExecutionKind::Anexo, 'um anexo'],
+    [ExecutionKind::Windows, 'uma acao do windows'],
+]);
+
+it('recent() FILTRA ANTES DE APLICAR O LIMITE', function () {
+    // Este é o teste que derruba um filtro feito em PHP depois da consulta.
+    // A execução do Windows é a mais ANTIGA, com cinco comandos na frente
+    // dela: quem lesse "as N mais recentes" e filtrasse na memória devolveria
+    // lista VAZIA, existindo registro no banco — e nada na tela explicaria.
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    $p->insert(novaExecucao('uma acao do windows', kind: ExecutionKind::Windows));
+    foreach (range(1, 5) as $i) {
+        $p->insert(novaExecucao('comando ' . $i));
+    }
+
+    $lidas = $p->recent(1, ExecutionKind::Windows);
+
+    expect($lidas)->toHaveCount(1)
+        ->and($lidas[0]->command)->toBe('uma acao do windows');
+});
+
+it('recent() filtrado devolve lista vazia quando não há daquele tipo', function () {
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    $p->insert(novaExecucao('só comando'));
+
+    expect($p->recent(100, ExecutionKind::Windows))->toBe([]);
+});
+
+it('CLEAR DE UM TIPO NÃO LEVA O OUTRO JUNTO', function () {
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    tresTipos($p);
+
+    $apagados = $p->clear(ExecutionKind::Windows);
+
+    expect($apagados)->toBe(1)
+        ->and($p->recent())->toHaveCount(2)
+        ->and($p->recent(100, ExecutionKind::Windows))->toBe([])
+        ->and($p->recent(100, ExecutionKind::Comando))->toHaveCount(1)
+        ->and($p->recent(100, ExecutionKind::Anexo))->toHaveCount(1);
+});
+
+it('clear() SEM filtro continua apagando tudo', function () {
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    tresTipos($p);
+
+    expect($p->clear())->toBe(3)
+        ->and($p->recent())->toBe([]);
+});
+
+it('clear() de um tipo ausente devolve zero e não apaga nada', function () {
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    $p->insert(novaExecucao('só comando'));
+
+    expect($p->clear(ExecutionKind::Windows))->toBe(0)
+        ->and($p->recent())->toHaveCount(1);
+});
+
+it('grava e relê o tipo windows sem perder o valor', function () {
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    $p->insert(novaExecucao('winutil -Action audit', 'ok', 0, 8123, ExecutionKind::Windows));
+
+    $lido = $p->recent()[0];
+
+    expect($lido->kind)->toBe(ExecutionKind::Windows)
+        ->and($lido->kind->value)->toBe('windows')
+        ->and($lido->command)->toBe('winutil -Action audit')
+        ->and($lido->durationMs)->toBe(8123);
+});

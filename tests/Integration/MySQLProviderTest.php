@@ -157,3 +157,46 @@ it('clear() esvazia e devolve quantos foram apagados', function () {
     expect($p->clear())->toBe(2)
         ->and($p->recent())->toBe([]);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Filtro por tipo
+|--------------------------------------------------------------------------
+|
+| Mesmas exigências dos testes do SQLite, contra o driver do MySQL. Só rodam
+| com MYSQL_TEST_* exportado e servidor de pé; sem isso o beforeEach pula
+| tudo neste arquivo. A cobertura real do filtro está no SQLite.
+|
+*/
+
+it('recent() sem filtro devolve todos os tipos, e filtrado devolve só o pedido', function () {
+    $p = new MySQLProvider(mysqlTestConfig());
+    $p->insert(novaExecucaoMysql('um comando', '', 0, 1, ExecutionKind::Comando));
+    $p->insert(novaExecucaoMysql('um anexo', '', 0, 1, ExecutionKind::Anexo));
+    $p->insert(novaExecucaoMysql('uma acao do windows', '', 0, 1, ExecutionKind::Windows));
+
+    expect($p->recent())->toHaveCount(3)
+        ->and($p->recent(100, ExecutionKind::Windows))->toHaveCount(1)
+        ->and($p->recent(100, ExecutionKind::Windows)[0]->command)->toBe('uma acao do windows');
+});
+
+it('recent() filtra antes de aplicar o limite', function () {
+    $p = new MySQLProvider(mysqlTestConfig());
+    $p->insert(novaExecucaoMysql('uma acao do windows', '', 0, 1, ExecutionKind::Windows));
+    foreach (range(1, 5) as $i) {
+        $p->insert(novaExecucaoMysql('comando ' . $i));
+    }
+
+    expect($p->recent(1, ExecutionKind::Windows))->toHaveCount(1)
+        ->and($p->recent(1, ExecutionKind::Windows)[0]->command)->toBe('uma acao do windows');
+});
+
+it('clear() de um tipo não leva o outro junto', function () {
+    $p = new MySQLProvider(mysqlTestConfig());
+    $p->insert(novaExecucaoMysql('um comando', '', 0, 1, ExecutionKind::Comando));
+    $p->insert(novaExecucaoMysql('uma acao do windows', '', 0, 1, ExecutionKind::Windows));
+
+    expect($p->clear(ExecutionKind::Windows))->toBe(1)
+        ->and($p->recent())->toHaveCount(1)
+        ->and($p->recent()[0]->kind)->toBe(ExecutionKind::Comando);
+});

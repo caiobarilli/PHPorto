@@ -81,11 +81,13 @@ final class MongoProvider implements DatabaseProviderInterface
         );
     }
 
-    public function recent(int $limit = 100): array
+    public function recent(int $limit = 100, ?ExecutionKind $kind = null): array
     {
         try {
             $cursor = $this->collection->find(
-                [],
+                // Filtro vazio é "todos": aqui o Mongo é mais direto que o SQL,
+                // porque a ausência de cláusula é o próprio documento vazio.
+                $kind === null ? [] : ['kind' => $kind->value],
                 [
                     // _id do Mongo é monotônico por processo e serve de desempate
                     // quando duas execuções caem no mesmo milissegundo.
@@ -108,10 +110,12 @@ final class MongoProvider implements DatabaseProviderInterface
         }
     }
 
-    public function clear(): int
+    public function clear(?ExecutionKind $kind = null): int
     {
         try {
-            return $this->collection->deleteMany([])->getDeletedCount();
+            return $this->collection
+                ->deleteMany($kind === null ? [] : ['kind' => $kind->value])
+                ->getDeletedCount();
         } catch (MongoDriverException $e) {
             throw new StorageException('Falha ao limpar as execuções: ' . $e->getMessage(), 0, $e);
         }
