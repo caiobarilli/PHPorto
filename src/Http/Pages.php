@@ -9,6 +9,7 @@ use App\Config\Flags;
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
 use App\Services\ExecutionLogService;
+use App\Win\Elevation;
 use App\Wsl\Distro;
 use App\Wsl\Runner;
 use App\Wsl\ScriptBuilder;
@@ -48,6 +49,7 @@ final class Pages
         private readonly Distro $distroChecker,
         private readonly Closure $makeService,
         private readonly string $filesDir,
+        private readonly Elevation $elevation,
     ) {
     }
 
@@ -94,6 +96,8 @@ final class Pages
         // esconde a opção em vez de oferecer um botão que recusa depois.
         $dbPath = $provider === 'sqlite' ? $this->config['sqlite']['path'] : '';
 
+        $win = $this->elevation->state();
+
         $view = new ConfigView(
             provider: $provider === '' ? 'desconhecido' : $provider,
             details: $details,
@@ -106,6 +110,10 @@ final class Pages
             notice: $this->takeFlash(),
             csrfToken: Csrf::token(),
             csrfField: Csrf::fieldName(),
+            win: $win,
+            winPath: $this->config['winutil']['path'],
+            winRetry: $this->takeWinRetry(),
+            winProofTimeout: Elevation::PROOF_TIMEOUT_S,
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view));
@@ -151,6 +159,10 @@ final class Pages
             Respond::redirect('/config');
         }
 
+        if ($action === 'powershell') {
+            $this->handlePowerShellToggle(($_POST['ps_enabled'] ?? '') === '1');
+        }
+
         if ($action === 'fabrica') {
             $apagarBanco = ($_POST['apagar_banco'] ?? '') === '1';
             $partes      = [];
@@ -168,6 +180,50 @@ final class Pages
         }
 
         $this->flash('Ação desconhecida.');
+        Respond::redirect('/config');
+    }
+
+    /**
+     * Liga ou desliga o PowerShell elevado.
+     *
+     * LIGAR NÃO É GRAVAR UM BOOLEANO: abre um processo elevado e espera a
+     * prova de que ele funciona. É por isso que este caminho pode demorar e
+     * pode falhar — e falhar aqui é resposta legítima, não erro do servidor:
+     * quem recusa a elevação é o Windows, a pedido de quem está na frente da
+     * máquina.
+     *
+     * DESLIGAR NÃO PERGUNTA e não pode falhar por permissão: o PHP não mata o
+     * processo elevado (medido: taskkill devolve "Acesso negado"), então
+     * deixa uma ordem em arquivo e o worker obedece no próprio laço.
+     */
+    private function handlePowerShellToggle(bool $ligar): never
+    {
+        if (!$ligar) {
+            $this->flash($this->elevation->disable());
+            Respond::redirect('/config');
+        }
+
+        $erro = $this->elevation->enable();
+
+        if ($erro === null) {
+            $estado = $this->elevation->state();
+
+            $this->flash(
+                'PowerShell elevado de pé'
+                . ($estado->psPid === null ? '' : ' (PID ' . $estado->psPid . ')')
+                . '. O botão WIN está liberado. Este estado é de vida curta: reiniciar o servidor desliga.'
+            );
+            Respond::redirect('/config');
+        }
+
+        // O botão "tentar novamente" aparece por causa desta marca, e ela é
+        // de uso único como o flash: recarregar a tela depois de ler o aviso
+        // não deve continuar oferecendo a retentativa de uma tentativa que
+        // já passou.
+        Csrf::start();
+        $_SESSION['phporto_win_retry'] = true;
+
+        $this->flash($erro);
         Respond::redirect('/config');
     }
 
@@ -344,6 +400,16 @@ final class Pages
     {
         Csrf::start();
         $_SESSION['phporto_flash'] = $message;
+    }
+
+    /** De uso único, como o flash: a retentativa é da tentativa que falhou. */
+    private function takeWinRetry(): bool
+    {
+        Csrf::start();
+        $marca = $_SESSION['phporto_win_retry'] ?? false;
+        unset($_SESSION['phporto_win_retry']);
+
+        return $marca === true;
     }
 
     private function takeFlash(): ?string

@@ -16,6 +16,12 @@
 # desligada, e não a decisão que alguém tomou em outro computador.
 /storage/flags.json
 
+# O marcador do PowerShell elevado. É o estado mais local que existe aqui: dois
+# PIDs de processos desta execução desta máquina. Versionar não seria só ruído
+# — quem clonasse receberia um marcador apontando para PIDs que na máquina dele
+# são de outros programas.
+/storage/win-elevation.json
+
 # Pasta de trabalho do motor: o cmd.sh descartável guarda o último comando
 # executado, e os .tmp guardam a saída.
 /files/*

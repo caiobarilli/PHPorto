@@ -33,6 +33,7 @@ use App\Http\Api;
 use App\Http\Pages;
 use App\Http\Respond;
 use App\Services\ExecutionLogService;
+use App\Win\Elevation;
 use App\Wsl\Distro;
 
 /**
@@ -49,6 +50,7 @@ use App\Wsl\Distro;
  *         mysql: array{host: string, port: string, database: string, user: string, password: string, table: string},
  *         sqlite: array{path: string, table: string},
  *         wsl: array{root: string, distro: string, timeout: int},
+ *         winutil: array{path: string},
  *         tz: string,
  *         dashboard_enabled: bool,
  *         api_enabled: bool
@@ -108,11 +110,19 @@ if (!$config['dashboard_enabled']) {
     Respond::notFound();
 }
 
+// O marcador da elevação mora em storage/, ao lado do flags.json, e não em
+// files/: files/ é área de trabalho descartável do que está executando, e o
+// marcador precisa sobreviver a uma limpeza dela.
 $pages = new Pages(
     config: $config,
     distroChecker: $distro,
     makeService: $makeService,
     filesDir: $filesDir,
+    elevation: new Elevation(
+        filesDir: $filesDir,
+        storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
+        winutilPath: $config['winutil']['path'],
+    ),
 );
 
 match ($path) {

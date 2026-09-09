@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http;
 
+use App\Win\ElevationState;
+
 /**
  * A tela /config.
  *
@@ -31,6 +33,17 @@ final readonly class ConfigView
      * @param string $corsOrigin    a única origem que a API aceita
      * @param string $dbPath        caminho do sqlite, vazio nos outros bancos
      * @param bool   $dbExists      se há arquivo de banco para apagar
+     *
+     * O interruptor de PowerShell é diferente em natureza do da API, e a tela
+     * precisa deixar isso visível. O da API grava um booleano em arquivo e
+     * sobrevive a reinício. Este abre um PROCESSO ELEVADO e vive só enquanto
+     * este php -S viver: reiniciar o servidor desliga, porque o marcador é
+     * amarrado ao PID dele. Prometer permanência aqui seria mentir.
+     *
+     * @param ElevationState $win             o que vale agora
+     * @param string         $winPath         PHPORTO_WINUTIL_PATH, para a tela mostrar
+     * @param bool           $winRetry        última tentativa falhou: oferece "tentar novamente"
+     * @param int            $winProofTimeout segundos que o POST espera pela prova
      */
     public function __construct(
         public string $provider,
@@ -44,6 +57,10 @@ final readonly class ConfigView
         public ?string $notice,
         public string $csrfToken,
         public string $csrfField,
+        public ElevationState $win,
+        public string $winPath,
+        public bool $winRetry,
+        public int $winProofTimeout,
     ) {
     }
 }

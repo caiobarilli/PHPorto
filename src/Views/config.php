@@ -68,6 +68,57 @@ use App\Http\Respond;
   </section>
 
   <section>
+    <h2>Windows — PowerShell elevado</h2>
+
+    <?php if (!$view->win->canTry()): ?>
+      <div class="alert alert-block"><?= Respond::e($view->win->blocked) ?></div>
+    <?php endif; ?>
+
+    <form method="post" id="form-ps">
+      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+      <input type="hidden" name="acao" value="powershell">
+
+      <div class="linha-acao">
+        <label class="switch">
+          <input type="checkbox" name="ps_enabled" value="1" id="ps-toggle"
+                 <?= $view->win->on ? 'checked' : '' ?>
+                 <?= $view->win->canTry() ? '' : 'disabled' ?>>
+          <span class="trilho"></span>
+          <span class="rotulo" id="ps-rotulo"><?= $view->win->on ? 'Ligado' : 'Desligado' ?></span>
+        </label>
+        <button type="submit" class="btn btn-sm" id="btn-salvar-ps"
+                <?= $view->win->canTry() ? '' : 'disabled' ?>>Salvar</button>
+
+        <?php if ($view->winRetry): ?>
+          <button type="submit" class="btn btn-sm btn-ghost" name="ps_enabled" value="1" id="btn-retentar">
+            Tentar novamente
+          </button>
+        <?php endif; ?>
+      </div>
+
+      <p class="nota-estado">
+        Libera o botão <strong>WIN</strong>, que executa as ações do
+        <code>winutil-cli</code> — e elas pedem Administrador.
+        <br>
+        <?php if ($view->win->on): ?>
+          De pé desde <strong><?= Respond::e($view->win->provedAt) ?></strong> (UTC), PID
+          <strong><?= (int) $view->win->psPid ?></strong>.
+        <?php elseif ($view->win->detail !== null): ?>
+          <strong><?= Respond::e($view->win->detail) ?></strong>
+        <?php endif; ?>
+        <br>
+        Estado de <strong>vida curta</strong>: reiniciar o servidor desliga. Não passa pelo
+        <code>flags.json</code> de propósito — aquele arquivo existe para sobreviver a reinício,
+        e aqui se quer o contrário.
+        <?php if ($view->winPath !== ''): ?>
+          <br>
+          Script: <code><?= Respond::e($view->winPath) ?></code>
+        <?php endif; ?>
+      </p>
+    </form>
+  </section>
+
+  <section>
     <h2>Restaurar configurações de fábrica</h2>
 
     <form method="post" id="form-fabrica">
@@ -110,6 +161,29 @@ use App\Http\Respond;
     </form>
   </section>
 </div>
+
+<dialog id="modal-ps">
+  <div class="modal-corpo">
+    <h3>Abrir um PowerShell com privilégio de Administrador?</h3>
+    <p>
+      Ligar não grava uma preferência: <strong>abre um processo elevado</strong> e espera a prova
+      de que ele funciona. O Windows pode pedir confirmação — se pedir e ninguém confirmar,
+      a tela avisa depois de <code><?= (int) $view->winProofTimeout ?> s</code>.
+    </p>
+    <p>
+      Enquanto estiver ligado, esse processo aceita as ações do <code>winutil-cli</code>
+      vindas desta tela. Ele <strong>obedece a uma lista fechada</strong> de ações e
+      parâmetros — o que a tela manda nunca é código.
+    </p>
+    <p>
+      Some ao reiniciar o servidor, e desligar aqui manda ele sair. Desligar não pergunta nada.
+    </p>
+  </div>
+  <div class="modal-acoes">
+    <button type="button" class="btn btn-ghost btn-sm" data-fechar>Cancelar</button>
+    <button type="button" class="btn btn-sm" id="btn-confirmar-ps">Abrir elevado</button>
+  </div>
+</dialog>
 
 <dialog id="modal-api">
   <div class="modal-corpo">
@@ -169,5 +243,42 @@ use App\Http\Respond;
   document.getElementById('btn-fabrica').addEventListener('click', function () {
     document.getElementById('modal-fabrica').showModal();
   });
+
+  // ---- Interruptor do PowerShell -----------------------------------------
+  // Mesmo padrão do da API: só LIGAR pergunta, porque desligar reduz
+  // superfície. A diferença é o que está do outro lado — aqui ligar abre um
+  // processo elevado, então o aviso diz isso com essas palavras.
+  var formPs   = document.getElementById('form-ps');
+  var psToggle = document.getElementById('ps-toggle');
+  var psRotulo = document.getElementById('ps-rotulo');
+  var modalPs  = document.getElementById('modal-ps');
+  var psLigado = psToggle.checked;
+  var psForcar = false;
+
+  psToggle.addEventListener('change', function () {
+    psRotulo.textContent = psToggle.checked ? 'Ligado' : 'Desligado';
+  });
+
+  formPs.addEventListener('submit', function (ev) {
+    // O "tentar novamente" envia ps_enabled=1 pelo próprio botão, com o
+    // interruptor ainda desligado — e ele não passa pelo modal, porque quem
+    // clica nele já leu o aviso na tentativa anterior.
+    if (psForcar) { return; }
+
+    if (psToggle.checked && !psLigado) {
+      ev.preventDefault();
+      modalPs.showModal();
+    }
+  });
+
+  document.getElementById('btn-confirmar-ps').addEventListener('click', function () {
+    modalPs.close();
+    formPs.submit();
+  });
+
+  var btnRetentar = document.getElementById('btn-retentar');
+  if (btnRetentar) {
+    btnRetentar.addEventListener('click', function () { psForcar = true; });
+  }
 })();
 </script>
