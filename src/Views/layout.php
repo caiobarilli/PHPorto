@@ -85,6 +85,22 @@ use App\Http\Respond;
     pointer-events: none;
   }
 
+  /* ---- Botão só de ícone -------------------------------------------------
+     A engrenagem se lê sem legenda; WIN e WSL não. O min-width de 132px do
+     .btn deixaria o ícone sozinho perdido no meio de um botão largo, então
+     este modificador o solta e deixa o botão quadrado. O nome fica no
+     aria-label, que é o que o leitor de tela anuncia. */
+  .btn-icone { min-width: 0; padding: 13px; }
+  .btn-icone svg { width: 21px; height: 21px; }
+
+  /* A home pode ter mais de um botão desabilitado, e cada um por um motivo
+     diferente — o WSL por não achar a distro, o WIN por não haver PowerShell
+     elevado. Uma nota por motivo, e não um parágrafo só tentando dizer os
+     dois. */
+  .home-notas { display: flex; flex-direction: column; gap: 7px; align-items: center; margin: 0; padding: 0; list-style: none; }
+  .home-notas li { color: var(--mut); font-size: 13px; max-width: 52ch; }
+  .home-notas strong { color: var(--ink); font-weight: 600; }
+
   /* ---- páginas internas ---- */
   .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
   .topbar { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }

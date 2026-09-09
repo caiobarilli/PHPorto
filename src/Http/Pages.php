@@ -59,12 +59,21 @@ final class Pages
     public function home(): never
     {
         $status = $this->distroChecker->status();
+        $win    = $this->elevation->state();
 
         $view = new HomeView(
             wslEnabled: $status->isUsable(),
             wslReason: $status->reason($this->config['wsl']['distro']),
             distro: $this->config['wsl']['distro'],
             status: $status,
+            winEnabled: $win->on,
+            // Três respostas, e a home só tem uma linha para dar: problema de
+            // configuração primeiro, porque é o que não se resolve clicando;
+            // depois o que houve com uma tentativa; e por último o estado
+            // normal de quem acabou de subir o servidor.
+            winReason: $win->blocked
+                ?? $win->detail
+                ?? 'O PowerShell elevado está desligado. Ligue na configuração — ele não sobrevive a reiniciar o servidor.',
         );
 
         Respond::html('PHPorto', Respond::render('home.php', $view));
