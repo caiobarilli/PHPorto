@@ -10,6 +10,9 @@ use App\Domain\Execution;
 use App\Domain\ExecutionKind;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
+use App\Win\JobChannel;
+use App\Win\PsRunner;
+use App\Win\WinAction;
 use App\Wsl\Distro;
 use App\Wsl\Runner;
 use App\Wsl\ScriptBuilder;
@@ -248,6 +251,193 @@ final class Pages
         return @unlink($path)
             ? 'banco apagado (' . basename($path) . ')'
             : 'FALHA ao apagar o banco: o arquivo pode estar aberto por outro processo';
+    }
+
+    /**
+     * A tela /win.
+     *
+     * Mesmo desenho do /wsl: POST executa e redireciona, GET mostra o
+     * registro mais recente do banco. A diferença é o filtro por tipo — sem
+     * ele, esta tela mostraria a última execução do WSL logo depois de
+     * alguém rodar uma ação do Windows.
+     */
+    public function win(string $method): never
+    {
+        if ($method === 'POST') {
+            $this->handleWinPost();
+        }
+
+        $rows   = [];
+        $failed = null;
+
+        try {
+            $rows = ($this->makeService)()->recent(self::ROWS, ExecutionKind::Windows);
+        } catch (Throwable $e) {
+            $failed = 'Não foi possível ler os registros: ' . $e->getMessage();
+        }
+
+        $view = new WinView(
+            rows: $rows,
+            result: $rows[0] ?? null,
+            blocked: $failed ?? $this->winBlockingReason(),
+            notice: $this->takeFlash(),
+            csrfToken: Csrf::token(),
+            csrfField: Csrf::fieldName(),
+            win: $this->elevation->state(),
+            winutilPath: $this->config['winutil']['path'],
+            timeout: $this->config['winutil']['timeout'],
+            tz: $this->config['tz'],
+            maxOutputBytes: PsRunner::MAX_OUTPUT_BYTES,
+            maxParamBytes: WinAction::MAX_PARAM_BYTES,
+        );
+
+        Respond::html('PHPorto — Windows', Respond::render('win.php', $view));
+    }
+
+    /**
+     * POST da /win: valida, manda para o worker elevado, registra, redireciona.
+     *
+     * A VALIDAÇÃO É AQUI E TAMBÉM LÁ. Esta é a primeira barreira, a que sabe
+     * escrever uma frase que a pessoa entende; a allowlist do worker é a
+     * tranca, e é ela que cobre quem escrever no arquivo de trabalho sem
+     * passar por esta tela.
+     */
+    private function handleWinPost(): never
+    {
+        if (!Csrf::consume()) {
+            $this->flash(
+                'Requisição recusada: o token desta página já foi usado, ou está ausente. '
+                . 'Cada envio vale uma execução — recarregue a página para enviar de novo.'
+            );
+            Respond::redirect('/win');
+        }
+
+        $acaoBruta = $_POST['acao'] ?? '';
+        $acaoBruta = is_string($acaoBruta) ? $acaoBruta : '';
+
+        if ($acaoBruta === 'limpar') {
+            try {
+                $n = ($this->makeService)()->clear(ExecutionKind::Windows);
+                $this->flash($n === 0 ? 'Não havia registro do Windows para apagar.' : $n . ' registro(s) do Windows apagado(s).');
+            } catch (Throwable $e) {
+                $this->flash('Falha ao limpar: ' . $e->getMessage());
+            }
+            Respond::redirect('/win');
+        }
+
+        $acao = WinAction::tryFrom($acaoBruta);
+
+        if ($acao === null) {
+            $this->flash('Ação desconhecida.');
+            Respond::redirect('/win');
+        }
+
+        $blocked = $this->winBlockingReason();
+
+        if ($blocked !== null) {
+            $this->flash($blocked);
+            Respond::redirect('/win');
+        }
+
+        // Só os campos que chegaram como texto: o resto não é entrada válida
+        // de formulário, e deixar passar viraria um TypeError lá dentro.
+        $entrada = [];
+        foreach ($_POST as $chave => $valor) {
+            if (is_string($chave) && is_string($valor)) {
+                $entrada[$chave] = $valor;
+            }
+        }
+
+        try {
+            $params = $acao->validate($entrada);
+        } catch (InvalidArgumentException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/win');
+        }
+
+        $nonce = $this->elevation->nonce();
+
+        if ($nonce === null) {
+            // Corrida real: o interruptor foi desligado entre o GET que
+            // desenhou o formulário e este POST.
+            $this->flash('O PowerShell elevado não está mais de pé. Ligue de novo na configuração.');
+            Respond::redirect('/win');
+        }
+
+        $canal = new JobChannel($this->filesDir);
+
+        try {
+            $run = $canal->dispatch($acao, $params, $nonce, $this->config['winutil']['timeout']);
+        } catch (RuntimeException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/win');
+        }
+
+        $execution = new Execution(
+            // O que se registra é a linha de comando EQUIVALENTE, e não o
+            // JSON do arquivo de trabalho: o log tem de dizer o que foi feito
+            // numa forma que a pessoa possa repetir no terminal.
+            command: self::describe($acao, $params),
+            output: $run->output,
+            exitCode: $run->exitCode,
+            durationMs: $run->durationMs,
+            kind: ExecutionKind::Windows,
+            timedOut: $run->timedOut,
+        );
+
+        try {
+            ($this->makeService)()->record($execution);
+        } catch (InvalidArgumentException $e) {
+            $this->flash('Registro recusado: ' . $e->getMessage());
+        } catch (Throwable $e) {
+            // A ação ACONTECEU; só o registro falhou. Numa tela que executa
+            // com privilégio de Administrador, dizer isso é o mínimo.
+            $this->flash('A ação executou, mas o registro falhou: ' . $e->getMessage());
+        }
+
+        Respond::redirect('/win');
+    }
+
+    /**
+     * A linha de comando equivalente, para o registro.
+     *
+     * @param array<string, string|int|bool> $params
+     */
+    private static function describe(WinAction $acao, array $params): string
+    {
+        $partes = ['winutil -Action ' . $acao->value];
+
+        foreach ($params as $nome => $valor) {
+            if (is_bool($valor)) {
+                if ($valor) {
+                    $partes[] = '-' . $nome;
+                }
+
+                continue;
+            }
+
+            $texto    = (string) $valor;
+            $partes[] = '-' . $nome . ' ' . (preg_match('/\s/', $texto) === 1 ? '"' . $texto . '"' : $texto);
+        }
+
+        return implode(' ', $partes);
+    }
+
+    /** O que impede executar uma ação do Windows agora, ou null. */
+    private function winBlockingReason(): ?string
+    {
+        $estado = $this->elevation->state();
+
+        if ($estado->blocked !== null) {
+            return $estado->blocked;
+        }
+
+        if (!$estado->on) {
+            return ($estado->detail ?? 'O PowerShell elevado está desligado.')
+                . ' Nada é executado sem ele: as ações do winutil-cli exigem Administrador.';
+        }
+
+        return null;
     }
 
     public function wsl(string $method): never

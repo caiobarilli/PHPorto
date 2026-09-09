@@ -272,7 +272,12 @@ final class Elevation
     public function disable(): string
     {
         $marcador = $this->readMarker();
-        @unlink($this->markerPath());
+
+        // is_file() antes: desligar sem nada ligado é caminho normal, e o
+        // unlink emitiria warning nele.
+        if (is_file($this->markerPath())) {
+            @unlink($this->markerPath());
+        }
 
         if (!$this->order(self::F_ORDEM_DESLIGAR)) {
             return 'Não foi possível escrever a ordem de desligar em ' . $this->filesDir

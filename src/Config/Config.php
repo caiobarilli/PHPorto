@@ -23,7 +23,7 @@ namespace App\Config;
  *     mysql: array{host: string, port: string, database: string, user: string, password: string, table: string},
  *     sqlite: array{path: string, table: string},
  *     wsl: array{root: string, distro: string, timeout: int},
- *     winutil: array{path: string},
+ *     winutil: array{path: string, timeout: int},
  *     tz: string,
  *     dashboard_enabled: bool,
  *     api_enabled: bool
@@ -33,6 +33,17 @@ final class Config
 {
     /** Piso do timeout. Ver a nota em .env.example: acordar a VM custa ~4,5 s. */
     public const MIN_TIMEOUT = 30;
+
+    /**
+     * Piso do timeout das ações do Windows.
+     *
+     * Piso mais alto que o do WSL porque o que roda do outro lado é outra
+     * coisa: um debloat mexe em 22 pacotes APPX e um install chama o winget,
+     * que baixa. Com valor baixo, a ação seria morta no meio de uma
+     * instalação — e uma instalação interrompida deixa o sistema num estado
+     * que a ferramenta não sabe descrever.
+     */
+    public const MIN_WINUTIL_TIMEOUT = 60;
 
     /**
      * @return AppConfig
@@ -74,7 +85,8 @@ final class Config
                 // default aqui seria um palpite sobre onde o outro projeto
                 // está na máquina de quem clonou, e a tela falharia por um
                 // caminho que ninguém escreveu.
-                'path' => self::env('PHPORTO_WINUTIL_PATH', ''),
+                'path'    => self::env('PHPORTO_WINUTIL_PATH', ''),
+                'timeout' => self::winutilTimeout(),
             ],
             'tz'                => self::timezone(),
             'dashboard_enabled' => self::bool('PHPORTO_DASHBOARD_ENABLED', true),
@@ -100,6 +112,26 @@ final class Config
         $raw = (int) self::env('PHPORTO_TIMEOUT', '120');
 
         return max(self::MIN_TIMEOUT, $raw);
+    }
+
+    /**
+     * Timeout das ações do Windows, com piso.
+     *
+     * O padrão é generoso (600 s) porque as ações longas do winutil são a
+     * regra, não a exceção: audit gera oito blocos, network captura pelo
+     * tempo que se pedir mais o relatório, install chama o winget e debloat
+     * percorre 22 pacotes. A espera é SÍNCRONA de propósito — é o que garante
+     * que o registro sempre chega ao banco.
+     *
+     * Este número atravessa o limite de execução do PHP: ver
+     * TIME_LIMIT_MARGIN_S na Elevation. O php -S corta em 30 s por padrão, e
+     * sem levantar isso nenhuma ação longa terminaria.
+     */
+    private static function winutilTimeout(): int
+    {
+        $raw = (int) self::env('PHPORTO_WINUTIL_TIMEOUT', '600');
+
+        return max(self::MIN_WINUTIL_TIMEOUT, $raw);
     }
 
     /** Fuso das datas. Valor inválido cai no padrão em vez de derrubar a página. */

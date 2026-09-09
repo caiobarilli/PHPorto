@@ -50,7 +50,7 @@ use App\Wsl\Distro;
  *         mysql: array{host: string, port: string, database: string, user: string, password: string, table: string},
  *         sqlite: array{path: string, table: string},
  *         wsl: array{root: string, distro: string, timeout: int},
- *         winutil: array{path: string},
+ *         winutil: array{path: string, timeout: int},
  *         tz: string,
  *         dashboard_enabled: bool,
  *         api_enabled: bool
@@ -129,5 +129,6 @@ match ($path) {
     '/'       => $pages->home(),
     '/config' => $pages->config($method),
     '/wsl'    => $pages->wsl($method),
+    '/win'    => $pages->win($method),
     default   => Respond::notFound(),
 };

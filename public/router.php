@@ -44,7 +44,7 @@ declare(strict_types=1);
  */
 
 /** Rotas exatas atendidas pelo front controller. */
-const PHPORTO_ROUTES = ['/', '/config', '/wsl'];
+const PHPORTO_ROUTES = ['/', '/config', '/wsl', '/win'];
 
 /** Prefixo da API; o front controller decide se ela está ligada. */
 const PHPORTO_API_PREFIX = '/api/';

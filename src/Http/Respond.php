@@ -20,6 +20,36 @@ final class Respond
     }
 
     /**
+     * A data de um registro, para exibição: dd/mm/aaaa hh:mm:ss no fuso dado.
+     *
+     * O QUE SE GRAVA CONTINUA SENDO UTC, e o schema não muda: a conversão é
+     * de exibição, e acontece o mais tarde possível. Guardar no fuso local
+     * pareceria mais simples e quebraria a comparação entre registros
+     * gravados antes e depois de uma mudança de horário.
+     *
+     * MORA AQUI, e não na view do Windows, porque o /wsl vai reusar: hoje ele
+     * imprime o UTC cru do banco, e essa correção já está enfileirada. Nascer
+     * com o auxiliar num lugar compartilhado é o que evita a segunda cópia.
+     *
+     * Valor ausente ou impossível de interpretar volta como veio — o log é
+     * prova, e inventar data seria pior que mostrar o valor estranho.
+     */
+    public static function dateTime(?string $utcIso, string $tz): string
+    {
+        if ($utcIso === null || trim($utcIso) === '') {
+            return '—';
+        }
+
+        try {
+            $data = new \DateTimeImmutable($utcIso, new \DateTimeZone('UTC'));
+
+            return $data->setTimezone(new \DateTimeZone($tz))->format('d/m/Y H:i:s');
+        } catch (\Exception) {
+            return $utcIso;
+        }
+    }
+
+    /**
      * Renderiza um template de views/ para string.
      *
      * O template recebe uma única variável, $view, tipada — é o que permite
