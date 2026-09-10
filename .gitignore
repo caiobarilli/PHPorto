@@ -34,3 +34,13 @@
 # Estado local do Claude Code: as skills em .claude/skills/ SÃO versionadas
 # (são documentação do projeto), o estado de máquina não.
 /.claude/settings.local.json
+
+# Binário da ação `memory`, baixado na primeira execução (482 KB). O
+# winutil-cli já o mantinha fora do repositório; a decisão não é nova, só não
+# foi desfeita. Ver src/Win/THIRD-PARTY.md.
+/src/Win/tools/WinMemoryCleaner.exe
+
+# Relatório JUnit que o `Invoke-Pester -CI` escreve. O -CI está lá pelo código
+# de saída (sem ele, teste falhando não derruba o `composer gate`); o XML é
+# subproduto.
+/testResults.xml

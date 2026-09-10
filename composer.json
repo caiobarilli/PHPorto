@@ -2,6 +2,7 @@
     "name": "phporto/phporto",
     "description": "Esqueleto PHP com provider de banco plugável (SQLite, MySQL, MongoDB).",
     "type": "project",
+    "license": "MIT",
     "require": {
         "php": "^8.5",
         "ext-json": "*",
@@ -34,7 +35,20 @@
         "test": "pest",
         "stan": "phpstan analyse",
         "cs-check": "php-cs-fixer fix --dry-run --diff",
-        "cs-fix": "php-cs-fixer fix"
+        "cs-check-lf": "@php tools/cs-check-lf.php",
+        "cs-fix": "php-cs-fixer fix",
+        "pester": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Invoke-Pester ./tests/Pester -CI\"",
+        "gate": [
+            "@test",
+            "@stan",
+            "@cs-check-lf",
+            "@pester"
+        ]
+    },
+    "scripts-descriptions": {
+        "cs-check-lf": "cs-check sobre cópia em LF — na árvore CRLF o cs-check acusa todo arquivo.",
+        "pester": "Testes PowerShell das ações do Windows (Windows + PS 5.1).",
+        "gate": "O portão: test, stan, cs-check-lf e pester. Não há CI; o portão é este comando."
     },
     "require-dev": {
         "pestphp/pest": "^3",

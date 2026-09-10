@@ -208,7 +208,43 @@ linha aparece como `cmd.sh: line 2`.
 ## Comandos
 
 ```bash
-composer test       # suíte Pest
-composer stan       # PHPStan (level max, phpVersion 8.5)
-composer cs-check   # PHP-CS-Fixer, sem escrever nada
+composer gate         # o portão inteiro: os quatro abaixo, em ordem
+
+composer test         # suíte Pest
+composer stan         # PHPStan (level max, phpVersion 8.5)
+composer cs-check-lf  # PHP-CS-Fixer sobre cópia em LF, sem escrever nada
+composer pester       # testes PowerShell das ações do Windows
+composer cs-fix       # PHP-CS-Fixer, escrevendo
 ```
+
+**Não há CI.** O portão é o `composer gate` que você roda. A maior parte das
+ações do Windows exige Administrador e mexe na máquina de verdade; num runner
+hospedado elas seriam puladas, e o verde seria sobre o que menos importa.
+
+Use `cs-check-lf`, não `cs-check`. A árvore de trabalho tem `.php` em CRLF
+(`core.autocrlf=true`) e o PSR-12 quer LF, então o `cs-check` direto acusa 37
+dos 53 arquivos, cada um com o arquivo inteiro no diff. Medido: desligar a
+regra `line_ending` **não** resolve — as regras que mexem no bloco de abertura
+reescrevem aquele trecho em LF e deixam o arquivo misto. O `cs-check-lf` roda o
+fixer sobre uma cópia convertida, e o que sobra no relatório é estilo de
+verdade. Detalhes em `tools/cs-check-lf.php`.
+
+## Licença
+
+MIT — texto em [`LICENSE`](LICENSE). A escolha é prática: `src/Win/lib/` e
+`src/Win/config/` já são MIT do CT Tech Group, e a mesma licença elimina
+conflito de cláusula na redistribuição. E a ausência de garantia, numa
+ferramenta que executa shell arbitrário como Administrador, não é formalidade:
+é o parágrafo que precisa estar escrito.
+
+## Créditos
+
+A tela `/win` executa ações que vieram do
+[WinUtil](https://github.com/ChrisTitusTech/winutil), de Chris Titus Tech, pelo
+fork sem interface gráfica `winutil-cli`. As partes copiadas estão em
+`src/Win/lib/` e `src/Win/config/`, sob **MIT © 2022 CT Tech Group LLC** — texto
+íntegro em [`src/Win/LICENSE.winutil`](src/Win/LICENSE.winutil), com o que veio
+de onde em [`src/Win/THIRD-PARTY.md`](src/Win/THIRD-PARTY.md).
+
+Binários usados pelas ações não são versionados: cada um é baixado na primeira
+execução. Os créditos deles estão no mesmo arquivo.
