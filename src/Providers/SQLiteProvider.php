@@ -56,20 +56,40 @@ final class SQLiteProvider implements DatabaseProviderInterface
 
     public function insert(Execution $execution): Execution
     {
+        // O created_at é do BANCO quando não vem preenchido, e é assim no
+        // caminho normal: a execução acabou de acontecer, e CURRENT_TIMESTAMP
+        // é mais confiável que o relógio do PHP.
+        //
+        // Vem preenchido só no recolhimento de execução órfã, e aí o padrão
+        // seria errado: carimbaria a hora em que a página foi aberta numa
+        // execução que terminou antes. Como a listagem ordena por created_at,
+        // isso poria a linha de ontem no topo do histórico de hoje.
+        $comData = $execution->createdAt !== null;
+
         try {
+            $colunas = 'command, output, exit_code, duration_ms, kind, timed_out'
+                . ($comData ? ', created_at' : '');
+            $valores = ':command, :output, :exit_code, :duration_ms, :kind, :timed_out'
+                . ($comData ? ', :created_at' : '');
+
             $stmt = $this->pdo->prepare(
-                "INSERT INTO \"{$this->table}\"
-                    (command, output, exit_code, duration_ms, kind, timed_out)
-                 VALUES (:command, :output, :exit_code, :duration_ms, :kind, :timed_out)"
+                "INSERT INTO \"{$this->table}\" ({$colunas}) VALUES ({$valores})"
             );
-            $stmt->execute([
+
+            $dados = [
                 'command'     => $execution->command,
                 'output'      => $execution->output,
                 'exit_code'   => $execution->exitCode,
                 'duration_ms' => $execution->durationMs,
                 'kind'        => $execution->kind->value,
                 'timed_out'   => $execution->timedOut ? 1 : 0,
-            ]);
+            ];
+
+            if ($comData) {
+                $dados['created_at'] = $execution->createdAt;
+            }
+
+            $stmt->execute($dados);
 
             // Lê de volta pelo id recém-gerado, e não pelo conteúdo: dois
             // registros idênticos no mesmo segundo são legítimos aqui, então

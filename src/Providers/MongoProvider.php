@@ -54,7 +54,23 @@ final class MongoProvider implements DatabaseProviderInterface
     {
         // Aqui a data é gerada por este código, não pelo servidor, então não há
         // leitura de volta: o valor devolvido é exatamente o que foi gravado.
+        //
+        // Quando vem preenchida, é recolhimento de execução órfã, e a hora tem
+        // de ser a de TÉRMINO — a listagem ordena por created_at, e o "agora"
+        // poria a linha de ontem no topo do histórico de hoje. Ver a nota no
+        // SQLiteProvider. Data ilegível cai no agora em vez de derrubar a
+        // gravação: perder a hora é menos grave que perder a execução.
         $createdAt = new UTCDateTime();
+
+        if ($execution->createdAt !== null) {
+            try {
+                $createdAt = new UTCDateTime(
+                    new \DateTimeImmutable($execution->createdAt, new \DateTimeZone('UTC'))
+                );
+            } catch (\Exception) {
+                $createdAt = new UTCDateTime();
+            }
+        }
 
         try {
             $this->collection->insertOne([

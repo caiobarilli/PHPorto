@@ -204,46 +204,178 @@ final class JobChannel
     }
 
     /**
+     * A nota que abre a saída de uma execução recolhida depois do fato.
+     *
+     * NO INÍCIO da saída, e não no fim: quem abre o histórico e vê uma linha
+     * com hora de ontem precisa saber, na primeira linha, por que ela apareceu
+     * só agora. É nota de TEXTO e não coluna nova — informação para quem lê, e
+     * não dado para consultar.
+     */
+    private const NOTA_RECOLHIDA = '[phporto] Execução recuperada depois do fato: ela terminou no '
+        . 'PowerShell elevado, mas o servidor saiu no meio da espera e a linha nunca foi gravada. '
+        . "Registrada agora, com a hora real de término.\n";
+
+    /**
+     * As execuções que terminaram e nunca viraram linha no banco.
+     *
+     * O PAR DE ARQUIVOS É A FILA, e não há tabela nem coluna de controle:
+     * gravar o resultado de um job é o mesmo ato que apagar o `win-out-<id>` e
+     * o `win-done-<id>`. Logo, par que sobrou é, por definição, trabalho
+     * concluído e não registrado. É o espírito do flags.json — a ausência do
+     * arquivo é a informação.
+     *
+     * SÓ PAR COMPLETO. `win-out` sem `win-done` é trabalho EM ANDAMENTO: o
+     * worker cria a saída antes de largar o filho, e o arquivo de conclusão é
+     * o único sinal de fim. Recolher a saída sozinha registraria como
+     * terminado algo que está rodando com privilégio de Administrador.
+     *
+     * NÃO FILTRA POR NONCE, e isso é o oposto do que o `send()` faz. Lá o
+     * nonce é guarda de obsolescência: job de ENTRADA de outra execução do
+     * servidor não deve ser executado. Aqui, na saída, o órfão que interessa é
+     * justamente o da execução anterior do servidor — é ele que perdeu o
+     * registro. Filtrar por nonce apagaria a razão de este método existir.
+     *
+     * NÃO HÁ CORRIDA A TRATAR. O `php -S` é um processo só e atende em série
+     * (medido: nove requisições, cinco em série e quatro simultâneas, todas com
+     * o mesmo PID), e o worker roda uma ação por vez. Ninguém está lendo estes
+     * arquivos ao mesmo tempo, e não há tranca a acrescentar aqui.
+     *
+     * @return list<OrphanRun> na ordem em que o disco devolveu
+     */
+    public function collectOrphans(): array
+    {
+        clearstatcache();
+
+        $orfas = [];
+
+        foreach (glob($this->filesDir . DIRECTORY_SEPARATOR . 'win-done-*.json') ?: [] as $arquivo) {
+            $done = self::parseDone($arquivo);
+
+            if ($done === null) {
+                continue;
+            }
+
+            // O par tem de estar completo: sem a saída não há execução a
+            // registrar, só um arquivo de conclusão perdido.
+            if (!is_file($this->path('win-out-' . $done['id'] . '.txt'))) {
+                continue;
+            }
+
+            [$saida, $truncada] = $this->readOutput($done['id']);
+
+            $orfas[] = new OrphanRun(
+                id: $done['id'],
+                acao: $done['acao'],
+                params: $done['params'],
+                result: new PsResult(
+                    output: self::NOTA_RECOLHIDA . $saida,
+                    exitCode: $done['exit'],
+                    timedOut: $done['nota'] === 'cancelado',
+                    durationMs: $done['ms'],
+                    truncated: $truncada,
+                ),
+                finishedAt: $done['fim'],
+            );
+        }
+
+        return $orfas;
+    }
+
+    /**
+     * Apaga o par de um órfão. Chamar SÓ DEPOIS de a linha estar no banco.
+     *
+     * Se o registro falhar, o par tem de ficar no disco: apagar antes de
+     * gravar transformaria uma falha de banco na perda definitiva da execução,
+     * que é exatamente o problema que o recolhimento existe para resolver.
+     */
+    public function discardOrphan(string $id): void
+    {
+        foreach (['win-done-' . $id . '.json', 'win-out-' . $id . '.txt'] as $nome) {
+            $caminho = $this->path($nome);
+
+            if (is_file($caminho)) {
+                @unlink($caminho);
+            }
+        }
+    }
+
+    /**
      * O arquivo de conclusão, se houver.
      *
-     * @return array{id: string, exit: int|null, ms: int, nota: string}|null
+     * @return array{id: string, exit: int|null, ms: int, nota: string, acao: string, params: array<string, string|int|bool>, fim: string|null}|null
      */
     private function findDone(): ?array
     {
         clearstatcache();
 
         foreach (glob($this->filesDir . DIRECTORY_SEPARATOR . 'win-done-*.json') ?: [] as $arquivo) {
-            $raw = @file_get_contents($arquivo);
+            $done = self::parseDone($arquivo);
 
-            if (!is_string($raw) || trim($raw) === '') {
-                continue;
+            if ($done !== null) {
+                return $done;
             }
-
-            $data = json_decode($raw, true);
-
-            if (!is_array($data)) {
-                continue;
-            }
-
-            $id = $data['id'] ?? null;
-
-            if (!is_string($id) || $id === '') {
-                continue;
-            }
-
-            $exit = $data['exit'] ?? null;
-            $ms   = $data['ms'] ?? 0;
-            $nota = $data['nota'] ?? '';
-
-            return [
-                'id'   => $id,
-                'exit' => is_int($exit) ? $exit : null,
-                'ms'   => is_int($ms) ? $ms : 0,
-                'nota' => is_string($nota) ? $nota : '',
-            ];
         }
 
         return null;
+    }
+
+    /**
+     * Um arquivo de conclusão em array tipado, ou null se não der para ler.
+     *
+     * Os campos `acao`, `params` e `fim` só interessam a quem RECOLHE — quem
+     * espera já sabe o que pediu. Estão lidos aqui, e não num segundo parser,
+     * porque dois leitores do mesmo arquivo é onde um deles fica para trás.
+     *
+     * @return array{id: string, exit: int|null, ms: int, nota: string, acao: string, params: array<string, string|int|bool>, fim: string|null}|null
+     */
+    private static function parseDone(string $arquivo): ?array
+    {
+        $raw = @file_get_contents($arquivo);
+
+        if (!is_string($raw) || trim($raw) === '') {
+            return null;
+        }
+
+        $data = json_decode($raw, true);
+
+        if (!is_array($data)) {
+            return null;
+        }
+
+        $id = $data['id'] ?? null;
+
+        if (!is_string($id) || $id === '') {
+            return null;
+        }
+
+        $exit = $data['exit'] ?? null;
+        $ms   = $data['ms'] ?? 0;
+        $nota = $data['nota'] ?? '';
+        $acao = $data['acao'] ?? '';
+        $fim  = $data['fim'] ?? null;
+
+        $params = [];
+
+        // Só escalar entra: o worker manda o que a allowlist dele validou, mas
+        // este lado não vive de confiança em arquivo — um valor aninhado aqui
+        // quebraria o rótulo na hora de montar a linha.
+        if (isset($data['params']) && is_array($data['params'])) {
+            foreach ($data['params'] as $nome => $valor) {
+                if (is_string($nome) && (is_string($valor) || is_int($valor) || is_bool($valor))) {
+                    $params[$nome] = $valor;
+                }
+            }
+        }
+
+        return [
+            'id'     => $id,
+            'exit'   => is_int($exit) ? $exit : null,
+            'ms'     => is_int($ms) ? $ms : 0,
+            'nota'   => is_string($nota) ? $nota : '',
+            'acao'   => is_string($acao) ? $acao : '',
+            'params' => $params,
+            'fim'    => is_string($fim) && trim($fim) !== '' ? $fim : null,
+        ];
     }
 
     /**

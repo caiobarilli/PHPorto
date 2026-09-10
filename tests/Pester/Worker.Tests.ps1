@@ -132,6 +132,102 @@ Describe 'worker - encoding' {
 }
 
 # ==============================================================
+# O ARQUIVO DE CONCLUSAO — o unico sinal de fim
+# ==============================================================
+#
+# Ele carrega mais do que o PHP que espera precisa, e por um motivo medido:
+# quem espera ja sabe o que pediu, quem RECOLHE depois nao sabe de nada. Se o
+# php -S sair entre o filho terminar e a linha ser gravada, este arquivo e' tudo
+# o que resta da execucao.
+Describe 'worker - o arquivo de conclusao' {
+
+    BeforeEach {
+        Get-ChildItem -Path $Script:Trabalho -Filter 'win-done-*.json' -File -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'carrega acao, parametros e hora de fim, alem do que o PHP que espera usa' {
+        Write-Done 'teste01' 0 1234 '' 'gdid' ([ordered]@{ SubAction = 'status' })
+
+        $j = Get-Content (Join-Path $Script:Trabalho 'win-done-teste01.json') -Raw | ConvertFrom-Json
+
+        $j.id                | Should -Be 'teste01'
+        $j.exit              | Should -Be 0
+        $j.ms                | Should -Be 1234
+        $j.acao              | Should -Be 'gdid'
+        $j.params.SubAction  | Should -Be 'status'
+        $j.fim               | Should -Not -BeNullOrEmpty
+    }
+
+    It 'a hora de fim sai no formato do CURRENT_TIMESTAMP do banco, em UTC' {
+        # 'yyyy-MM-dd HH:mm:ss'. Sem isso o recolhimento gravaria um carimbo
+        # que o banco nao entende, e a ordenacao por created_at iria para o
+        # espaco.
+        Write-Done 'teste02' 0 1 '' 'audit' $null
+
+        $j = Get-Content (Join-Path $Script:Trabalho 'win-done-teste02.json') -Raw | ConvertFrom-Json
+
+        $j.fim | Should -Match '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$'
+
+        # E e' UTC, nao hora local: comparado com o agora em UTC, a diferenca
+        # tem de ser de segundos.
+        $agora = [DateTime]::UtcNow
+        $lido  = [DateTime]::ParseExact($j.fim, 'yyyy-MM-dd HH:mm:ss', [System.Globalization.CultureInfo]::InvariantCulture)
+        [Math]::Abs(($agora - $lido).TotalMinutes) | Should -BeLessThan 2
+    }
+
+    It 'params sai como OBJETO JSON, e nao como texto de tipo .NET' {
+        # Com o -Depth padrao (2) o hashtable aninhado sairia serializado como
+        # o nome do tipo, e o PHP receberia uma string onde espera objeto.
+        Write-Done 'teste03' 0 1 '' 'tweaks' ([ordered]@{ Preset = 'advanced'; Undo = $true })
+
+        $bruto = Get-Content (Join-Path $Script:Trabalho 'win-done-teste03.json') -Raw
+
+        $bruto | Should -Match '"params":\{"Preset":"advanced","Undo":true\}'
+        $bruto | Should -Not -Match 'System\.Collections'
+    }
+
+    It 'acao sem parametro sai com params vazio, e nao ausente' {
+        Write-Done 'teste04' 0 1 '' 'audit' $null
+
+        $bruto = Get-Content (Join-Path $Script:Trabalho 'win-done-teste04.json') -Raw
+        $bruto | Should -Match '"params":\{\}'
+    }
+
+    It 'a recusa da allowlist sai sem acao: o worker nao inventa o que recusou' {
+        Write-Done 'teste05' 126 0 'recusado'
+
+        $j = Get-Content (Join-Path $Script:Trabalho 'win-done-teste05.json') -Raw | ConvertFrom-Json
+
+        $j.acao | Should -Be ''
+        $j.nota | Should -Be 'recusado'
+        $j.exit | Should -Be 126
+    }
+
+    It 'o JSON sai sem BOM — com BOM o json_decode do PHP devolve null' {
+        Write-Done 'teste06' 0 1 '' 'audit' $null
+
+        $bytes = [System.IO.File]::ReadAllBytes((Join-Path $Script:Trabalho 'win-done-teste06.json'))
+        $bytes[0] | Should -Not -Be 0xEF
+    }
+
+    It 'a interrupcao existe como caminho proprio, e deixa sinal de fim' {
+        # A funcao que fecha o buraco medido: antes, o laco saia por
+        # "pai desapareceu" matando o filho e sem escrever conclusao nenhuma —
+        # entao nao havia o que recolher, e a execucao desaparecia.
+        Get-Command -Name 'Stop-FilhoComSinal' -CommandType Function -ErrorAction SilentlyContinue |
+            Should -Not -BeNullOrEmpty
+
+        $texto = Get-Content -Path $Script:Worker -Raw
+
+        # Os dois caminhos de saida do laco passam por ela.
+        $texto | Should -Match "Stop-FilhoComSinal 'pai desapareceu'"
+        $texto | Should -Match "Stop-FilhoComSinal 'desligando'"
+        $texto | Should -Match "Write-Done .*'interrompido'"
+    }
+}
+
+# ==============================================================
 # A TRANCA — Test-Job contra a allowlist
 # ==============================================================
 #

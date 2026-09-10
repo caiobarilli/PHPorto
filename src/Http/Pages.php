@@ -271,6 +271,12 @@ final class Pages
      */
     public function win(string $method): never
     {
+        // ANTES DE TUDO, inclusive antes do POST, e a ordem não é detalhe: o
+        // send() limpa os arquivos de saída e conclusão antes de mandar o job
+        // novo. Recolher depois seria recolher o que o próprio POST acabou de
+        // apagar.
+        $this->collectOrphanRuns();
+
         if ($method === 'POST') {
             $this->handleWinPost();
         }
@@ -403,6 +409,83 @@ final class Pages
         }
 
         Respond::redirect('/win');
+    }
+
+    /**
+     * Grava as execuções que terminaram e nunca viraram linha.
+     *
+     * POR QUE ISTO EXISTE: a espera é síncrona, e quem grava a linha é a
+     * requisição que espera. Se ela morrer — servidor parado, aba fechada,
+     * processo do `php -S` encerrado no meio —, o trabalho terminou do outro
+     * lado e o registro não aconteceu. Medido no `files/win-worker.log`: duas
+     * execuções de `tweaks` mexeram no registro e nos serviços do Windows e
+     * não existem no histórico. A promessa do projeto é que o banco diz se
+     * algo executou, e sem isto ela não se sustenta.
+     *
+     * SÓ APAGA O PAR DEPOIS DE GRAVAR. Apagar antes transformaria uma falha de
+     * banco na perda definitiva da execução, que é justamente o problema que
+     * este método resolve. Falhou, o par fica para a próxima abertura da tela.
+     *
+     * A PRIMEIRA FALHA INTERROMPE o recolhimento. Se o banco recusou uma, vai
+     * recusar as outras, e insistir só encheria a sessão de mensagens sobre o
+     * mesmo problema.
+     *
+     * O AVISO PODE SER SOBRESCRITO num POST, e é aceito: quem acabou de mandar
+     * uma ação está olhando o resultado dela, e a linha recolhida está no
+     * histórico com a nota que se explica. Num GET — que é o caso comum, abrir
+     * a tela depois de reiniciar o servidor — o aviso aparece.
+     */
+    private function collectOrphanRuns(): void
+    {
+        $canal  = new JobChannel($this->filesDir);
+        $orfas  = $canal->collectOrphans();
+
+        if ($orfas === []) {
+            return;
+        }
+
+        $gravadas = 0;
+
+        foreach ($orfas as $orfa) {
+            $acao = WinAction::tryFrom($orfa->acao);
+
+            $execution = new Execution(
+                // Sem ação conhecida o rótulo diz isso, em vez de inventar um
+                // nome: o worker só deixa a ação de fora quando recusou o job
+                // antes de validá-lo, e a saída registrada explica o motivo.
+                command: $acao === null
+                    ? 'ação não identificada (recuperada)'
+                    : self::describe($acao, $orfa->params),
+                output: $orfa->result->output,
+                exitCode: $orfa->result->exitCode,
+                durationMs: $orfa->result->durationMs,
+                kind: ExecutionKind::Windows,
+                timedOut: $orfa->result->timedOut,
+                createdAt: $orfa->finishedAt,
+            );
+
+            try {
+                ($this->makeService)()->record($execution);
+            } catch (Throwable $e) {
+                $this->flash(
+                    'Havia execução do Windows sem registro, e gravá-la falhou: ' . $e->getMessage()
+                    . ' Ela continua no disco e será tentada de novo.'
+                );
+
+                return;
+            }
+
+            $canal->discardOrphan($orfa->id);
+            $gravadas++;
+        }
+
+        $this->flash(
+            $gravadas === 1
+                ? 'Uma execução do Windows terminou sem ser registrada e acabou de entrar no histórico, '
+                    . 'com a hora real de término.'
+                : $gravadas . ' execuções do Windows terminaram sem registro e acabaram de entrar no '
+                    . 'histórico, com a hora real de término.'
+        );
     }
 
     /**

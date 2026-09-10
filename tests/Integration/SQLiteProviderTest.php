@@ -293,3 +293,71 @@ it('grava e relê o tipo windows sem perder o valor', function () {
         ->and($lido->command)->toBe('audit')
         ->and($lido->durationMs)->toBe(8123);
 });
+
+// ------------------------------------- created_at explícito (execução órfã)
+
+it('created_at nulo deixa o BANCO carimbar a hora', function () {
+    // Caminho normal: a execução acabou de acontecer, e CURRENT_TIMESTAMP é
+    // mais confiável que o relógio do PHP.
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+
+    $lido = $p->insert(novaExecucao('processes', 'ok', 0, 10, ExecutionKind::Windows));
+
+    expect($lido->createdAt)->toBeString()
+        ->and($lido->createdAt)->not->toBe('')
+        // Dentro de um minuto do agora, em UTC.
+        ->and(abs(time() - (int) strtotime((string) $lido->createdAt . ' UTC')))->toBeLessThan(60);
+});
+
+it('created_at preenchido é GRAVADO como veio, e não substituído pelo agora', function () {
+    // É o recolhimento de execução órfã: a hora tem de ser a de término. Como
+    // a listagem ordena por created_at, o agora poria a linha de ontem no topo
+    // do histórico de hoje.
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+
+    $lido = $p->insert(new Execution(
+        command: 'tweaks -Preset advanced',
+        output: 'recuperada',
+        exitCode: null,
+        durationMs: 116000,
+        kind: ExecutionKind::Windows,
+        timedOut: false,
+        createdAt: '2026-09-09 13:04:14',
+    ));
+
+    // O instante, e não a grafia: o provider normaliza o created_at para ISO
+    // 8601 na saída, e é assim para toda linha, não só para esta.
+    expect($lido->createdAt)->toBeString()
+        ->and(strtotime((string) $lido->createdAt))->toBe(strtotime('2026-09-09 13:04:14 UTC'));
+});
+
+it('a órfã recolhida entra na POSIÇÃO cronológica dela, não no topo', function () {
+    // O que torna a hora de fim mais que um detalhe de texto: recent() ordena
+    // por created_at, então a linha antiga vai para o lugar dela mesmo tendo
+    // sido inserida por último.
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+
+    $p->insert(new Execution(
+        command: 'processes',
+        output: 'hoje',
+        exitCode: 0,
+        durationMs: 10,
+        kind: ExecutionKind::Windows,
+        timedOut: false,
+        createdAt: '2026-09-10 09:00:00',
+    ));
+
+    $p->insert(new Execution(
+        command: 'tweaks -Preset advanced',
+        output: 'ontem, recuperada',
+        exitCode: null,
+        durationMs: 116000,
+        kind: ExecutionKind::Windows,
+        timedOut: false,
+        createdAt: '2026-09-09 13:04:14',
+    ));
+
+    $comandos = array_map(static fn (Execution $e): string => $e->command, $p->recent());
+
+    expect($comandos)->toBe(['processes', 'tweaks -Preset advanced']);
+});

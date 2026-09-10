@@ -367,17 +367,59 @@ function New-InvocationScript($validado, [string]$id) {
     return $caminho
 }
 
-function Write-Done([string]$id, $exit, [int]$ms, [string]$nota) {
+<#
+    Escreve o arquivo de conclusao — o UNICO sinal de que um job terminou.
+
+    ELE CARREGA MAIS DO QUE O PHP QUE ESTA ESPERANDO PRECISA, e isso e'
+    deliberado. Quem espera ja sabe qual acao pediu; quem RECOLHE depois nao
+    sabe de nada. Se o php -S sair entre o filho terminar e a linha ser gravada
+    no banco, este arquivo e' tudo o que resta da execucao — e sem a acao, os
+    parametros e a hora de fim, o recolhimento gravaria uma linha que nao diz
+    o que aconteceu nem quando.
+
+    A HORA E' A DE FIM, EM UTC, no formato que o CURRENT_TIMESTAMP do banco
+    usa. O recolhimento grava esse valor em vez de deixar o banco carimbar a
+    hora da abertura da pagina: a listagem ordena por created_at, entao a hora
+    errada nao seria so um detalhe no texto — poria a execucao de ontem no topo
+    do historico de hoje.
+
+    InvariantCulture no ToString nao e' preciosismo: no formato do .NET o ':'
+    significa "separador de hora da cultura", nao dois-pontos literais. Numa
+    cultura que use outro separador o carimbo sairia num formato que o banco
+    nao entende.
+#>
+function Write-Done {
+    param(
+        [string]$id,
+        $exit,
+        [int]$ms,
+        [string]$nota,
+        [string]$acao = '',
+        $params = $null
+    )
+
     $done = Join-Path $Dir ('win-done-' + $id + '.json')
     $dados = [ordered]@{
-        id    = $id
-        exit  = $exit
-        ms    = $ms
-        nota  = $nota
+        id     = $id
+        exit   = $exit
+        ms     = $ms
+        nota   = $nota
+        acao   = $acao
+        params = if ($null -eq $params) { [ordered]@{} } else { $params }
+        fim    = [DateTime]::UtcNow.ToString(
+            'yyyy-MM-dd HH:mm:ss',
+            [System.Globalization.CultureInfo]::InvariantCulture
+        )
     }
     # WriteAllText sem BOM: este arquivo e' JSON lido pelo PHP, e BOM em JSON
     # faz json_decode devolver null. O Set-Content -Encoding UTF8 poria BOM.
-    [System.IO.File]::WriteAllText($done, ($dados | ConvertTo-Json -Compress), [System.Text.UTF8Encoding]::new($false))
+    # -Depth 5 porque agora ha objeto aninhado: com o padrao (2) o hashtable de
+    # params sairia como o TEXTO do tipo .NET em vez de objeto JSON.
+    [System.IO.File]::WriteAllText(
+        $done,
+        ($dados | ConvertTo-Json -Compress -Depth 5),
+        [System.Text.UTF8Encoding]::new($false)
+    )
 }
 
 # ============================================================
@@ -404,11 +446,16 @@ Write-Log "iniciado pid=$PID pai=$ParentPid bootstrap='$BOOTSTRAP'"
 # LACO — 500 ms, cinco tarefas
 # ============================================================
 
-$filho     = $null   # processo da acao em andamento
-$filhoId   = $null
-$filhoT0   = $null
-$filhoOut  = $null
+$filho       = $null   # processo da acao em andamento
+$filhoId     = $null
+$filhoT0     = $null
+$filhoOut    = $null
 $filhoScript = $null
+
+# A acao e os parametros do job em andamento. Guardados porque o arquivo de
+# conclusao os carrega: quem recolhe a execucao depois nao tem outra fonte.
+$filhoAcao   = ''
+$filhoParams = $null
 
 function Stop-Filho([string]$motivo) {
     # Alta contra Alta: AQUI o taskkill funciona. E' o PHP, em Media, que nao
@@ -443,6 +490,54 @@ function Clear-Filho {
     $script:filhoT0     = $null
     $script:filhoOut    = $null
     $script:filhoScript = $null
+    $script:filhoAcao   = ''
+    $script:filhoParams = $null
+}
+
+<#
+    Encerra o job em andamento DEIXANDO SINAL DE FIM, e sai do laco.
+
+    ISTO NASCEU DE UMA MEDICAO, e a medicao esta no proprio win-worker.log:
+
+      13:02:17  job aceito id=3d7456dba545 acao=tweaks filho=13364
+      13:04:13  pai 9260 desapareceu: encerrando por conta propria
+      13:04:14  filho 13364 morto: pai desapareceu
+
+    Duas execucoes de tweaks acabaram assim. O php -S saiu no meio da espera, o
+    worker matou o filho, e o laco terminava sem escrever arquivo de conclusao
+    nenhum — entao nao sobrava sinal de fim, e as duas execucoes NUNCA viraram
+    linha no banco. Mexeram no registro e nos servicos do Windows, e o
+    historico nao sabe que existiram.
+
+    Agora sobra. O par saida+conclusao fica no disco, o proximo carregamento da
+    /win o recolhe, e a linha entra com a hora real e a nota de que a acao foi
+    interrompida.
+
+    O CODIGO DE SAIDA E' NULO de proposito. O filho foi morto: nao houve codigo.
+    Nulo e' o que o banco guarda para "nao se sabe", e e' diferente de zero —
+    ninguem deve ler esta linha como sucesso. A saida parcial que o filho
+    escreveu ate ali fica, porque e' a unica pista do que chegou a acontecer.
+#>
+function Stop-FilhoComSinal([string]$motivo) {
+    if ($null -eq $script:filho) {
+        return
+    }
+
+    $ms = if ($null -ne $script:filhoT0) {
+        [int]((Get-Date) - $script:filhoT0).TotalMilliseconds
+    } else {
+        0
+    }
+
+    Stop-Filho $motivo
+    Write-Done $script:filhoId $null $ms 'interrompido' $script:filhoAcao $script:filhoParams
+    Write-Log "job interrompido id=$($script:filhoId) motivo='$motivo': conclusao deixada para recolhimento"
+
+    # Limpa os auxiliares e PRESERVA o par saida+conclusao: e' exatamente o que
+    # o Clear-Filho faz. Sem esta chamada o script gerado ficava para tras — os
+    # dois win-exec-*.ps1 de 09/09 que sobraram em files/ sao desse caminho,
+    # que saia do laco sem passar por limpeza nenhuma.
+    Clear-Filho
 }
 
 while ($true) {
@@ -454,7 +549,7 @@ while ($true) {
     # heartbeat, e as duas coisas juntas fecham a janela na pratica.
     if (-not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) {
         Write-Log "pai $ParentPid desapareceu: encerrando por conta propria"
-        Stop-Filho 'pai desapareceu'
+        Stop-FilhoComSinal 'pai desapareceu'
         break
     }
 
@@ -462,7 +557,7 @@ while ($true) {
     if (Test-Path $F_DESLIGAR) {
         Remove-Item $F_DESLIGAR -Force -ErrorAction SilentlyContinue
         Write-Log 'ordem de desligar recebida'
-        Stop-Filho 'desligando'
+        Stop-FilhoComSinal 'desligando'
         break
     }
 
@@ -473,7 +568,7 @@ while ($true) {
         if ($null -ne $filho -and -not $filho.HasExited) {
             $ms = [int]((Get-Date) - $filhoT0).TotalMilliseconds
             Stop-Filho 'cancelado'
-            Write-Done $filhoId $null $ms 'cancelado'
+            Write-Done $filhoId $null $ms 'cancelado' $filhoAcao $filhoParams
             Clear-Filho
         } else {
             Write-Log 'ordem de cancelar sem acao em andamento: ignorada'
@@ -512,7 +607,7 @@ while ($true) {
             Remove-Item $arqExit -Force -ErrorAction SilentlyContinue
         }
 
-        Write-Done $filhoId $code $ms ''
+        Write-Done $filhoId $code $ms '' $filhoAcao $filhoParams
         Write-Log "filho concluido id=$filhoId exit=$code ms=$ms"
         Clear-Filho
     }
@@ -556,8 +651,10 @@ while ($true) {
                     -WindowStyle Hidden `
                     -PassThru
 
-                $script:filhoId = $id
-                $script:filhoT0 = Get-Date
+                $script:filhoId     = $id
+                $script:filhoT0     = Get-Date
+                $script:filhoAcao   = $validado.acao
+                $script:filhoParams = $validado.params
                 Write-Log "job aceito id=$id acao=$($validado.acao) filho=$($script:filho.Id)"
             } catch {
                 # Recusa e' resposta: o PHP esta esperando um arquivo de
@@ -568,6 +665,11 @@ while ($true) {
                     "[phporto] job recusado pela allowlist do worker: $($_.Exception.Message)`r`n",
                     [System.Text.UTF8Encoding]::new($false)
                 )
+                # Sem acao nem parametros: a recusa aconteceu ANTES de a
+                # allowlist devolver algo validado, e inventar um nome aqui
+                # seria gravar como fato o que o worker justamente nao aceitou.
+                # Quem recolher esta conclusao registra o que ha — a saida
+                # acima diz o motivo.
                 Write-Done $id 126 0 'recusado'
                 Clear-Filho
             }
