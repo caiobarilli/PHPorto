@@ -15,10 +15,13 @@ use App\Win\ElevationState;
  * décima terceira é o gdid, que existia em src/Win/actions desde a migração
  * mas só passou a ser alcançável quando entrou nas DUAS allowlists.
  *
- * $blocked é o que impede executar agora, e tem mais de uma causa: o
- * PHPORTO_WINUTIL_PATH pode não estar configurado, ou o PowerShell elevado
- * pode estar desligado. A tela precisa dizer qual das duas é, porque uma se
- * resolve no .env e a outra num clique na /config.
+ * $blocked é o que impede executar agora, e tem mais de uma causa: o checkout
+ * pode estar sem os .ps1 de src/Win, ou o PowerShell elevado pode estar
+ * desligado. A tela precisa dizer qual das duas é, porque uma se resolve
+ * refazendo o clone e a outra num clique na /config.
+ *
+ * A primeira causa já foi outra: até a migração, era uma chave do .env
+ * apontando para um projeto externo. Não há mais o que configurar.
  *
  * $rows e $result vêm FILTRADOS por tipo Windows. O painel mostra sempre o
  * registro mais recente do banco, e o filtro é o que impede a última execução
@@ -32,7 +35,6 @@ final readonly class WinView
      * @param Execution|null  $result         a mais recente, para o painel de saída
      * @param string|null     $blocked        o que impede executar agora
      * @param ElevationState  $win            estado do PowerShell elevado
-     * @param string          $winutilPath    caminho do winutil-cli.ps1
      * @param int             $timeout        segundos até uma ação ser cancelada
      * @param string          $tz             fuso das datas exibidas
      * @param int             $maxOutputBytes teto de saída de uma execução
@@ -46,7 +48,6 @@ final readonly class WinView
         public string $csrfToken,
         public string $csrfField,
         public ElevationState $win,
-        public string $winutilPath,
         public int $timeout,
         public string $tz,
         public int $maxOutputBytes,

@@ -105,10 +105,32 @@ final class Elevation
 
     public const F_MARCADOR = 'win-elevation.json';
 
+    /**
+     * Os dois .ps1 que o motor precisa em src/Win.
+     *
+     * Estão aqui, e não espalhados, porque as duas coisas que o Elevation faz
+     * com eles precisam concordar: o configProblem() confere que existem, e o
+     * launcherBody() manda o Windows rodar o worker. Se a checagem olhasse um
+     * caminho e o lançamento outro, a tela diria que está tudo bem antes de
+     * uma elevação que não sobe.
+     */
+    public const SCRIPT_WORKER = 'worker.ps1';
+
+    public const SCRIPT_BOOTSTRAP = 'bootstrap.ps1';
+
+    /**
+     * @param string $winDir pasta src/Win, onde vivem o worker e o bootstrap
+     *
+     * O $winDir vem por parâmetro, e não de __DIR__, pelo mesmo motivo do
+     * $filesDir e do $storageDir: quem monta a aplicação decide onde as coisas
+     * estão, e um teste consegue apontar para uma árvore incompleta para ver a
+     * tela explicar o problema. Não é configuração — não sai do .env, e não há
+     * o que ajustar numa instalação.
+     */
     public function __construct(
         private readonly string $filesDir,
         private readonly string $storageDir,
-        private readonly string $winutilPath,
+        private readonly string $winDir,
     ) {
     }
 
@@ -332,19 +354,43 @@ final class Elevation
         return @file_put_contents($this->path($this->filesDir, $nome), "1\n") !== false;
     }
 
-    /** O que impede até de tentar ligar, ou null. */
+    /**
+     * O que impede até de tentar ligar, ou null.
+     *
+     * ANTES ISTO OLHAVA O .env. Havia uma chave, PHPORTO_WINUTIL_PATH, que
+     * apontava para um projeto externo, e a maioria dos problemas daqui era
+     * alguém não tê-la preenchido. As ações moram neste repositório desde a
+     * migração, então não há mais nada a configurar — e o que sobrou de
+     * verificável é o checkout.
+     *
+     * Não é checagem inútil por isso: `git clone` parcial, sparse-checkout, um
+     * .gitignore mal escrito ou um deploy que copiou só o que o autoloader
+     * conhece deixam src/Win sem os .ps1. Sem esta mensagem, o sintoma seria
+     * uma elevação que sobe e sai em silêncio, ou um job que nunca conclui.
+     */
     private function configProblem(): ?string
     {
-        if ($this->winutilPath === '') {
-            return 'PHPORTO_WINUTIL_PATH está vazio ou ausente no .env. Sem ele não há o que executar: '
-                . 'o caminho do winutil-cli.ps1 não tem padrão de propósito.';
-        }
+        foreach ([self::SCRIPT_WORKER, self::SCRIPT_BOOTSTRAP] as $nome) {
+            $caminho = $this->scriptPath($nome);
 
-        if (!is_file($this->winutilPath)) {
-            return sprintf('PHPORTO_WINUTIL_PATH aponta para um arquivo que não existe: %s', $this->winutilPath);
+            if (!is_file($caminho)) {
+                return sprintf(
+                    'Instalação incompleta: %s não foi encontrado em %s. '
+                    . 'Sem ele não há o que executar — o motor do Windows mora no próprio '
+                    . 'repositório, e este arquivo faz parte dele.',
+                    $nome,
+                    $this->winDir
+                );
+            }
         }
 
         return null;
+    }
+
+    /** Caminho de um dos .ps1 do motor. */
+    private function scriptPath(string $nome): string
+    {
+        return rtrim($this->winDir, '\\/') . DIRECTORY_SEPARATOR . $nome;
     }
 
     /**
@@ -466,13 +512,11 @@ final class Elevation
             '-ExecutionPolicy',
             'Bypass',
             '-File',
-            dirname(__DIR__) . DIRECTORY_SEPARATOR . 'Win' . DIRECTORY_SEPARATOR . 'worker.ps1',
+            $this->scriptPath(self::SCRIPT_WORKER),
             '-ParentPid',
             (string) getmypid(),
             '-Dir',
             $this->filesDir,
-            '-Winutil',
-            $this->winutilPath,
             '-Nonce',
             $nonce,
         ];

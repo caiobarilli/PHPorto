@@ -23,7 +23,7 @@ namespace App\Config;
  *     mysql: array{host: string, port: string, database: string, user: string, password: string, table: string},
  *     sqlite: array{path: string, table: string},
  *     wsl: array{root: string, distro: string, timeout: int},
- *     winutil: array{path: string, timeout: int},
+ *     winutil: array{timeout: int},
  *     tz: string,
  *     dashboard_enabled: bool,
  *     api_enabled: bool
@@ -80,12 +80,12 @@ final class Config
                 'distro'  => self::env('PHPORTO_DISTRO', 'Debian'),
                 'timeout' => self::timeout(),
             ],
+            // A chave mantém o nome winutil porque a variável de ambiente
+            // mantém: PHPORTO_WINUTIL_TIMEOUT continua sendo o nome no .env de
+            // quem já usa, e renomear só a chave interna deixaria as duas
+            // pontas com nomes diferentes para a mesma coisa. Só sobrou o
+            // timeout — o caminho para o projeto externo não existe mais.
             'winutil' => [
-                // Sem padrão, pelo mesmo motivo do PHPORTO_WSL_ROOT: um
-                // default aqui seria um palpite sobre onde o outro projeto
-                // está na máquina de quem clonou, e a tela falharia por um
-                // caminho que ninguém escreveu.
-                'path'    => self::env('PHPORTO_WINUTIL_PATH', ''),
                 'timeout' => self::winutilTimeout(),
             ],
             'tz'                => self::timezone(),
@@ -117,7 +117,7 @@ final class Config
     /**
      * Timeout das ações do Windows, com piso.
      *
-     * O padrão é generoso (600 s) porque as ações longas do winutil são a
+     * O padrão é generoso (600 s) porque as ações longas do Windows são a
      * regra, não a exceção: audit gera oito blocos, network captura pelo
      * tempo que se pedir mais o relatório, install chama o winget e debloat
      * percorre 22 pacotes. A espera é SÍNCRONA de propósito — é o que garante

@@ -17,7 +17,7 @@ enum ExecutionKind: string
     case Anexo = 'anexo';
 
     /**
-     * Execução do lado Windows, via winutil-cli em PowerShell elevado.
+     * Execução do lado Windows: uma ação de src/Win/actions, num PowerShell elevado.
      *
      * Mora na MESMA tabela dos outros dois: um comando no WSL e uma ação no
      * Windows são o mesmo fato — algo foi executado nesta máquina, com saída,

@@ -20,7 +20,7 @@ declare(strict_types=1);
 
 use App\Http\Respond;
 
-/** Abre uma seção com o número e o nome que o menu do winutil usa. */
+/** Abre uma seção com o número e o nome que ela tem no menu. */
 $secao = static function (int $n, string $titulo, string $descricao): string {
     return '<h2>[' . $n . '] ' . Respond::e($titulo) . '</h2>'
         . '<p class="dica" style="margin-top:0">' . Respond::e($descricao) . '</p>';
@@ -140,7 +140,7 @@ $dis     = $travado ? ' disabled' : '';
 
   <!-- -------------------------------------------------------------- [4] dns -->
   <section>
-    <?= $secao(4, 'DNS', 'Troca o DNS dos adaptadores ativos. A lista vem do config/dns.json do winutil-cli.') ?>
+    <?= $secao(4, 'DNS', 'Troca o DNS dos adaptadores ativos. A lista vem do src/Win/config/dns.json.') ?>
     <form method="post" id="form-dns">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="acao" value="dns">
@@ -176,9 +176,9 @@ $dis     = $travado ? ' disabled' : '';
       <input type="hidden" name="acao" value="performance">
       <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Ativar Ultimate Performance</button></div>
       <p class="dica">
-        <strong>Só ativa.</strong> Restaurar o Balanceado não é alcançável por esta tela: o dispatch
-        por parâmetro do <code>winutil-cli.ps1</code> não repassa <code>-State</code>, e passá-lo
-        devolve <code>NamedParameterNotFound</code>. Para desativar, use o menu interativo do CLI.
+        <strong>Só ativa.</strong> Restaurar o Balanceado ainda não tem controle aqui — não por
+        limitação da ação, que aceita ligar e desligar, mas porque <code>State</code> não está nas
+        duas allowlists. É omissão a resolver, não impedimento.
       </p>
     </form>
   </section>
@@ -229,7 +229,7 @@ $dis     = $travado ? ' disabled' : '';
       </div>
       <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Capturar</button></div>
       <p class="dica">
-        A interface é <strong>obrigatória</strong>: sem ela o winutil pede por
+        A interface é <strong>obrigatória</strong>: sem ela a ação recusa e pede por
         <code>Read-Host</code>, e num processo não interativo isso falha com erro que não explica
         nada. Duração em segundos, de <?= \App\Win\WinAction::NETWORK_DURATION_MIN ?> a
         <?= \App\Win\WinAction::NETWORK_DURATION_MAX ?>. Lembre do timeout de
@@ -398,7 +398,7 @@ $dis     = $travado ? ' disabled' : '';
   </section>
 
   <p class="sub" style="margin-top:18px">
-    Script: <code><?= Respond::e($view->winutilPath) ?></code>
+    Motor: <code>src/Win/</code>
     <?php if ($view->win->on): ?>
       &middot; PowerShell elevado de pé, PID <?= (int) $view->win->psPid ?>
     <?php endif; ?>

@@ -87,6 +87,51 @@ AfterAll {
 }
 
 # ==============================================================
+# ENCODING DO PROPRIO WORKER
+# ==============================================================
+#
+# ESTE TESTE NASCEU DE UM ACIDENTE, e vale registrar qual: um `sed -i` rodado
+# sobre o worker.ps1 para ajustar comentario devolveu o arquivo em LF. O
+# .gitattributes marca *.ps1 com -text, ou seja, grava os bytes como estao —
+# entao o LF teria entrado no repositorio, e o diff de vinte linhas apareceu
+# como mil e cento e setenta e cinco, escondendo a mudanca real na revisao.
+#
+# O Bootstrap.Tests.ps1 ja cobria o bootstrap.ps1. O worker nao tinha ninguem
+# olhando, e e' o arquivo que roda elevado.
+Describe 'worker - encoding' {
+
+    It 'worker.ps1 tem BOM UTF-8 — sem ele o 5.1 le como ANSI' {
+        $bytes = [System.IO.File]::ReadAllBytes($Script:Worker)
+        $bytes[0] | Should -Be 0xEF
+        $bytes[1] | Should -Be 0xBB
+        $bytes[2] | Should -Be 0xBF
+    }
+
+    It 'worker.ps1 tem CRLF, sem nenhum LF solto' {
+        $texto = [System.IO.File]::ReadAllText($Script:Worker)
+        $texto | Should -Match "`r`n"
+        [regex]::Matches($texto, "(?<!`r)`n").Count | Should -Be 0
+    }
+
+    It 'worker.ps1 nao tem erro de sintaxe' {
+        $erros = $null
+        [System.Management.Automation.Language.Parser]::ParseFile(
+            $Script:Worker, [ref]$null, [ref]$erros
+        ) | Out-Null
+        $erros.Count | Should -Be 0
+    }
+
+    It 'o worker nao recebe mais caminho de projeto externo' {
+        $texto = Get-Content -Path $Script:Worker -Raw
+
+        # O parametro -Winutil saiu com a independencia. Se voltar, volta junto
+        # a chave de .env que esta fatia removeu de ponta a ponta.
+        $texto | Should -Not -Match '\$Winutil'
+        $texto | Should -Not -Match 'PHPORTO_WINUTIL_PATH'
+    }
+}
+
+# ==============================================================
 # A TRANCA — Test-Job contra a allowlist
 # ==============================================================
 #

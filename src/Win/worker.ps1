@@ -22,7 +22,7 @@
     filho dele — entao desligar e cancelar chegam como ORDEM, num arquivo que
     este laco le, e quem obedece e' este worker.
 
-    E POR QUE O FILHO E' ASSINCRONO: se este worker esperasse o winutil de
+    E POR QUE O FILHO E' ASSINCRONO: se este worker esperasse a acao de
     forma sincrona, o heartbeat pararia junto, e o PHP concluiria que o worker
     morreu exatamente durante a acao mais longa — um install de dez minutos
     derrubaria o indicador dele mesmo. Um laco so faz tudo: heartbeat, vigia
@@ -38,15 +38,6 @@ param(
 
     # Pasta de trabalho (files/ do projeto): job, saida, ordens e heartbeat.
     [Parameter(Mandatory)] [string]$Dir,
-
-    # Caminho do winutil-cli.ps1. Vem de PHPORTO_WINUTIL_PATH.
-    #
-    # JA NAO E' USADO: as acoes moram em src/Win/actions e quem as monta e'
-    # o bootstrap.ps1, irmao deste arquivo (ver New-InvocationScript). O
-    # parametro continua obrigatorio ate a fatia que remove o
-    # PHPORTO_WINUTIL_PATH de ponta a ponta — tirar so este lado agora
-    # quebraria o Elevation, que ainda o passa.
-    [Parameter(Mandatory)] [string]$Winutil,
 
     # Carimbo desta execucao do servidor. NAO E' TRANCA: ele mora no marcador,
     # em storage/, que qualquer processo do mesmo usuario le. E' guarda de
@@ -95,8 +86,8 @@ $BOOTSTRAP   = Join-Path $PSScriptRoot 'bootstrap.ps1'
 # estiver declarado e' recusado antes de qualquer execucao.
 #
 # O QUE ELA FAZ: impede que quem escreva no arquivo de trabalho execute codigo
-# arbitrario em integridade Alta. O maximo que se consegue e' uma acao do
-# winutil com parametros validos.
+# arbitrario em integridade Alta. O maximo que se consegue e' uma das acoes de
+# src/Win/actions, com parametros validos.
 #
 # O QUE ELA NAO FAZ: limitar a CONSEQUENCIA de uma acao legitima. O
 # install -Apps continua instalando qualquer coisa que o winget ofereca, e e'
@@ -297,12 +288,10 @@ function Test-Job($job) {
     escrevesse falharia em algum valor, e a falha apareceria como erro DO
     COMANDO, mandando quem depura para o lugar errado.
 
-    O ALVO E' O BOOTSTRAP DESTE REPOSITORIO, nao mais um winutil-cli externo.
-    O caminho vem de $BOOTSTRAP, resolvido no bloco de constantes: bootstrap.ps1
-    e worker.ps1 sao irmaos na mesma pasta e viajam juntos, entao nao ha o que
-    configurar nem parametro novo para manter em dia. O PHPORTO_WINUTIL_PATH
-    ainda chega em -Winutil, e ainda e' obrigatorio, mas ja nao e' usado aqui:
-    quem o remove e' a fatia da independencia.
+    O ALVO E' O BOOTSTRAP DESTE REPOSITORIO. O caminho vem de $BOOTSTRAP,
+    resolvido no bloco de constantes: bootstrap.ps1 e worker.ps1 sao irmaos na
+    mesma pasta e viajam juntos, entao nao ha o que configurar, nao ha parametro
+    para manter em dia, e nao ha projeto externo a apontar.
 
     OS PARAMETROS VAO POR SPLATTING, num hashtable literal, e nao como
     -Nome valor soltos na chamada. Assim um nome de parametro tambem e' literal
@@ -319,7 +308,7 @@ function Test-Job($job) {
     script ANTES das linhas que gravam o codigo de saida — o worker nao acharia
     arquivo de codigo e registraria exit nulo, que na tela nao se distingue de
     "terminou sem dizer nada". Com ele, recusa e' exit 1, que e' o mesmo que o
-    winutil-cli devolvia quando recusava por falta de Administrador.
+    o winutil-cli devolvia quando recusava por falta de Administrador.
 #>
 function New-InvocationScript($validado, [string]$id) {
     $arqExit = Join-Path $Dir ('win-exit-' + $id + '.txt')
@@ -415,7 +404,7 @@ Write-Log "iniciado pid=$PID pai=$ParentPid bootstrap='$BOOTSTRAP'"
 # LACO — 500 ms, cinco tarefas
 # ============================================================
 
-$filho     = $null   # processo do winutil em andamento
+$filho     = $null   # processo da acao em andamento
 $filhoId   = $null
 $filhoT0   = $null
 $filhoOut  = $null
@@ -529,7 +518,7 @@ while ($true) {
     }
 
     # --- 5. job novo, so quando nao ha filho de pe -------------------------
-    # Uma acao por vez, de proposito: duas acoes do winutil ao mesmo tempo
+    # Uma acao por vez, de proposito: duas acoes ao mesmo tempo
     # mexeriam no mesmo registro e nos mesmos servicos. O php -S atende em
     # serie, entao nem havia como pedir duas.
     if ($null -eq $filho -and (Test-Path $F_JOB)) {

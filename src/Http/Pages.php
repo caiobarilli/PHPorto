@@ -123,7 +123,6 @@ final class Pages
             csrfToken: Csrf::token(),
             csrfField: Csrf::fieldName(),
             win: $win,
-            winPath: $this->config['winutil']['path'],
             winRetry: $this->takeWinRetry(),
             winProofTimeout: Elevation::PROOF_TIMEOUT_S,
         );
@@ -293,7 +292,6 @@ final class Pages
             csrfToken: Csrf::token(),
             csrfField: Csrf::fieldName(),
             win: $this->elevation->state(),
-            winutilPath: $this->config['winutil']['path'],
             timeout: $this->config['winutil']['timeout'],
             tz: $this->config['tz'],
             maxOutputBytes: PsRunner::MAX_OUTPUT_BYTES,
@@ -408,13 +406,31 @@ final class Pages
     }
 
     /**
-     * A linha de comando equivalente, para o registro.
+     * O RÓTULO da execução, para o registro. Não é comando colável.
+     *
+     * Até a migração ele começava com `winutil`, e naquele tempo era colável de
+     * verdade: existia um winutil-cli.ps1 na máquina que aceitava exatamente
+     * aqueles parâmetros. Não existe mais — as ações moram em src/Win/actions e
+     * quem as chama é o bootstrap, com splatting.
+     *
+     * Então o prefixo saiu em vez de virar outro nome inventado. Um rótulo que
+     * PARECE comando e não roda é pior que um rótulo que não finge: quem
+     * copiasse `winutil -Action audit` de uma linha do histórico receberia
+     * "termo não reconhecido" e iria procurar defeito onde não há.
+     *
+     * O que sobrou é a ação e os parâmetros, que é o que a pessoa escolheu na
+     * tela. A coluna `kind` do banco já diz que é do Windows.
+     *
+     * CONSEQUÊNCIA REGISTRADA: o histórico fica com dois formatos. As linhas
+     * gravadas antes desta mudança continuam com o prefixo, e reescrevê-las
+     * seria falsear o registro — cada linha diz o que a ferramenta chamava
+     * naquele dia.
      *
      * @param array<string, string|int|bool> $params
      */
     private static function describe(WinAction $acao, array $params): string
     {
-        $partes = ['winutil -Action ' . $acao->value];
+        $partes = [$acao->value];
 
         foreach ($params as $nome => $valor) {
             if (is_bool($valor)) {
@@ -443,7 +459,7 @@ final class Pages
 
         if (!$estado->on) {
             return ($estado->detail ?? 'O PowerShell elevado está desligado.')
-                . ' Nada é executado sem ele: as ações do winutil-cli exigem Administrador.';
+                . ' Nada é executado sem ele: as ações do Windows exigem Administrador.';
         }
 
         return null;

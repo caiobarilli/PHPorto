@@ -41,7 +41,6 @@ final readonly class ConfigView
      * amarrado ao PID dele. Prometer permanência aqui seria mentir.
      *
      * @param ElevationState $win             o que vale agora
-     * @param string         $winPath         PHPORTO_WINUTIL_PATH, para a tela mostrar
      * @param bool           $winRetry        última tentativa falhou: oferece "tentar novamente"
      * @param int            $winProofTimeout segundos que o POST espera pela prova
      */
@@ -58,7 +57,6 @@ final readonly class ConfigView
         public string $csrfToken,
         public string $csrfField,
         public ElevationState $win,
-        public string $winPath,
         public bool $winRetry,
         public int $winProofTimeout,
     ) {

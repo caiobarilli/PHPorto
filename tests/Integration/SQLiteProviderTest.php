@@ -284,12 +284,12 @@ it('clear() de um tipo ausente devolve zero e não apaga nada', function () {
 
 it('grava e relê o tipo windows sem perder o valor', function () {
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
-    $p->insert(novaExecucao('winutil -Action audit', 'ok', 0, 8123, ExecutionKind::Windows));
+    $p->insert(novaExecucao('audit', 'ok', 0, 8123, ExecutionKind::Windows));
 
     $lido = $p->recent()[0];
 
     expect($lido->kind)->toBe(ExecutionKind::Windows)
         ->and($lido->kind->value)->toBe('windows')
-        ->and($lido->command)->toBe('winutil -Action audit')
+        ->and($lido->command)->toBe('audit')
         ->and($lido->durationMs)->toBe(8123);
 });

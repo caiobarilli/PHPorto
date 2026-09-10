@@ -196,7 +196,7 @@ it('install aceita exatamente no teto', function () {
 
 // ---------------------------------------------------------------- network
 
-it('network exige a interface, porque sem ela o winutil cai num Read-Host', function () {
+it('network exige a interface, porque sem ela a ação recusa', function () {
     WinAction::Network->validate(['Duration' => '30']);
 })->throws(InvalidArgumentException::class);
 

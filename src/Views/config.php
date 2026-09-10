@@ -98,7 +98,7 @@ use App\Http\Respond;
 
       <p class="nota-estado">
         Libera o botão <strong>WIN</strong>, que executa as ações do
-        <code>winutil-cli</code> — e elas pedem Administrador.
+        Windows — e elas pedem Administrador.
         <br>
         <?php if ($view->win->on): ?>
           De pé desde <strong><?= Respond::e($view->win->provedAt) ?></strong> (UTC), PID
@@ -110,10 +110,6 @@ use App\Http\Respond;
         Estado de <strong>vida curta</strong>: reiniciar o servidor desliga. Não passa pelo
         <code>flags.json</code> de propósito — aquele arquivo existe para sobreviver a reinício,
         e aqui se quer o contrário.
-        <?php if ($view->winPath !== ''): ?>
-          <br>
-          Script: <code><?= Respond::e($view->winPath) ?></code>
-        <?php endif; ?>
       </p>
     </form>
   </section>
@@ -171,7 +167,7 @@ use App\Http\Respond;
       a tela avisa depois de <code><?= (int) $view->winProofTimeout ?> s</code>.
     </p>
     <p>
-      Enquanto estiver ligado, esse processo aceita as ações do <code>winutil-cli</code>
+      Enquanto estiver ligado, esse processo aceita as ações do Windows
       vindas desta tela. Ele <strong>obedece a uma lista fechada</strong> de ações e
       parâmetros — o que a tela manda nunca é código.
     </p>

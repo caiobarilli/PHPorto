@@ -50,7 +50,7 @@ use App\Wsl\Distro;
  *         mysql: array{host: string, port: string, database: string, user: string, password: string, table: string},
  *         sqlite: array{path: string, table: string},
  *         wsl: array{root: string, distro: string, timeout: int},
- *         winutil: array{path: string, timeout: int},
+ *         winutil: array{timeout: int},
  *         tz: string,
  *         dashboard_enabled: bool,
  *         api_enabled: bool
@@ -121,7 +121,7 @@ $pages = new Pages(
     elevation: new Elevation(
         filesDir: $filesDir,
         storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
-        winutilPath: $config['winutil']['path'],
+        winDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Win',
     ),
 );
 

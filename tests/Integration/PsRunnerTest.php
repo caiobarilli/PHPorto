@@ -66,8 +66,8 @@ it('executa e devolve a saída', function () {
         ->and($r->durationMs)->toBeGreaterThan(0);
 });
 
-it('captura Write-Host, que é por onde o winutil escreve', function () {
-    // O winutil-cli escreve tudo por Write-Host. Se isso não fosse capturado,
+it('captura Write-Host, que é por onde as ações escrevem', function () {
+    // As ações do Windows escrevem tudo por Write-Host. Se isso não fosse capturado,
     // a tela mostraria saída vazia para uma ação que funcionou.
     $runner = new PsRunner($this->dir);
 
