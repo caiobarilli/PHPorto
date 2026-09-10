@@ -8,12 +8,12 @@ use App\Domain\Execution;
 use App\Win\ElevationState;
 
 /**
- * A tela /win: as doze seções do menu do winutil-cli.
+ * A tela /win: as treze seções das ações do Windows.
  *
- * DOZE E NÃO ONZE, e a diferença é achado, não capricho: o ValidateSet do
- * winutil-cli.ps1 tem gpu, o menu do código mostra [12] GPU e existe um
- * Invoke-GPU.ps1. A lista de onze é a do README, que ficou atrás. A tela
- * espelha o código.
+ * TREZE, e a contagem tem história: a tela nasceu com doze porque o README do
+ * winutil-cli listava onze e o código tinha gpu — a tela seguiu o código. A
+ * décima terceira é o gdid, que existia em src/Win/actions desde a migração
+ * mas só passou a ser alcançável quando entrou nas DUAS allowlists.
  *
  * $blocked é o que impede executar agora, e tem mais de uma causa: o
  * PHPORTO_WINUTIL_PATH pode não estar configurado, ou o PowerShell elevado

@@ -161,6 +161,14 @@ $ALLOWLIST = @{
         'KeepUser' = @{ tipo = 'text' }
         'Undo'     = @{ tipo = 'flag' }
     }
+
+    # O gdid liga e desliga um pipeline inteiro, entao o conjunto nao se parece
+    # com o do exporter nem com o do gpu. E ele NAO entra em preset nenhum: o
+    # 'disable' bloqueia dominios de notificacao no arquivo hosts, e efeito
+    # amplo assim tem de ser escolhido a dedo, nunca herdado de um preset.
+    'gdid'        = @{
+        'SubAction' = @{ tipo = 'set'; valores = @('status', 'disable', 'enable') }
+    }
 }
 
 # ============================================================

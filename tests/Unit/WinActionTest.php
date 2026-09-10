@@ -13,12 +13,47 @@ use App\Win\WinAction;
  * errado.
  */
 
-it('tem as doze ações do menu, na ordem do menu', function () {
+it('tem as treze ações do menu, na ordem do menu', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
+            'gdid',
         ]);
+});
+
+/**
+ * A PARIDADE ENTRE AS DUAS ALLOWLISTS.
+ *
+ * As duas listas são redundantes de propósito, mas a redundância não é
+ * automática: nada obriga o $ALLOWLIST do worker.ps1 a acompanhar este enum.
+ * Uma ação que entre só de um lado fica pela metade — aceita aqui e recusada
+ * lá com "acao fora da allowlist", ou executável por quem escrever no arquivo
+ * de trabalho sem que a tela sequer a ofereça.
+ *
+ * Este teste lê o worker.ps1 como TEXTO, e é o único jeito: PHP não executa
+ * PowerShell para perguntar, e um teste do Pester não enxerga o enum. Ler o
+ * arquivo é grosseiro, mas é o que fecha a única costura entre as duas
+ * linguagens que ninguém mais confere.
+ */
+it('as duas allowlists conhecem exatamente as mesmas ações', function () {
+    $worker = file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+
+    expect($worker)->toBeString();
+
+    // Recorta o bloco $ALLOWLIST = @{ ... } e pega as chaves de primeiro nível,
+    // que são as linhas 'nome' = @{ — as chaves de parâmetro vêm indentadas
+    // mais fundo e não casam.
+    expect(preg_match('/\$ALLOWLIST\s*=\s*@\{(.*?)\n\}/s', $worker, $bloco))->toBe(1);
+    expect(preg_match_all("/^    '([a-z-]+)'\s*=/m", $bloco[1], $achadas))->toBeGreaterThan(0);
+
+    $noWorker = $achadas[1];
+    $noPhp    = array_map(static fn (WinAction $a): string => $a->value, WinAction::cases());
+
+    sort($noWorker);
+    sort($noPhp);
+
+    expect($noWorker)->toBe($noPhp);
 });
 
 it('as ações sem parâmetro devolvem lista vazia', function (WinAction $acao) {
@@ -32,9 +67,10 @@ it('as ações sem parâmetro devolvem lista vazia', function (WinAction $acao) 
 ]);
 
 it('performance DESCARTA um state que venha no POST', function () {
-    // Não é tolerância: é o único comportamento honesto. O dispatch por
-    // parâmetro do winutil-cli.ps1 não repassa -State, e o param() do entry
-    // point não declara State — passar devolveria NamedParameterNotFound.
+    // Agora esta lista é a ÚNICA coisa que descarta. Antes havia duas travas:
+    // esta e o param() do winutil-cli.ps1, que não declarava State. Aquele
+    // ponto de entrada não existe mais e o bootstrap faz splatting direto em
+    // Invoke-Performance, que DECLARA -State [ValidateSet('on','off')].
     expect(WinAction::Performance->validate(['State' => 'off']))->toBe([]);
 });
 
@@ -206,6 +242,35 @@ it('gpu aceita as próprias e recusa a do exporter', function () {
 
     expect(static fn () => WinAction::Gpu->validate(['SubAction' => 'firewall']))
         ->toThrow(InvalidArgumentException::class);
+});
+
+// ---------------------------------------------------------------- gdid
+
+it('gdid exige subação', function () {
+    WinAction::Gdid->validate([]);
+})->throws(InvalidArgumentException::class);
+
+it('gdid aceita as três subações', function (string $sub) {
+    expect(WinAction::Gdid->validate(['SubAction' => $sub]))->toBe(['SubAction' => $sub]);
+})->with(['status', 'disable', 'enable']);
+
+it('gdid não compartilha subação com exporter nem com gpu', function () {
+    // Ele liga e desliga um pipeline; não instala nem para processo.
+    foreach (['install', 'start', 'stop', 'metrics', 'firewall', 'uninstall'] as $alheia) {
+        expect(static fn () => WinAction::Gdid->validate(['SubAction' => $alheia]))
+            ->toThrow(InvalidArgumentException::class);
+    }
+});
+
+it('gdid devolve a grafia da LISTA, não a que veio no POST', function () {
+    expect(WinAction::Gdid->validate(['SubAction' => 'DISABLE']))->toBe(['SubAction' => 'disable']);
+});
+
+it('gdid não entra em preset nenhum do optimize nem dos tweaks', function () {
+    // Bloquear domínio de notificação é efeito amplo: tem de ser escolhido a
+    // dedo, nunca herdado de quem pediu outra coisa.
+    expect(WinAction::TWEAK_PRESETS)->not->toContain('gdid')
+        ->and(WinAction::OPTIMIZE_PRESETS)->not->toContain('gdid');
 });
 
 // ---------------------------------------------------------------- optimize

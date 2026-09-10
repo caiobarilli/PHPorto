@@ -3,15 +3,17 @@
 declare(strict_types=1);
 
 /**
- * A tela /win: as doze ações do winutil-cli, uma seção cada.
+ * A tela /win: as treze ações do Windows, uma seção cada.
  *
  * Cada seção é um FORMULÁRIO PRÓPRIO, e não um formulário só com um seletor
  * de ação. O motivo é o token: ele vale por UMA execução, e um formulário
- * único com doze botões enviaria campos das outras seções em cada envio —
+ * único com treze botões enviaria campos das outras seções em cada envio —
  * o servidor teria de adivinhar quais ignorar. Formulários separados mandam
  * só o que a ação usa.
  *
- * A ordem é a do menu do winutil-cli, de [1] a [12], e vem do próprio enum.
+ * A ordem é a do menu, de [1] a [13]. As seções são escritas à mão, e não
+ * geradas do enum: cada ação tem campos próprios, e um laço genérico
+ * precisaria de uma tabela de campos por ação para produzir o mesmo HTML.
  *
  * @var \App\Http\WinView $view
  */
@@ -35,7 +37,7 @@ $dis     = $travado ? ' disabled' : '';
     <a href="/config">configuração</a>
   </div>
   <p class="sub">
-    As doze ações do <code>winutil-cli</code>, executadas por um PowerShell com privilégio de
+    As treze ações do Windows, executadas por um PowerShell com privilégio de
     Administrador. Cada ação é registrada no banco com tipo <code>windows</code>.
   </p>
 
@@ -318,6 +320,30 @@ $dis     = $travado ? ' disabled' : '';
       <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Executar</button></div>
       <p class="dica">Conjunto diferente do exporter: aqui existe <code>uninstall</code> e não
         existe <code>firewall</code>.</p>
+    </form>
+  </section>
+
+  <!-- ------------------------------------------------------------- [13] gdid -->
+  <section>
+    <?= $secao(13, 'GDID', 'Liga e desliga o pipeline de Connected Devices: serviços, histórico de atividades, domínios no hosts e o cache.') ?>
+    <form method="post">
+      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+      <input type="hidden" name="acao" value="gdid">
+      <div class="campo">
+        <label for="gdid-sub">Subação</label>
+        <select id="gdid-sub" name="SubAction"<?= $dis ?>>
+          <?php foreach (\App\Win\WinAction::GDID_SUBACTIONS as $s): ?>
+            <option value="<?= Respond::e($s) ?>"><?= Respond::e($s) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Executar</button></div>
+      <p class="dica">
+        O <code>disable</code> <strong>corta as notificações do Windows</strong>: os domínios do
+        WNS entram no bloqueio junto com os do GDID, e apps da Store param de receber aviso.
+        É recuperável — <code>enable</code> devolve tudo, incluindo o startup original dos
+        serviços. Comece por <code>status</code>, que só lê.
+      </p>
     </form>
   </section>
 

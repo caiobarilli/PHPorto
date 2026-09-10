@@ -34,6 +34,23 @@ BeforeAll {
         $false
     ) | ForEach-Object { Invoke-Expression $_.Extent.Text }
 
+    # E as duas constantes que a Test-Job consulta. Vem do arquivo, e nao
+    # copiadas para ca: uma copia viraria um segundo lugar para atualizar, e o
+    # teste passaria a conferir a copia em vez da tranca.
+    $ast.FindAll(
+        {
+            param($n)
+            $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            $n.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
+            $n.Left.VariablePath.UserPath -in @('ALLOWLIST', 'MAX_PARAM_BYTES')
+        },
+        $false
+    ) | ForEach-Object { Invoke-Expression $_.Extent.Text }
+
+    $global:ALLOWLIST       = $ALLOWLIST
+    $global:MAX_PARAM_BYTES = $MAX_PARAM_BYTES
+    $global:Nonce           = 'nonce-de-teste'
+
     # O que o worker teria em escopo de script quando gera o arquivo.
     #
     # $BOOTSTRAP aponta para o bootstrap DE VERDADE, e nao para um dublê: os
@@ -66,6 +83,82 @@ BeforeAll {
 AfterAll {
     if ($Script:Trabalho -and (Test-Path $Script:Trabalho)) {
         Remove-Item -Path $Script:Trabalho -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# ==============================================================
+# A TRANCA — Test-Job contra a allowlist
+# ==============================================================
+#
+# Esta e' a allowlist que importa: a do lado elevado, a ultima a validar antes
+# de executar. A do PHP recusa mais cedo e com mensagem melhor, mas quem
+# escrever direto no arquivo de trabalho passa por cima dela — e nao por cima
+# desta.
+Describe 'worker - a allowlist do lado elevado' {
+
+    It 'conhece as treze acoes' {
+        @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
+            'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'install',
+            'memory', 'network', 'optimize', 'performance', 'processes', 'tweaks'
+        )
+    }
+
+    It 'aceita gdid com <_>' -ForEach @('status', 'disable', 'enable') {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'gdid'
+            params = [PSCustomObject]@{ SubAction = $_ }
+        }
+
+        $ok = Test-Job $job
+        $ok.acao              | Should -Be 'gdid'
+        $ok.params['SubAction'] | Should -Be $_
+    }
+
+    It 'guarda a grafia da LISTA, e nao a que veio no arquivo' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'gdid'
+            params = [PSCustomObject]@{ SubAction = 'DISABLE' }
+        }
+
+        (Test-Job $job).params['SubAction'] | Should -Be 'disable'
+    }
+
+    It 'recusa subacao que o gdid nao tem' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'gdid'
+            params = [PSCustomObject]@{ SubAction = 'uninstall' }
+        }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage "valor fora do conjunto em 'SubAction'"
+    }
+
+    It 'recusa parametro que o gdid nao aceita' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'gdid'
+            params = [PSCustomObject]@{ SubAction = 'status'; Kill = 'explorer' }
+        }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage "parametro fora da allowlist para 'gdid': 'Kill'"
+    }
+
+    It 'recusa gdid vindo de outra execucao do servidor' {
+        $job = [PSCustomObject]@{
+            nonce  = 'nonce-velho'
+            acao   = 'gdid'
+            params = [PSCustomObject]@{ SubAction = 'status' }
+        }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage '*obsoleto*'
+    }
+
+    It 'recusa acao que nao esta na lista' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'rm-rf'; params = $null }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage "acao fora da allowlist: 'rm-rf'"
     }
 }
 

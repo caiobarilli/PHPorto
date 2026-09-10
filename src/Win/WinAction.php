@@ -7,7 +7,7 @@ namespace App\Win;
 use InvalidArgumentException;
 
 /**
- * As doze ações do winutil-cli, e a allowlist do lado PHP.
+ * As treze ações do Windows, e a allowlist do lado PHP.
  *
  * ESTA NÃO É A TRANCA. A tranca é a allowlist do worker.ps1, que roda em
  * integridade Alta e é a última a validar antes de executar. Esta classe é a
@@ -19,13 +19,20 @@ use InvalidArgumentException;
  * trabalho sem passar por aqui — que é exatamente o cenário que a allowlist do
  * worker existe para cobrir — não é barrado por esta classe.
  *
- * A ORDEM DOS CASOS É A DO MENU do winutil-cli, de [1] a [12], para a tela
- * poder iterar o enum sem manter uma segunda lista de ordenação.
+ * REDUNDANTE NÃO É AUTOMÁTICO: nada no PHP obriga o $ALLOWLIST do worker a
+ * acompanhar este enum, e uma ação que entre só de um lado fica pela metade —
+ * aceita aqui e recusada lá, ou o contrário. Quem acusa isso é o teste de
+ * paridade em tests/Unit/WinActionTest.php, que lê o worker.ps1 e compara as
+ * duas listas.
  *
- * Os nomes dos parâmetros devolvidos por validate() são os nomes EXATOS do
- * winutil-cli.ps1 (Preset, Provider, PrimaryDNS...), e não nomes próprios
- * traduzidos: renomear no meio do caminho obrigaria a manter um mapa em algum
- * lugar, e mapa é onde uma ponta fica para trás.
+ * A ORDEM DOS CASOS É A DO MENU, de [1] a [13], e a tela repete essa ordem nas
+ * seções dela.
+ *
+ * Os nomes dos parâmetros devolvidos por validate() são os nomes EXATOS dos
+ * parâmetros das ações (Preset, Provider, PrimaryDNS...), e não nomes próprios
+ * traduzidos: o bootstrap.ps1 faz splatting direto neles, então renomear no
+ * meio do caminho obrigaria a manter um mapa em algum lugar, e mapa é onde uma
+ * ponta fica para trás.
  */
 enum WinAction: string
 {
@@ -41,6 +48,7 @@ enum WinAction: string
     case Processes = 'processes';
     case Optimize = 'optimize';
     case Gpu = 'gpu';
+    case Gdid = 'gdid';
 
     /**
      * Teto de bytes de qualquer campo de texto livre.
@@ -87,6 +95,16 @@ enum WinAction: string
     /** O gpu troca o firewall do exporter por uninstall. Conferido no Invoke-GPU. */
     public const GPU_SUBACTIONS = ['install', 'status', 'start', 'stop', 'metrics', 'uninstall'];
 
+    /**
+     * O gdid não instala nem para nada: ele liga e desliga um pipeline inteiro.
+     *
+     * Daí o conjunto não se parecer com o do exporter nem com o do gpu. E
+     * `disable` bloqueia domínios de notificação no hosts, o que é efeito
+     * amplo e recuperável apenas rodando `enable` — por isso o gdid não entra
+     * em preset nenhum: é ação escolhida a dedo, nunca efeito colateral.
+     */
+    public const GDID_SUBACTIONS = ['status', 'disable', 'enable'];
+
     public const NETWORK_DURATION_MIN = 1;
 
     public const NETWORK_DURATION_MAX = 3600;
@@ -106,13 +124,19 @@ enum WinAction: string
     public function validate(array $input): array
     {
         return match ($this) {
-            // O performance NÃO recebe state, e não é esquecimento: o dispatch
-            // por parâmetro do winutil-cli.ps1 (linha 267) chama
-            // Invoke-Performance sem repassar -State, e o param() do entry
-            // point não declara State. Medido: passar -State devolve
-            // NamedParameterNotFound e nada executa. Pelo caminho que esta
-            // tela usa, só "on" é alcançável — restaurar o Balanceado é o
-            // menu interativo do CLI.
+            // O performance NÃO recebe state, e AGORA ESTA LISTA É A ÚNICA
+            // COISA QUE O IMPEDE.
+            //
+            // Havia duas travas: esta e o param() do winutil-cli.ps1, que não
+            // declarava State — passar -State devolvia NamedParameterNotFound
+            // e nada executava. Aquele ponto de entrada não existe mais: o
+            // bootstrap.ps1 faz splatting direto em Invoke-Performance, que
+            // DECLARA -State [ValidateSet('on','off')].
+            //
+            // Ou seja, "off" deixou de ser inalcançável por acidente e passou
+            // a ser omissão deliberada. Pôr State aqui e no worker faria o
+            // desligar do plano de energia funcionar — é decisão em aberto,
+            // não impedimento técnico.
             self::Audit,
             self::Debloat,
             self::Performance,
@@ -127,6 +151,7 @@ enum WinAction: string
             // uninstall. Conferido nos dois Invoke-*.
             self::Exporter  => ['SubAction' => $this->pick($input, 'SubAction', self::EXPORTER_SUBACTIONS, obrigatorio: true)],
             self::Gpu       => ['SubAction' => $this->pick($input, 'SubAction', self::GPU_SUBACTIONS, obrigatorio: true)],
+            self::Gdid      => ['SubAction' => $this->pick($input, 'SubAction', self::GDID_SUBACTIONS, obrigatorio: true)],
             self::Optimize  => $this->optimize($input),
         };
     }
