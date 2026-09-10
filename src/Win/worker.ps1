@@ -1,7 +1,7 @@
 ﻿<#
 .SYNOPSIS
-    Worker elevado do PHPorto. Recebe trabalho por arquivo e executa o
-    winutil-cli.
+    Worker elevado do PHPorto. Recebe trabalho por arquivo e executa uma acao
+    do Windows, carregada do bootstrap.ps1 ao lado.
 
 .DESCRIPTION
     POR QUE ELE EXISTE, e por que o canal e' por arquivo:
@@ -40,6 +40,12 @@ param(
     [Parameter(Mandatory)] [string]$Dir,
 
     # Caminho do winutil-cli.ps1. Vem de PHPORTO_WINUTIL_PATH.
+    #
+    # JA NAO E' USADO: as acoes moram em src/Win/actions e quem as monta e'
+    # o bootstrap.ps1, irmao deste arquivo (ver New-InvocationScript). O
+    # parametro continua obrigatorio ate a fatia que remove o
+    # PHPORTO_WINUTIL_PATH de ponta a ponta — tirar so este lado agora
+    # quebraria o Elevation, que ainda o passa.
     [Parameter(Mandatory)] [string]$Winutil,
 
     # Carimbo desta execucao do servidor. NAO E' TRANCA: ele mora no marcador,
@@ -68,6 +74,17 @@ $F_DESLIGAR  = Join-Path $Dir 'win-ordem-desligar'
 $F_CANCELAR  = Join-Path $Dir 'win-ordem-cancelar'
 $F_PROVA     = Join-Path $Dir ('win-prova-' + $Nonce + '.txt')
 $F_LOG       = Join-Path $Dir 'win-worker.log'
+
+# O bootstrap das acoes, irmao deste arquivo. Nao vem por parametro porque os
+# dois viajam juntos no repositorio: nao ha o que configurar, e uma chave a
+# menos e' uma chave a menos para ficar para tras.
+#
+# Resolvido AQUI, e nao dentro de New-InvocationScript, por dois motivos. O
+# primeiro e' a convencao deste bloco: caminho fica num lugar so. O segundo e'
+# medido — $PSScriptRoot dentro de uma funcao recriada por Invoke-Expression
+# vem VAZIO e ainda sombreia o global, entao a funcao nao teria como saber onde
+# esta, e o teste que a extrai por AST nao teria como dizer.
+$BOOTSTRAP   = Join-Path $PSScriptRoot 'bootstrap.ps1'
 
 # ============================================================
 # ALLOWLIST — a tranca de verdade
@@ -100,10 +117,15 @@ $ALLOWLIST = @{
     'memory'      = @{}
     'processes'   = @{}
 
-    # Sem 'State', e nao e' esquecimento: o dispatch por parametro do
-    # winutil-cli.ps1 chama Invoke-Performance sem repassar -State, e o
-    # param() do entry point nao declara State. Medido: passar -State devolve
-    # NamedParameterNotFound e nada executa.
+    # Sem 'State', e AGORA A ALLOWLIST E' A UNICA COISA QUE O IMPEDE.
+    #
+    # Antes havia duas trancas: esta lista e o param() do winutil-cli.ps1, que
+    # nao declarava State — passar -State devolvia NamedParameterNotFound e
+    # nada executava. Aquele ponto de entrada nao existe mais, e o bootstrap
+    # faz splatting direto em Invoke-Performance, que DECLARA
+    # -State [ValidateSet('on','off')]. Ou seja: pos ou nao, 'State' aqui
+    # decide sozinho se o desligar do plano de energia fica alcancavel pela
+    # tela. Deixar de fora e' escolha, nao heranca.
     'performance' = @{}
 
     'tweaks'      = @{
@@ -258,7 +280,7 @@ function Test-Job($job) {
 }
 
 <#
-    Gera o script que chama o winutil e devolve o caminho dele.
+    Gera o script que chama a acao e devolve o caminho dele.
 
     O JOB NUNCA VIRA LINHA DE COMANDO. Os valores ja validados sao emitidos
     como literais de string dentro de um .ps1, e o que vai para a linha de
@@ -267,33 +289,61 @@ function Test-Job($job) {
     escrevesse falharia em algum valor, e a falha apareceria como erro DO
     COMANDO, mandando quem depura para o lugar errado.
 
+    O ALVO E' O BOOTSTRAP DESTE REPOSITORIO, nao mais um winutil-cli externo.
+    O caminho vem de $BOOTSTRAP, resolvido no bloco de constantes: bootstrap.ps1
+    e worker.ps1 sao irmaos na mesma pasta e viajam juntos, entao nao ha o que
+    configurar nem parametro novo para manter em dia. O PHPORTO_WINUTIL_PATH
+    ainda chega em -Winutil, e ainda e' obrigatorio, mas ja nao e' usado aqui:
+    quem o remove e' a fatia da independencia.
+
+    OS PARAMETROS VAO POR SPLATTING, num hashtable literal, e nao como
+    -Nome valor soltos na chamada. Assim um nome de parametro tambem e' literal
+    de string, e nao ha ponto nenhum da linha em que um valor validado possa
+    virar outra coisa que nao dado.
+
     O *>&1 funde todos os fluxos no de sucesso. E' o equivalente do
     "exec 2>&1" do lado bash, e e' o que faz a ordem das linhas ser a real —
-    o winutil escreve por Write-Host, que sem isso nao entra na captura.
+    as acoes escrevem por Write-Host, que sem isso nao entra na captura.
+
+    A RECUSA VOLTA COMO 1. O despachante do bootstrap nao chama exit: ele lanca,
+    depois de escrever o motivo por Write-Status (sem elevacao, acao fora do
+    mapa, funcao ausente, config ausente). Sem o try/catch, a excecao mataria o
+    script ANTES das linhas que gravam o codigo de saida — o worker nao acharia
+    arquivo de codigo e registraria exit nulo, que na tela nao se distingue de
+    "terminou sem dizer nada". Com ele, recusa e' exit 1, que e' o mesmo que o
+    winutil-cli devolvia quando recusava por falta de Administrador.
 #>
 function New-InvocationScript($validado, [string]$id) {
     $arqExit = Join-Path $Dir ('win-exit-' + $id + '.txt')
 
-    $linhas = New-Object System.Collections.Generic.List[string]
-    $linhas.Add('$ErrorActionPreference = ' + (ConvertTo-PsLiteral 'Continue'))
-    $linhas.Add('[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($true)')
-
-    $chamada = '& ' + (ConvertTo-PsLiteral $Winutil) + ' -Action ' + (ConvertTo-PsLiteral $validado.acao)
+    $pares = New-Object System.Collections.Generic.List[string]
 
     foreach ($nome in $validado.params.Keys) {
         $valor = $validado.params[$nome]
 
         if ($valor -is [bool]) {
-            if ($valor) { $chamada += " -$nome" }
+            # A allowlist so guarda flag verdadeira; falsa e' ausencia.
+            if ($valor) { $pares.Add((ConvertTo-PsLiteral $nome) + ' = $true') }
         } elseif ($valor -is [int]) {
-            $chamada += " -$nome $valor"
+            $pares.Add((ConvertTo-PsLiteral $nome) + " = $valor")
         } else {
-            $chamada += " -$nome " + (ConvertTo-PsLiteral ([string]$valor))
+            $pares.Add((ConvertTo-PsLiteral $nome) + ' = ' + (ConvertTo-PsLiteral ([string]$valor)))
         }
     }
 
-    $chamada += ' *>&1'
-    $linhas.Add($chamada)
+    $hash = if ($pares.Count -eq 0) { '@{}' } else { '@{ ' + ($pares -join '; ') + ' }' }
+
+    $linhas = New-Object System.Collections.Generic.List[string]
+    $linhas.Add('$ErrorActionPreference = ' + (ConvertTo-PsLiteral 'Continue'))
+    $linhas.Add('[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($true)')
+    $linhas.Add('$phportoRecusado = $false')
+    $linhas.Add('try {')
+    $linhas.Add('    . ' + (ConvertTo-PsLiteral $BOOTSTRAP))
+    $linhas.Add('    Invoke-PhportoWinAction -Action ' + (ConvertTo-PsLiteral $validado.acao) + ' -Params ' + $hash + ' *>&1')
+    $linhas.Add('} catch {')
+    $linhas.Add('    Write-Host ("[phporto] " + $_.Exception.Message)')
+    $linhas.Add('    $phportoRecusado = $true')
+    $linhas.Add('}')
 
     # O CODIGO DE SAIDA VOLTA POR ARQUIVO, e nao pelo objeto do processo.
     #
@@ -305,7 +355,7 @@ function New-InvocationScript($validado, [string]$id) {
     #
     # $LASTEXITCODE fica nulo quando nada nativo rodou nem houve exit
     # explicito; nesse caso o certo e' zero.
-    $linhas.Add('$code = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }')
+    $linhas.Add('$code = if ($phportoRecusado) { 1 } elseif ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }')
     $linhas.Add('[System.IO.File]::WriteAllText(' + (ConvertTo-PsLiteral $arqExit) + ', [string]$code, [System.Text.UTF8Encoding]::new($false))')
     $linhas.Add('exit $code')
 
@@ -340,9 +390,10 @@ function Write-Done([string]$id, $exit, [int]$ms, [string]$nota) {
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
 if (-not $admin) {
-    # Sem elevacao este worker nao serve para nada: o winutil-cli sai com
-    # exit 1 na propria checagem de Administrador. Melhor nao escrever prova e
-    # deixar o PHP dizer que a permissao nao foi concedida.
+    # Sem elevacao este worker nao serve para nada: o despachante do
+    # bootstrap recusa toda acao por falta de Administrador. Melhor nao
+    # escrever prova e deixar o PHP dizer que a permissao nao foi concedida,
+    # em vez de aceitar jobs para recusar um por um.
     Write-Log "recusado: processo nao esta elevado (pid=$PID)"
     exit 1
 }
@@ -350,7 +401,7 @@ if (-not $admin) {
 # Prova em ASCII e sem BOM, para o PHP casar o conteudo sem tirar bytes antes.
 Set-Content -Path $F_PROVA -Value "PID=$PID;ADMIN=True;NONCE=$Nonce" -Encoding ASCII
 Write-Heartbeat
-Write-Log "iniciado pid=$PID pai=$ParentPid winutil='$Winutil'"
+Write-Log "iniciado pid=$PID pai=$ParentPid bootstrap='$BOOTSTRAP'"
 
 # ============================================================
 # LACO — 500 ms, cinco tarefas
