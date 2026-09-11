@@ -244,6 +244,24 @@ reescrevem aquele trecho em LF e deixam o arquivo misto. O `cs-check-lf` roda o
 fixer sobre uma cópia convertida, e o que sobra no relatório é estilo de
 verdade. Detalhes em `tools/cs-check-lf.php`.
 
+## O registro fica nas mensagens de commit
+
+`git log` é a documentação de decisão deste projeto: cada mensagem registra por
+que a coisa é como é, com a medição que sustentou a escolha. Vale ler antes de
+desfazer qualquer coisa que pareça estranha — provavelmente já foi pesada.
+
+Quatro mensagens perderam texto no caminho até o repositório, e uma foi empurrada
+sem corpo nenhum. Como aqui não se faz `amend` nem `rebase` em histórico
+publicado, o conserto é aditivo: [`ERRATA.md`](ERRATA.md) nomeia cada commit pelo
+hash, mostra onde a costura cedeu e restaura o sentido do que se perdeu.
+
+A causa era o transporte — copiar e colar a mensagem para dentro do terminal. Por
+isso **a mensagem vai por arquivo**, e esta é a regra daqui em diante:
+
+```bash
+git commit -F .git/COMMIT_MSG.txt   # e confira com: git log -1 --format=%B
+```
+
 ## Licença
 
 MIT — texto em [`LICENSE`](LICENSE). A escolha é prática: `src/Win/lib/` e
