@@ -6,6 +6,8 @@ namespace App\Providers;
 
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\WinState;
+use App\Domain\WinStateScope;
 use App\Exceptions\StorageException;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -25,6 +27,9 @@ final class MySQLProvider implements DatabaseProviderInterface
     /** Nome da tabela, já validado contra a whitelist de identificadores. */
     private string $table;
 
+    /** Tabela de estado da /win, derivada da outra. Ver a nota no SQLiteProvider. */
+    private string $stateTable;
+
     /**
      * @param array{host: string, port: string, database: string, user: string, password: string, table: string} $config
      */
@@ -34,7 +39,8 @@ final class MySQLProvider implements DatabaseProviderInterface
             throw new StorageException('Configuração do MySQL incompleta (database/user).');
         }
 
-        $this->table = $this->sanitizeIdentifier($config['table']);
+        $this->table      = $this->sanitizeIdentifier($config['table']);
+        $this->stateTable = $this->sanitizeIdentifier($this->table . self::STATE_SUFFIX);
 
         $dsn = sprintf(
             'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
@@ -184,6 +190,134 @@ final class MySQLProvider implements DatabaseProviderInterface
         }
     }
 
+    public function putWinState(WinState $state): WinState
+    {
+        try {
+            // ON DUPLICATE KEY, o upsert do MySQL — equivalente ao ON CONFLICT
+            // do SQLite. Dois nomes de parâmetro para o mesmo payload porque
+            // ATTR_EMULATE_PREPARES está desligado neste provider, e sem
+            // emulação o PDO não deixa reusar um named param na mesma query.
+            //
+            // O updated_at é escrito explicitamente na cláusula de UPDATE, e
+            // não deixado para o ON UPDATE CURRENT_TIMESTAMP da coluna: o
+            // MySQL não considera a linha alterada quando o payload chega
+            // idêntico, e aí a hora ficaria a da gravação anterior — dizendo
+            // que ninguém reaplicou quando alguém reaplicou.
+            $stmt = $this->pdo->prepare(
+                "INSERT INTO `{$this->stateTable}` (scope, action, payload, updated_at)
+                      VALUES (:scope, :action, :payload, CURRENT_TIMESTAMP)
+                 ON DUPLICATE KEY UPDATE
+                        payload    = :payload_novo,
+                        updated_at = CURRENT_TIMESTAMP"
+            );
+
+            $stmt->execute([
+                'scope'        => $state->scope->value,
+                'action'       => $state->action,
+                'payload'      => $state->encodedPayload(),
+                'payload_novo' => $state->encodedPayload(),
+            ]);
+
+            return $this->readBackState($state);
+        } catch (PDOException $e) {
+            throw new StorageException('Falha ao gravar o estado da /win: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /** Ver a nota no readBackState() do SQLiteProvider. */
+    private function readBackState(WinState $state): WinState
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT updated_at FROM `{$this->stateTable}`
+              WHERE scope = :scope AND action = :action"
+        );
+        $stmt->execute(['scope' => $state->scope->value, 'action' => $state->action]);
+        $updatedAt = $this->formatDate($stmt->fetchColumn());
+
+        if ($updatedAt === null) {
+            return $state;
+        }
+
+        return new WinState(
+            scope: $state->scope,
+            action: $state->action,
+            payload: $state->payload,
+            updatedAt: $updatedAt,
+        );
+    }
+
+    public function winStates(WinStateScope $scope): array
+    {
+        try {
+            $stmt = $this->pdo->prepare(
+                "SELECT scope, action, payload, updated_at
+                   FROM `{$this->stateTable}`
+                  WHERE scope = :scope"
+            );
+            $stmt->bindValue('scope', $scope->value, PDO::PARAM_STR);
+            $stmt->execute();
+
+            $estados = [];
+
+            foreach ($stmt->fetchAll() as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+
+                $assoc = [];
+                foreach ($row as $key => $value) {
+                    $assoc[(string) $key] = $value;
+                }
+
+                $estado = $this->hydrateState($assoc);
+
+                if ($estado !== null) {
+                    $estados[$estado->action] = $estado;
+                }
+            }
+
+            return $estados;
+        } catch (PDOException $e) {
+            throw new StorageException('Falha ao ler o estado da /win: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    public function forgetWinState(WinStateScope $scope, string $action): int
+    {
+        try {
+            $stmt = $this->pdo->prepare(
+                "DELETE FROM `{$this->stateTable}`
+                  WHERE scope = :scope AND action = :action"
+            );
+            $stmt->execute(['scope' => $scope->value, 'action' => $action]);
+
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            throw new StorageException('Falha ao esquecer o estado da /win: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function hydrateState(array $row): ?WinState
+    {
+        $scope   = WinStateScope::fromStorage($row['scope'] ?? null);
+        $action  = $row['action'] ?? null;
+        $payload = WinState::decodePayload($row['payload'] ?? null);
+
+        if ($scope === null || !is_string($action) || $action === '' || $payload === null) {
+            return null;
+        }
+
+        return new WinState(
+            scope: $scope,
+            action: $action,
+            payload: $payload,
+            updatedAt: $this->formatDate($row['updated_at'] ?? null),
+        );
+    }
+
     /**
      * @param array<string, mixed> $row
      */
@@ -222,6 +356,28 @@ final class MySQLProvider implements DatabaseProviderInterface
                 timed_out TINYINT(1) NOT NULL DEFAULT 0,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 INDEX idx_created_at (created_at, id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+        $this->ensureStateTable();
+    }
+
+    /**
+     * Cria a tabela de estado da /win. Ver a nota no SQLiteProvider.
+     *
+     * VARCHAR e não TEXT nas duas colunas da chave: o MySQL não indexa TEXT
+     * sem prefixo de tamanho, e chave primária sobre TEXT seria recusada na
+     * criação da tabela. Os 16 e 32 bytes são folgados — escopo é enum de duas
+     * palavras, e a ação mais longa das treze tem onze letras.
+     */
+    private function ensureStateTable(): void
+    {
+        $this->pdo->exec(
+            "CREATE TABLE IF NOT EXISTS `{$this->stateTable}` (
+                scope VARCHAR(16) NOT NULL,
+                action VARCHAR(32) NOT NULL,
+                payload MEDIUMTEXT NOT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (scope, action)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
         );
     }

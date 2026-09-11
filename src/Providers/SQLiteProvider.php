@@ -6,6 +6,8 @@ namespace App\Providers;
 
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\WinState;
+use App\Domain\WinStateScope;
 use App\Exceptions\StorageException;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -29,6 +31,22 @@ final class SQLiteProvider implements DatabaseProviderInterface
     private string $table;
 
     /**
+     * Nome da tabela de estado da /win.
+     *
+     * DERIVADA DA OUTRA, com sufixo fixo, e não uma chave nova no .env. O
+     * nome da tabela de execuções já é configurável, então quem a renomeou
+     * para não colidir com algo ganha a de estado renomeada junto, sem ter de
+     * lembrar de uma segunda variável — e uma chave a menos é uma chave a
+     * menos para ficar para trás, que é o mesmo critério do caminho do
+     * bootstrap.ps1 no worker.
+     *
+     * Passa pelo sanitizeIdentifier de novo: o sufixo é literal aqui, mas
+     * validar o resultado é o que garante que a interpolação na query só
+     * recebe [A-Za-z0-9_] venha o prefixo de onde vier.
+     */
+    private string $stateTable;
+
+    /**
      * @param array{path: string, table: string} $config
      */
     public function __construct(array $config)
@@ -39,7 +57,8 @@ final class SQLiteProvider implements DatabaseProviderInterface
             throw new StorageException('Configuração do SQLite incompleta (path).');
         }
 
-        $this->table = $this->sanitizeIdentifier($config['table']);
+        $this->table      = $this->sanitizeIdentifier($config['table']);
+        $this->stateTable = $this->sanitizeIdentifier($this->table . self::STATE_SUFFIX);
 
         $this->ensureDirectory($path);
 
@@ -201,6 +220,140 @@ final class SQLiteProvider implements DatabaseProviderInterface
         }
     }
 
+    public function putWinState(WinState $state): WinState
+    {
+        try {
+            // UPSERT NATIVO, e não SELECT-depois-INSERT-ou-UPDATE. Medido: o
+            // SQLite desta máquina é 3.53.4, e o ON CONFLICT existe desde o
+            // 3.24 (2018). A alternativa em dois passos abriria uma janela
+            // entre a leitura e a escrita — que aqui não teria consequência,
+            // porque o php -S atende em série, mas custaria uma ida a mais ao
+            // banco para resolver um problema que o banco resolve sozinho.
+            $stmt = $this->pdo->prepare(
+                "INSERT INTO \"{$this->stateTable}\" (scope, action, payload, updated_at)
+                      VALUES (:scope, :action, :payload, CURRENT_TIMESTAMP)
+                 ON CONFLICT(scope, action) DO UPDATE
+                        SET payload    = excluded.payload,
+                            updated_at = CURRENT_TIMESTAMP"
+            );
+
+            $stmt->execute([
+                'scope'   => $state->scope->value,
+                'action'  => $state->action,
+                'payload' => $state->encodedPayload(),
+            ]);
+
+            return $this->readBackState($state);
+        } catch (PDOException $e) {
+            throw new StorageException('Falha ao gravar o estado da /win: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * Lê de volta só o updated_at, pelo mesmo motivo do readBack() do insert():
+     * quem chama não tem outra forma de saber a hora que o banco atribuiu.
+     *
+     * Falha na leitura devolve o que foi gravado em vez de estourar — o dado
+     * ESTÁ no banco, e perder a hora é menos grave que fazer o chamador
+     * concluir que a gravação falhou.
+     */
+    private function readBackState(WinState $state): WinState
+    {
+        $stmt = $this->pdo->prepare(
+            "SELECT updated_at FROM \"{$this->stateTable}\"
+              WHERE scope = :scope AND action = :action"
+        );
+        $stmt->execute(['scope' => $state->scope->value, 'action' => $state->action]);
+        $updatedAt = $this->formatDate($stmt->fetchColumn());
+
+        if ($updatedAt === null) {
+            return $state;
+        }
+
+        return new WinState(
+            scope: $state->scope,
+            action: $state->action,
+            payload: $state->payload,
+            updatedAt: $updatedAt,
+        );
+    }
+
+    public function winStates(WinStateScope $scope): array
+    {
+        try {
+            // O filtro na consulta, como no recent(): ver a nota na interface.
+            $stmt = $this->pdo->prepare(
+                "SELECT scope, action, payload, updated_at
+                   FROM \"{$this->stateTable}\"
+                  WHERE scope = :scope"
+            );
+            $stmt->bindValue('scope', $scope->value, PDO::PARAM_STR);
+            $stmt->execute();
+
+            $estados = [];
+
+            foreach ($stmt->fetchAll() as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+
+                $assoc = [];
+                foreach ($row as $key => $value) {
+                    $assoc[(string) $key] = $value;
+                }
+
+                $estado = $this->hydrateState($assoc);
+
+                // Linha ilegível é descartada, não é erro: ver a nota na
+                // interface. A tela sem estado se comporta como antes desta
+                // fatia, que é o lado que não afirma nada.
+                if ($estado !== null) {
+                    $estados[$estado->action] = $estado;
+                }
+            }
+
+            return $estados;
+        } catch (PDOException $e) {
+            throw new StorageException('Falha ao ler o estado da /win: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    public function forgetWinState(WinStateScope $scope, string $action): int
+    {
+        try {
+            $stmt = $this->pdo->prepare(
+                "DELETE FROM \"{$this->stateTable}\"
+                  WHERE scope = :scope AND action = :action"
+            );
+            $stmt->execute(['scope' => $scope->value, 'action' => $action]);
+
+            return $stmt->rowCount();
+        } catch (PDOException $e) {
+            throw new StorageException('Falha ao esquecer o estado da /win: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function hydrateState(array $row): ?WinState
+    {
+        $scope   = WinStateScope::fromStorage($row['scope'] ?? null);
+        $action  = $row['action'] ?? null;
+        $payload = WinState::decodePayload($row['payload'] ?? null);
+
+        if ($scope === null || !is_string($action) || $action === '' || $payload === null) {
+            return null;
+        }
+
+        return new WinState(
+            scope: $scope,
+            action: $action,
+            payload: $payload,
+            updatedAt: $this->formatDate($row['updated_at'] ?? null),
+        );
+    }
+
     /**
      * @param array<string, mixed> $row
      */
@@ -256,6 +409,42 @@ final class SQLiteProvider implements DatabaseProviderInterface
         $this->pdo->exec(
             "CREATE INDEX IF NOT EXISTS \"idx_{$this->table}_created_at\"
                 ON \"{$this->table}\" (created_at DESC, id DESC)"
+        );
+        $this->ensureStateTable();
+    }
+
+    /**
+     * Cria a tabela de estado da /win. Idempotente, e no MESMO acesso.
+     *
+     * SEM MIGRATION, porque o projeto não tem esse mecanismo: a tabela de
+     * execuções também nasce no CREATE TABLE IF NOT EXISTS de toda abertura de
+     * conexão, e inventar um versionador de schema para a segunda tabela
+     * criaria uma peça nova que só ela usaria. Quem já tem banco ganha a
+     * tabela na próxima página que abrir, vazia — e tabela de estado vazia
+     * significa exatamente o que tem de significar: nada aplicado que esta
+     * ferramenta saiba.
+     *
+     * CHAVE COMPOSTA (scope, action) E SEM id, ao contrário da tabela de
+     * execuções. Lá não há unicidade de propósito, porque duas execuções
+     * iguais são dois fatos; aqui é o oposto — é uma linha por par, e gravar
+     * duas vezes é substituir. A chave composta é o que torna o upsert
+     * possível sem um SELECT antes.
+     *
+     * NÃO HÁ ÍNDICE ALÉM DA CHAVE, e pelo mesmo motivo registrado no recent():
+     * a tabela tem no máximo uma linha por ação por escopo — 26 linhas no
+     * limite, com as treze ações —, e varrer isso é mais rápido que abrir um
+     * índice.
+     */
+    private function ensureStateTable(): void
+    {
+        $this->pdo->exec(
+            "CREATE TABLE IF NOT EXISTS \"{$this->stateTable}\" (
+                scope TEXT NOT NULL,
+                action TEXT NOT NULL,
+                payload TEXT NOT NULL DEFAULT '{}',
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (scope, action)
+            )"
         );
     }
 

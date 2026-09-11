@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\WinState;
+use App\Domain\WinStateScope;
 use App\Providers\MySQLProvider;
 
 /**
@@ -92,7 +94,12 @@ beforeEach(function () {
 
 afterEach(function () {
     try {
-        rawPdo()->exec('DROP TABLE IF EXISTS `' . TEST_TABLE . '`');
+        $pdo = rawPdo();
+        $pdo->exec('DROP TABLE IF EXISTS `' . TEST_TABLE . '`');
+        // A de estado também: o provider cria as DUAS no mesmo acesso, e
+        // deixar uma para trás faria o teste seguinte herdar linha de estado
+        // do anterior.
+        $pdo->exec('DROP TABLE IF EXISTS `' . TEST_TABLE . '_win_state`');
     } catch (PDOException) {
         // Sem conexão: nada a limpar.
     }
@@ -199,4 +206,73 @@ it('clear() de um tipo não leva o outro junto', function () {
     expect($p->clear(ExecutionKind::Windows))->toBe(1)
         ->and($p->recent())->toHaveCount(1)
         ->and($p->recent()[0]->kind)->toBe(ExecutionKind::Comando);
+});
+
+/*
+ * ============================================================
+ * ESTADO DA /win
+ * ============================================================
+ *
+ * ESCRITOS E NÃO EXECUTADOS nesta máquina: sem MYSQL_TEST_* e servidor de pé,
+ * o beforeEach pula o arquivo inteiro. Existem porque o upsert do MySQL é
+ * OUTRO comando — ON DUPLICATE KEY em vez de ON CONFLICT —, e cláusula que
+ * ninguém exercita é onde a assimetria entre os drivers se instala.
+ */
+
+it('grava o estado aplicado e devolve com o updated_at do banco', function () {
+    $p = new MySQLProvider(mysqlTestConfig());
+
+    $gravado = $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
+
+    expect($gravado->updatedAt)->not->toBeNull()
+        ->and($gravado->payload)->toBe(['Preset' => 'standard']);
+});
+
+it('o ON DUPLICATE KEY substitui em vez de duplicar', function () {
+    $p = new MySQLProvider(mysqlTestConfig());
+
+    $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
+    $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'advanced']));
+
+    $estados = $p->winStates(WinStateScope::Applied);
+
+    expect($estados)->toHaveCount(1)
+        ->and($estados['tweaks']->payload)->toBe(['Preset' => 'advanced']);
+});
+
+it('a mesma ação em escopos diferentes são duas linhas independentes', function () {
+    $p = new MySQLProvider(mysqlTestConfig());
+
+    $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
+    $p->putWinState(new WinState(WinStateScope::Selection, 'tweaks', ['itens' => 'a,b']));
+
+    expect($p->winStates(WinStateScope::Applied))->toHaveCount(1)
+        ->and($p->winStates(WinStateScope::Selection))->toHaveCount(1);
+});
+
+it('esquecer devolve 1 e depois 0', function () {
+    $p = new MySQLProvider(mysqlTestConfig());
+
+    $p->putWinState(new WinState(WinStateScope::Applied, 'gdid'));
+
+    expect($p->forgetWinState(WinStateScope::Applied, 'gdid'))->toBe(1)
+        ->and($p->forgetWinState(WinStateScope::Applied, 'gdid'))->toBe(0);
+});
+
+it('limpar o histórico do Windows NÃO mexe no estado', function () {
+    $p = new MySQLProvider(mysqlTestConfig());
+
+    $p->insert(novaExecucaoMysql('tweaks -Preset standard', kind: ExecutionKind::Windows));
+    $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
+
+    expect($p->clear(ExecutionKind::Windows))->toBe(1)
+        ->and($p->winStates(WinStateScope::Applied))->toHaveCount(1);
+});
+
+it('payload vazio volta como mapa vazio', function () {
+    $p = new MySQLProvider(mysqlTestConfig());
+
+    $p->putWinState(new WinState(WinStateScope::Applied, 'gdid'));
+
+    expect($p->winStates(WinStateScope::Applied)['gdid']->payload)->toBe([]);
 });

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\WinState;
+use App\Domain\WinStateScope;
 use App\Services\ExecutionLogService;
 use Tests\Fakes\FakeProvider;
 
@@ -142,4 +144,64 @@ it('clear() repassa o tipo e não leva os outros', function () {
     expect($service->clear(ExecutionKind::Windows))->toBe(1)
         ->and($service->recent(100))->toHaveCount(1)
         ->and($service->recent(100)[0]->kind)->toBe(ExecutionKind::Comando);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Estado da /win
+|--------------------------------------------------------------------------
+|
+| O repasse existe porque o serviço é o único caminho das telas até os
+| providers. Sem ele, os três drivers teriam os métodos e nenhuma tela
+| alcançaria — código nascido morto, esperando outro commit para ter sentido.
+|
+*/
+
+it('putWinState repassa e devolve com o updated_at carimbado', function () {
+    $provider = new FakeProvider();
+    $service  = new ExecutionLogService($provider);
+
+    $gravado = $service->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
+
+    expect($gravado->updatedAt)->not->toBeNull()
+        ->and($provider->winState)->toHaveKey('aplicado:tweaks');
+});
+
+it('RECUSA AÇÃO VAZIA antes de chegar ao banco', function () {
+    // Mesmo critério do record() com comando vazio: o que não identifica nada
+    // não é linha de estado, é lixo que a tela leria como ação desconhecida.
+    (new ExecutionLogService(new FakeProvider()))
+        ->putWinState(new WinState(WinStateScope::Applied, '   '));
+})->throws(InvalidArgumentException::class);
+
+it('winStates repassa o escopo, e um escopo não vê o outro', function () {
+    $service = new ExecutionLogService(new FakeProvider());
+    $service->putWinState(new WinState(WinStateScope::Applied, 'gdid'));
+    $service->putWinState(new WinState(WinStateScope::Selection, 'debloat', ['itens' => 'x']));
+
+    expect(array_keys($service->winStates(WinStateScope::Applied)))->toBe(['gdid'])
+        ->and(array_keys($service->winStates(WinStateScope::Selection)))->toBe(['debloat']);
+});
+
+it('forgetWinState apaga e devolve quantos, e repetir devolve zero', function () {
+    $service = new ExecutionLogService(new FakeProvider());
+    $service->putWinState(new WinState(WinStateScope::Applied, 'gdid'));
+
+    expect($service->forgetWinState(WinStateScope::Applied, 'gdid'))->toBe(1)
+        ->and($service->forgetWinState(WinStateScope::Applied, 'gdid'))->toBe(0)
+        ->and($service->winStates(WinStateScope::Applied))->toBe([]);
+});
+
+it('CLEAR NÃO LEVA O ESTADO, nem com tipo nem sem', function () {
+    // O fake é escrito para provar isto: um fake que apagasse os dois deixaria
+    // o teste passar e esconderia o defeito na tela.
+    $service = new ExecutionLogService(new FakeProvider());
+    $service->record(exec_('uma acao', 12, ExecutionKind::Windows));
+    $service->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
+
+    expect($service->clear(ExecutionKind::Windows))->toBe(1)
+        ->and($service->winStates(WinStateScope::Applied))->toHaveCount(1);
+
+    expect($service->clear())->toBe(0)
+        ->and($service->winStates(WinStateScope::Applied))->toHaveCount(1);
 });

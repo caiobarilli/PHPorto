@@ -6,6 +6,8 @@ namespace App\Providers;
 
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\WinState;
+use App\Domain\WinStateScope;
 use App\Exceptions\StorageException;
 use MongoDB\BSON\UTCDateTime;
 use MongoDB\Client;
@@ -21,6 +23,9 @@ use MongoDB\Driver\Exception\Exception as MongoDriverException;
 final class MongoProvider implements DatabaseProviderInterface
 {
     private Collection $collection;
+
+    /** Coleção de estado da /win, derivada da outra. Ver a nota no SQLiteProvider. */
+    private Collection $stateCollection;
 
     /**
      * @param array{uri: string, database: string, collection: string} $config
@@ -44,6 +49,14 @@ final class MongoProvider implements DatabaseProviderInterface
         try {
             $client           = new Client($config['uri']);
             $this->collection = $client->selectCollection($config['database'], $config['collection']);
+            // Coleção separada, e não um tipo de documento dentro da mesma:
+            // uma coleção só obrigaria toda consulta de execução a filtrar
+            // "documentos que não são estado", e o clear() de execuções
+            // passaria a poder levar o estado embora por descuido de filtro.
+            $this->stateCollection = $client->selectCollection(
+                $config['database'],
+                $config['collection'] . self::STATE_SUFFIX
+            );
             $this->ensureIndex();
         } catch (MongoDriverException $e) {
             throw new StorageException('Falha ao inicializar o MongoDB: ' . $e->getMessage(), 0, $e);
@@ -135,6 +148,108 @@ final class MongoProvider implements DatabaseProviderInterface
         } catch (MongoDriverException $e) {
             throw new StorageException('Falha ao limpar as execuções: ' . $e->getMessage(), 0, $e);
         }
+    }
+
+    public function putWinState(WinState $state): WinState
+    {
+        // A hora é gerada por este código, não pelo servidor — como no
+        // insert() —, então não há leitura de volta: o valor devolvido é
+        // exatamente o que foi gravado.
+        $updatedAt = new UTCDateTime();
+
+        try {
+            // replaceOne com upsert, e a chave é o _id: ele já é único e
+            // indexado por construção, então a garantia de uma linha por
+            // (escopo, ação) sai de graça, sem depender de um createIndex que
+            // numa coleção preexistente pode falhar sem ninguém notar. Ver a
+            // nota em WinState::key().
+            $this->stateCollection->replaceOne(
+                ['_id' => $state->key()],
+                [
+                    'scope'  => $state->scope->value,
+                    'action' => $state->action,
+                    // Texto, como nos outros dois: subdocumento recusaria
+                    // chave com ponto ou '$'. Ver WinState::encodedPayload().
+                    'payload'    => $state->encodedPayload(),
+                    'updated_at' => $updatedAt,
+                ],
+                ['upsert' => true]
+            );
+        } catch (MongoDriverException $e) {
+            throw new StorageException('Falha ao gravar o estado da /win: ' . $e->getMessage(), 0, $e);
+        }
+
+        return new WinState(
+            scope: $state->scope,
+            action: $state->action,
+            payload: $state->payload,
+            updatedAt: $this->formatDate($updatedAt),
+        );
+    }
+
+    public function winStates(WinStateScope $scope): array
+    {
+        try {
+            $cursor = $this->stateCollection->find(
+                ['scope' => $scope->value],
+                ['typeMap' => ['root' => 'array', 'document' => 'array']]
+            );
+
+            $estados = [];
+
+            foreach ($cursor as $doc) {
+                if (!is_array($doc)) {
+                    continue;
+                }
+
+                $assoc = [];
+                foreach ($doc as $key => $value) {
+                    $assoc[(string) $key] = $value;
+                }
+
+                $estado = $this->hydrateState($assoc);
+
+                if ($estado !== null) {
+                    $estados[$estado->action] = $estado;
+                }
+            }
+
+            return $estados;
+        } catch (MongoDriverException $e) {
+            throw new StorageException('Falha ao ler o estado da /win: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    public function forgetWinState(WinStateScope $scope, string $action): int
+    {
+        try {
+            return $this->stateCollection
+                ->deleteOne(['_id' => (new WinState($scope, $action))->key()])
+                ->getDeletedCount();
+        } catch (MongoDriverException $e) {
+            throw new StorageException('Falha ao esquecer o estado da /win: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $doc
+     */
+    private function hydrateState(array $doc): ?WinState
+    {
+        $scope   = WinStateScope::fromStorage($doc['scope'] ?? null);
+        $action  = $doc['action'] ?? null;
+        $payload = WinState::decodePayload($doc['payload'] ?? null);
+
+        if ($scope === null || !is_string($action) || $action === '' || $payload === null) {
+            return null;
+        }
+
+        return new WinState(
+            scope: $scope,
+            action: $action,
+            payload: $payload,
+            updatedAt: $this->formatDate($doc['updated_at'] ?? null),
+        );
     }
 
     /**

@@ -157,6 +157,76 @@ enum WinAction: string
     }
 
     /**
+     * O que uma execução BEM-SUCEDIDA desta ação significa para o estado.
+     *
+     * Devolve null para as ações que não afirmam nada sobre estado — as nove
+     * que não são reversíveis, e o `gdid -SubAction status`, que só relata.
+     * Null NÃO é "não aplicado": quem recebe null não mexe no que está
+     * guardado. Ver WinStateChange.
+     *
+     * QUATRO AÇÕES SÃO REVERSÍVEIS, e cada uma diz a reversão de um jeito:
+     *
+     *   tweaks    -Undo, e ele EXIGE -Preset. Medido no Invoke-Tweaks: o -Undo
+     *             lê a lista daquele preset no preset.json e reverte item por
+     *             item, então reverter sem saber o preset é impossível. É a
+     *             razão mais forte para este estado existir: essa informação
+     *             não está em nenhum outro lugar do sistema.
+     *   optimize  -Undo, e ele NÃO precisa de parâmetro: o Invoke-Optimize lê
+     *             o próprio C:\WinUtil\optimize-state.json e recusa sem ele. O
+     *             payload guarda o preset só para a tela poder dizer o que
+     *             será revertido.
+     *   gdid      'disable' aplica e 'enable' reverte — não há -Undo, são duas
+     *             subações. O estado real também vive em
+     *             C:\WinUtil\gdid-state.json, escrito pela própria ação.
+     *   performance  -State on/off. Hoje só 'on' chega, porque State não está
+     *             nas allowlists; a regra já trata os dois para o dia em que
+     *             entrar, e o caminho de reverter não fica escrito pela metade.
+     *
+     * POR QUE O ESTADO NÃO É LIDO DA MÁQUINA, apesar de optimize e gdid
+     * guardarem arquivo próprio e o plano de energia ser consultável por
+     * powercfg: ler custaria um processo por carregamento de página, e é
+     * exatamente o custo que o heartbeat da elevação existe para não pagar
+     * (~200 ms de powershell.exe contra um filemtime()). Além disso, dois dos
+     * quatro arquivos ficam em C:\WinUtil, que é escrito por processo elevado,
+     * e o tweaks não tem arquivo nenhum. O que esta ferramenta guarda é o que
+     * ELA fez — e a nota no WinStateScope diz que mexer por fora deixa a linha
+     * desatualizada, que é o custo aceito.
+     *
+     * @param array<string, string|int|bool> $params os já validados por validate()
+     */
+    public function stateChange(array $params): ?WinStateChange
+    {
+        return match ($this) {
+            self::Tweaks => new WinStateChange(
+                applied: !isset($params['Undo']),
+                // Só o Preset: é o que o -Undo exige de volta. Guardar o resto
+                // seria guardar o que ninguém vai ler.
+                payload: isset($params['Preset']) ? ['Preset' => $params['Preset']] : [],
+            ),
+
+            self::Optimize => new WinStateChange(
+                applied: !isset($params['Undo']),
+                payload: isset($params['Preset']) ? ['Preset' => $params['Preset']] : [],
+            ),
+
+            // 'status' não muda nem afirma: devolve null para o chamador deixar
+            // a linha como está.
+            self::Gdid => match ($params['SubAction'] ?? '') {
+                'disable' => new WinStateChange(applied: true),
+                'enable'  => new WinStateChange(applied: false),
+                default   => null,
+            },
+
+            self::Performance => new WinStateChange(
+                // Ausente é 'on': é o default declarado no Invoke-Performance.
+                applied: ($params['State'] ?? 'on') !== 'off',
+            ),
+
+            default => null,
+        };
+    }
+
+    /**
      * @param array<string, string> $input
      *
      * @return array<string, string|bool>

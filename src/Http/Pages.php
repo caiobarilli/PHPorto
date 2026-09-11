@@ -8,6 +8,8 @@ use App\Config\Config;
 use App\Config\Flags;
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\WinState;
+use App\Domain\WinStateScope;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
 use App\Win\JobChannel;
@@ -408,7 +410,85 @@ final class Pages
             $this->flash('A ação executou, mas o registro falhou: ' . $e->getMessage());
         }
 
+        // DEPOIS do registro, e independente dele: a linha do histórico diz o
+        // que aconteceu, e esta diz como a máquina ficou. Se a gravação do
+        // histórico falhou, a ação ainda aconteceu e o estado ainda mudou.
+        $this->applyWinState($acao, $params, $run->exitCode, $run->timedOut);
+
         Respond::redirect('/win');
+    }
+
+    /**
+     * Anota o que esta execução significa para o estado aplicado da /win.
+     *
+     * SÓ EXIT 0 MOVE O ESTADO, e o resto fica como está. Timeout, código
+     * diferente de zero e código NULO — que é o que o worker deixa quando
+     * matou o filho por ordem ou por desaparecimento do pai — todos significam
+     * "não se sabe o que ficou feito", e nos três o certo é não mexer:
+     *
+     *   numa APLICAÇÃO que falhou, gravar "aplicado" seria afirmar sem base, e
+     *   é exatamente a afirmação que esta fatia não pode fazer;
+     *
+     *   numa REVERSÃO que falhou, esquecer a linha faria a tela oferecer
+     *   "Aplicar" no que provavelmente continua aplicado — e manter o
+     *   "Reverter" pelo menos deixa o botão do reparo à mão.
+     *
+     * E EXIT 0 AINDA É SINAL FRACO, o que está registrado aqui para ninguém
+     * ler esta linha como garantia. Medido no Invoke-Tweaks: ele captura o erro
+     * de CADA item, escreve ERROR e segue, termina com OK e sai 0; preset
+     * inexistente também sai 0. Ou seja, "aplicado" quer dizer "esta
+     * ferramenta mandou aplicar e o script terminou sem estourar", não "os 22
+     * tweaks estão no registro". A saída, que fica no histórico, é o que diz
+     * item por item.
+     *
+     * FALHA DE BANCO AQUI NÃO DERRUBA A PÁGINA. A ação já aconteceu e o
+     * histórico já tem a linha; o que se perde é o rótulo certo no botão. Avisa
+     * e segue, porque o contrário — estourar depois de uma ação de
+     * Administrador — deixaria a pessoa sem ver o resultado do que rodou.
+     *
+     * @param array<string, string|int|bool> $params
+     */
+    private function applyWinState(
+        ?WinAction $acao,
+        array $params,
+        ?int $exitCode,
+        bool $timedOut
+    ): void {
+        if ($acao === null || $timedOut || $exitCode !== 0) {
+            return;
+        }
+
+        $mudanca = $acao->stateChange($params);
+
+        // Null é "esta execução não afirma nada sobre estado" — as nove ações
+        // não reversíveis e o gdid status. Não é "não aplicado".
+        if ($mudanca === null) {
+            return;
+        }
+
+        try {
+            $servico = ($this->makeService)();
+
+            if ($mudanca->applied) {
+                $servico->putWinState(new WinState(
+                    scope: WinStateScope::Applied,
+                    action: $acao->value,
+                    payload: $mudanca->payload,
+                ));
+
+                return;
+            }
+
+            // Reverteu: APAGA em vez de gravar "não aplicado". Ausência e "não
+            // aplicado" têm de significar a mesma coisa — ver a nota na
+            // interface do provider.
+            $servico->forgetWinState(WinStateScope::Applied, $acao->value);
+        } catch (Throwable $e) {
+            $this->flash(
+                'A ação executou e está no histórico, mas não foi possível anotar o estado dela: '
+                . $e->getMessage() . ' O botão pode aparecer como "aplicar" no que já está aplicado.'
+            );
+        }
     }
 
     /**
@@ -474,6 +554,17 @@ final class Pages
 
                 return;
             }
+
+            // O recolhimento também move o estado, porque a execução que ele
+            // recolhe ACONTECEU de verdade — só o registro dela é que ficou
+            // para trás. Um tweaks que aplicou e cujo servidor morreu na
+            // espera está aplicado na máquina, e a tela tem de saber.
+            //
+            // Na prática o órfão interrompido traz exit NULO, e o
+            // applyWinState não mexe em nada: é o caso em que não se sabe o
+            // que ficou feito. Quem passa por aqui é o órfão que CONCLUIU com
+            // 0 e perdeu só a gravação.
+            $this->applyWinState($acao, $orfa->params, $orfa->result->exitCode, $orfa->result->timedOut);
 
             $canal->discardOrphan($orfa->id);
             $gravadas++;

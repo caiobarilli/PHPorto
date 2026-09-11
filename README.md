@@ -211,6 +211,36 @@ Não há unicidade, e é decisão registrada: duas execuções idênticas são d
 fatos distintos, e a ferramenta existe justamente para registrar que algo foi
 feito duas vezes.
 
+### A segunda tabela: o estado da `/win`
+
+Além do histórico há uma tabela de **estado**, com o nome da primeira mais o
+sufixo `_win_state` — derivada, não configurável, para não existir uma segunda
+variável de ambiente a manter em dia. Ela nasce no mesmo acesso que a outra, sem
+migration.
+
+O que ela guarda é uma linha por par *(escopo, ação)*, que se **substitui**:
+
+| escopo | o que é |
+| --- | --- |
+| `aplicado` | o que esta ferramenta aplicou e ainda não reverteu — é o que faz o botão dizer "reverter" em vez de "aplicar", e é onde fica o `-Preset` que o `-Undo` do `tweaks` exige de volta |
+| `selecao` | as caixas que ficaram marcadas na última visita, para não remarcar tudo a cada vez |
+
+**Não é leitura da máquina, e não substitui o histórico.** É memória do que a
+tela mandou fazer. Mexer no sistema por fora — `regedit`, o WinUtil original, um
+PowerShell elevado à mão — deixa a linha desatualizada, e isso é custo aceito: o
+contrário seria sondar a máquina a cada carregamento de página, que é justamente
+o que o heartbeat da elevação existe para não pagar.
+
+Duas consequências que valem saber:
+
+- **"Limpar histórico" não mexe nela.** Apagar registros e mudar o que a tela
+  afirma sobre a máquina são coisas diferentes, e há teste travando isso.
+- **Sem estado salvo, a tela se comporta como antes** e nunca afirma que algo
+  está aplicado. Linha ilegível é descartada em vez de derrubar a página — mesma
+  regra do `flags.json`.
+
+O "restaurar de fábrica" apaga o arquivo do banco, então leva as duas tabelas.
+
 ## Uma pegadinha, para você não perder tempo
 
 A primeira linha do `files/cmd.sh` é um cabeçalho da ferramenta: `exec 2>&1` mais
