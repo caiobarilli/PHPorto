@@ -18,6 +18,8 @@ final readonly class RunResult
         public ?int $exitCode,
         public bool $timedOut,
         public int $durationMs,
+        /** Saída cortada no teto do OutputCap. */
+        public bool $truncated = false,
     ) {
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Win;
 
+use App\Domain\OutputCap;
 use RuntimeException;
 
 /**
@@ -22,21 +23,6 @@ use RuntimeException;
  */
 final class PsRunner
 {
-    /**
-     * Teto de saída de UMA execução.
-     *
-     * O Runner do WSL ainda lê a saída inteira com file_get_contents, e um
-     * `find /` derruba o PHP no memory_limit antes de chegar ao banco. Essa
-     * dívida é de lá e segue de lá; este motor é código novo e nasce com o
-     * teto, porque escrevê-lo aqui custa uma constante e uma leitura em
-     * pedaços. O valor é 1 MiB: um audit ou um relatório de tshark cabem com
-     * folga, e o que passar disso a pessoa não vai ler numa página.
-     */
-    public const MAX_OUTPUT_BYTES = 1048576;
-
-    /** Tamanho de cada pedaço lido do arquivo de saída. */
-    private const CHUNK_BYTES = 65536;
-
     /** Intervalo de sondagem do processo, igual ao do Runner do WSL. */
     private const POLL_US = 80000;
 
@@ -119,13 +105,13 @@ final class PsRunner
         // stderr vem depois porque o script gerado funde os fluxos com *>&1 e
         // só sobra aqui o que o próprio host emitir — erro de ligação de
         // parâmetro, por exemplo.
-        [$stray, $strayTruncated] = self::readBounded($errFile, max(0, self::MAX_OUTPUT_BYTES - strlen($output)));
+        [$stray, $strayTruncated] = self::readBounded($errFile, max(0, OutputCap::MAX_OUTPUT_BYTES - strlen($output)));
         if (trim($stray) !== '') {
             $output .= $stray;
         }
 
         if ($timedOut) {
-            $output = self::withNewline($output)
+            $output = OutputCap::withNewline($output)
                 . sprintf('[phporto] TIMEOUT: %ds estourados, processo morto.', $timeoutSeconds) . "\n";
         }
 
@@ -136,83 +122,23 @@ final class PsRunner
     }
 
     /**
-     * Lê um arquivo até o teto, em pedaços, e diz se cortou.
+     * Lê a saída do PowerShell até o teto, e diz se cortou.
      *
-     * Em PEDAÇOS e não com file_get_contents porque o ponto do teto é não
-     * carregar o arquivo inteiro na memória: ler tudo e depois cortar já
-     * teria estourado o memory_limit, que é exatamente a falha que este teto
-     * existe para evitar.
-     *
-     * O aviso de corte entra na própria saída, não num campo separado: quem
-     * lê a saída na tela precisa ver ali que ela não está inteira.
+     * Recebe o caminho e, opcionalmente, um teto menor que o padrão. Devolve
+     * o texto em UTF-8, sem BOM, com o aviso de corte no fim quando cortou.
      *
      * @return array{0: string, 1: bool}
      */
     public static function readBounded(string $path, ?int $limit = null): array
     {
-        $limit = $limit ?? self::MAX_OUTPUT_BYTES;
+        $limit = $limit ?? OutputCap::MAX_OUTPUT_BYTES;
 
-        if ($limit <= 0) {
-            return ['', true];
-        }
+        [$bytes, $truncated, $tamanho] = OutputCap::read($path, $limit);
 
-        // is_file() antes de filesize(): num arquivo ausente o filesize()
-        // emite warning, e o "@" não o silencia sob o error handler do
-        // PHPUnit — a suíte acusaria um aviso num caminho que é normal
-        // (nada escrito ainda).
-        if (!is_file($path)) {
-            return ['', false];
-        }
+        $buffer = self::toUtf8(PsScriptBuilder::stripBom($bytes));
 
-        $tamanho = filesize($path);
-
-        if (!is_int($tamanho)) {
-            return ['', false];
-        }
-
-        $fh = @fopen($path, 'rb');
-
-        if ($fh === false) {
-            return ['', false];
-        }
-
-        $buffer = '';
-
-        while (true) {
-            // O quanto falta é calculado ANTES e testado contra 1, e não só
-            // usado dentro do min(): assim a invariante "o pedaço pedido é ao
-            // menos um byte" fica escrita, em vez de depender de o leitor
-            // deduzir a condição do while.
-            $falta = $limit - strlen($buffer);
-
-            if ($falta < 1) {
-                break;
-            }
-
-            $chunk = fread($fh, min(self::CHUNK_BYTES, $falta));
-
-            if (!is_string($chunk) || $chunk === '') {
-                break;
-            }
-
-            $buffer .= $chunk;
-        }
-
-        fclose($fh);
-
-        // O corte se decide pelo TAMANHO do arquivo, não por sondar o
-        // descritor: é uma chamada só, e não depende de quantas leituras
-        // foram necessárias para chegar ao teto.
-        $truncated = $tamanho > $limit;
-
-        $buffer = self::toUtf8(PsScriptBuilder::stripBom($buffer));
-
-        if ($truncated) {
-            $buffer = self::withNewline($buffer) . sprintf(
-                '[phporto] SAÍDA CORTADA no teto de %d bytes (o comando gerou %d).',
-                $limit,
-                $tamanho
-            ) . "\n";
+        if ($truncated && $tamanho > 0) {
+            $buffer = OutputCap::withNotice($buffer, $limit, $tamanho);
         }
 
         return [$buffer, $truncated];
@@ -237,11 +163,6 @@ final class PsRunner
         }
 
         return str_replace("\r\n", "\n", $s);
-    }
-
-    private static function withNewline(string $s): string
-    {
-        return $s === '' || str_ends_with($s, "\n") ? $s : $s . "\n";
     }
 
     /** Aspas só quando o valor tem espaço, como no Runner do WSL. */

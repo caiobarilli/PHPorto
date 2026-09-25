@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Wsl;
 
+use App\Domain\OutputCap;
 use RuntimeException;
 
 /**
@@ -128,25 +129,46 @@ final class Runner
         proc_close($proc);
         $durationMs = (int) round((microtime(true) - $started) * 1000);
 
-        $output = self::toUtf8((string) @file_get_contents($outFile));
+        [$output, $truncated] = self::readBounded($outFile);
 
         // stderr só recebe ruído do shell de login, antes de o exec 2>&1 valer.
-        $stray = self::toUtf8((string) @file_get_contents($errFile));
+        [$stray, $strayTruncated] = self::readBounded($errFile, max(0, OutputCap::MAX_OUTPUT_BYTES - strlen($output)));
         if (trim($stray) !== '') {
             $output .= $stray;
         }
 
         if ($timedOut) {
-            if ($output !== '' && !str_ends_with($output, "\n")) {
-                $output .= "\n";
-            }
-            $output .= sprintf('[phporto] TIMEOUT: %ds estourados, processo morto.', $timeout) . "\n";
+            $output = OutputCap::withNewline($output)
+                . sprintf('[phporto] TIMEOUT: %ds estourados, processo morto.', $timeout) . "\n";
         }
 
         @unlink($outFile);
         @unlink($errFile);
 
-        return new RunResult($output, $exitCode, $timedOut, $durationMs);
+        return new RunResult($output, $exitCode, $timedOut, $durationMs, $truncated || $strayTruncated);
+    }
+
+    /**
+     * Lê a saída do WSL até o teto, e diz se cortou.
+     *
+     * Recebe o caminho e, opcionalmente, um teto menor que o padrão. Devolve
+     * o texto em UTF-8, com o aviso de corte no fim quando cortou.
+     *
+     * @return array{0: string, 1: bool}
+     */
+    public static function readBounded(string $path, ?int $limit = null): array
+    {
+        $limit = $limit ?? OutputCap::MAX_OUTPUT_BYTES;
+
+        [$bytes, $truncated, $tamanho] = OutputCap::read($path, $limit);
+
+        $buffer = self::toUtf8($bytes);
+
+        if ($truncated && $tamanho > 0) {
+            $buffer = OutputCap::withNotice($buffer, $limit, $tamanho);
+        }
+
+        return [$buffer, $truncated];
     }
 
     /**

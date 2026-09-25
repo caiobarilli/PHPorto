@@ -8,6 +8,7 @@ use App\Domain\Execution;
 use App\Domain\ExecutionKind;
 use App\Services\ExecutionLogService;
 use App\Wsl\Distro;
+use App\Wsl\InputLimit;
 use App\Wsl\Runner;
 use App\Wsl\ScriptBuilder;
 use Closure;
@@ -133,6 +134,13 @@ final class Api
         $dst = $body['dst'] ?? null;
 
         if (is_string($src) && is_string($dst) && trim($src) !== '' && trim($dst) !== '') {
+            try {
+                InputLimit::path('src', trim($src));
+                InputLimit::path('dst', trim($dst));
+            } catch (InvalidArgumentException $e) {
+                Respond::json(['ok' => false, 'error' => $e->getMessage()], 413);
+            }
+
             $script   = ScriptBuilder::attachment();
             $record   = ScriptBuilder::attachmentRecord(trim($src), trim($dst));
             $kind     = ExecutionKind::Anexo;
@@ -145,6 +153,12 @@ final class Api
                     ['ok' => false, 'error' => 'Informe "command", ou "src" e "dst" para anexo.'],
                     400
                 );
+            }
+
+            try {
+                InputLimit::command($command);
+            } catch (InvalidArgumentException $e) {
+                Respond::json(['ok' => false, 'error' => $e->getMessage()], 413);
             }
 
             $script   = ScriptBuilder::command($command);

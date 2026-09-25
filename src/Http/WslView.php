@@ -22,6 +22,9 @@ final readonly class WslView
      * @param ?Execution      $result      execução desta requisição, se houve
      * @param ?string         $blocked     motivo que impede executar, se houver
      * @param ?string         $notice      recado de ação que não executou nada
+     * @param int             $maxOutputBytes  teto de saída de uma execução
+     * @param int             $maxCommandBytes teto do texto de um comando
+     * @param int             $maxPathBytes    teto de cada caminho de anexo
      */
     public function __construct(
         public array $rows,
@@ -35,6 +38,9 @@ final readonly class WslView
         public int $timeout,
         public string $tz,
         public int $coldStartSeconds,
+        public int $maxOutputBytes,
+        public int $maxCommandBytes,
+        public int $maxPathBytes,
     ) {
     }
 }

@@ -68,6 +68,11 @@ $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 12
         <span class="meta" id="estado-cmd"></span>
       </div>
     </form>
+    <p class="dica">
+      Comando de até <?= number_format($view->maxCommandBytes, 0, ',', '.') ?> bytes. A saída é cortada em
+      <?= number_format($view->maxOutputBytes, 0, ',', '.') ?> bytes por execução, e o corte aparece na
+      própria saída — para guardar tudo, redirecione para arquivo no comando (<code>… &gt; saida.txt</code>).
+    </p>
   </section>
 
   <section>
@@ -112,7 +117,8 @@ $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 12
     <p class="dica">
       Os <strong>dois</strong> caminhos são vistos de dentro do WSL — é isso que faz o card servir nos dois sentidos.<br>
       Do Windows para a distro: <code>/mnt/c/...</code> &rarr; <code>/home/voce/...</code><br>
-      Da distro para o Windows: <code>/home/voce/...</code> &rarr; <code>/mnt/c/...</code>
+      Da distro para o Windows: <code>/home/voce/...</code> &rarr; <code>/mnt/c/...</code><br>
+      Cada caminho aceita até <?= number_format($view->maxPathBytes, 0, ',', '.') ?> bytes.
     </p>
   </section>
 

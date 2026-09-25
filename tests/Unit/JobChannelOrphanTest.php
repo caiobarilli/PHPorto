@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Domain\OutputCap;
 use App\Win\JobChannel;
-use App\Win\PsRunner;
 
 /**
  * O recolhimento de execução órfã.
@@ -180,7 +180,7 @@ it('recusa da allowlist do worker chega sem ação, para o rótulo não inventar
 // ---------------------------------------------------------------- os limites
 
 it('saída de órfã acima do teto é cortada, como em qualquer outra leitura', function () {
-    $gigante = str_repeat('x', PsRunner::MAX_OUTPUT_BYTES + 4096);
+    $gigante = str_repeat('x', OutputCap::MAX_OUTPUT_BYTES + 4096);
     deixarOrfa($this, 'hhh888', $gigante);
 
     $orfa = $this->canal->collectOrphans()[0];
@@ -188,7 +188,7 @@ it('saída de órfã acima do teto é cortada, como em qualquer outra leitura', 
     expect($orfa->result->truncated)->toBeTrue()
         // O teto vale na LEITURA do arquivo. A nota de recuperação é escrita
         // por nós depois, como as outras linhas [phporto].
-        ->and(strlen($orfa->result->output))->toBeLessThan(PsRunner::MAX_OUTPUT_BYTES + 2048);
+        ->and(strlen($orfa->result->output))->toBeLessThan(OutputCap::MAX_OUTPUT_BYTES + 2048);
 });
 
 it('conclusão sem a hora de fim ainda é recolhida, com finishedAt nulo', function () {

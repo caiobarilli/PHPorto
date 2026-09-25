@@ -8,14 +8,15 @@ use App\Config\Config;
 use App\Config\Flags;
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\OutputCap;
 use App\Domain\WinState;
 use App\Domain\WinStateScope;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
 use App\Win\JobChannel;
-use App\Win\PsRunner;
 use App\Win\WinAction;
 use App\Wsl\Distro;
+use App\Wsl\InputLimit;
 use App\Wsl\Runner;
 use App\Wsl\ScriptBuilder;
 use Closure;
@@ -302,7 +303,7 @@ final class Pages
             win: $this->elevation->state(),
             timeout: $this->config['winutil']['timeout'],
             tz: $this->config['tz'],
-            maxOutputBytes: PsRunner::MAX_OUTPUT_BYTES,
+            maxOutputBytes: OutputCap::MAX_OUTPUT_BYTES,
             maxParamBytes: WinAction::MAX_PARAM_BYTES,
         );
 
@@ -666,6 +667,9 @@ final class Pages
             timeout: $this->config['wsl']['timeout'],
             tz: $this->config['tz'],
             coldStartSeconds: self::COLD_START_S,
+            maxOutputBytes: OutputCap::MAX_OUTPUT_BYTES,
+            maxCommandBytes: InputLimit::MAX_COMMAND_BYTES,
+            maxPathBytes: InputLimit::MAX_PATH_BYTES,
         );
 
         Respond::html('PHPorto — WSL', Respond::render('wsl.php', $view));
@@ -713,6 +717,14 @@ final class Pages
                 Respond::redirect('/wsl');
             }
 
+            try {
+                InputLimit::path('Origem', $src);
+                InputLimit::path('Destino', $dst);
+            } catch (InvalidArgumentException $e) {
+                $this->flash($e->getMessage());
+                Respond::redirect('/wsl');
+            }
+
             $this->execute(
                 ScriptBuilder::attachment(),
                 ScriptBuilder::attachmentRecord($src, $dst),
@@ -725,6 +737,13 @@ final class Pages
 
         if (trim($command) === '') {
             $this->flash('Digite um comando.');
+            Respond::redirect('/wsl');
+        }
+
+        try {
+            InputLimit::command($command);
+        } catch (InvalidArgumentException $e) {
+            $this->flash($e->getMessage());
             Respond::redirect('/wsl');
         }
 

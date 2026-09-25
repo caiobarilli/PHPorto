@@ -187,13 +187,13 @@ it('no timeout aproveita a conclusão do cancelamento se ela chegar', function (
 // ---------------------------------------------------------------- teto
 
 it('collect() aplica o teto de saída do PsRunner', function () {
-    $grande = str_repeat('z', \App\Win\PsRunner::MAX_OUTPUT_BYTES + 100);
+    $grande = str_repeat('z', \App\Domain\OutputCap::MAX_OUTPUT_BYTES + 100);
     fingirWorker($this, 'abc131', $grande);
 
     $r = $this->canal->collect(10);
 
     expect($r->truncated)->toBeTrue()
         ->and($r->output)->toContain('SAÍDA CORTADA')
-        ->and(substr($r->output, 0, \App\Win\PsRunner::MAX_OUTPUT_BYTES))
-        ->toBe(str_repeat('z', \App\Win\PsRunner::MAX_OUTPUT_BYTES));
+        ->and(substr($r->output, 0, \App\Domain\OutputCap::MAX_OUTPUT_BYTES))
+        ->toBe(str_repeat('z', \App\Domain\OutputCap::MAX_OUTPUT_BYTES));
 });

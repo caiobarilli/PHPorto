@@ -169,6 +169,12 @@ curl -X POST http://127.0.0.1:4001/api/executions \
 
 Para anexo, `{"src":"...","dst":"..."}`.
 
+Os tetos são os mesmos da tela `/wsl` e são recusados no servidor: comando de até
+64 KB e cada caminho de anexo de até 4 KB (acima disso, `413`). A saída de uma
+execução é cortada em 1 MiB, com o aviso na própria saída — o mesmo teto e o
+mesmo texto das ações do Windows. Quem precisa da saída inteira redireciona para
+arquivo no próprio comando.
+
 O `Content-Type: application/json` é **obrigatório**, e isso é trava, não
 formalidade — veja a seção seguinte.
 

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\OutputCap;
 use App\Win\PsResult;
 use App\Win\PsRunner;
 use App\Win\PsScriptBuilder;
@@ -117,14 +118,13 @@ it('normaliza CRLF da saída para LF', function () {
 | Teto de saída
 |--------------------------------------------------------------------------
 |
-| A dívida do Runner do WSL é ler a saída inteira com file_get_contents: um
-| `find /` derruba o PHP no memory_limit antes de chegar ao banco. Este motor
-| é código novo e nasce com o teto — estes testes são o que garante isso.
+| O teto é o OutputCap, o mesmo do Runner do WSL. Aqui se testa a leitura do
+| lado Windows: corte, aviso e BOM.
 |
 */
 
 it('o teto é 1 MiB, em constante nomeada', function () {
-    expect(PsRunner::MAX_OUTPUT_BYTES)->toBe(1048576);
+    expect(OutputCap::MAX_OUTPUT_BYTES)->toBe(1048576);
 });
 
 it('readBounded corta no teto e avisa dentro da própria saída', function () {
@@ -154,7 +154,7 @@ it('readBounded não corta o que cabe, e não avisa nada', function () {
 
 it('readBounded corta no teto REAL de 1 MiB', function () {
     $arquivo = $this->dir . DIRECTORY_SEPARATOR . 'muito-grande.txt';
-    file_put_contents($arquivo, str_repeat('y', PsRunner::MAX_OUTPUT_BYTES + 4096));
+    file_put_contents($arquivo, str_repeat('y', OutputCap::MAX_OUTPUT_BYTES + 4096));
 
     [$texto, $cortou] = PsRunner::readBounded($arquivo);
 
@@ -162,7 +162,7 @@ it('readBounded corta no teto REAL de 1 MiB', function () {
     // "bytes" do próprio aviso tem um 'y', e contar no texto inteiro devolve
     // um a mais — foi o que este teste acusou na primeira execução.
     expect($cortou)->toBeTrue()
-        ->and(substr($texto, 0, PsRunner::MAX_OUTPUT_BYTES))->toBe(str_repeat('y', PsRunner::MAX_OUTPUT_BYTES))
+        ->and(substr($texto, 0, OutputCap::MAX_OUTPUT_BYTES))->toBe(str_repeat('y', OutputCap::MAX_OUTPUT_BYTES))
         ->and($texto)->toContain('SAÍDA CORTADA');
 });
 
