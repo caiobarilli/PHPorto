@@ -106,12 +106,11 @@ function Test-PhportoElevado {
 $global:root = $PSScriptRoot
 
 # ============================================================
-# CONFIGS — tres JSON, e nao cinco
+# CONFIGS — os JSON que as acoes leem
 # ============================================================
 #
-# O winutil-cli carregava cinco. Medido: applications.json (74 KB) nao tem
-# leitor nenhum, e feature.json (11 KB) so e' lido por uma funcao que tambem
-# nao tem chamador. Ficaram para tras 86 KB que ninguem abre.
+# dns, preset e tweaks vieram do upstream. debloat e' do projeto: a lista de
+# pacotes do Invoke-Debloat, que a tela /win le do mesmo arquivo.
 #
 # AUSENTE E' ERRO, e aqui esta a diferenca deliberada em relacao ao
 # winutil-cli, que avisava e seguia. Sem tweaks.json a acao tweaks nao falha:
@@ -121,7 +120,7 @@ $global:root = $PSScriptRoot
 $global:sync          = [hashtable]::Synchronized(@{})
 $global:sync.configs  = @{}
 
-foreach ($nome in 'dns', 'preset', 'tweaks') {
+foreach ($nome in 'debloat', 'dns', 'preset', 'tweaks') {
     $arquivo = Join-Path $PSScriptRoot ('config\' + $nome + '.json')
 
     if (-not (Test-Path $arquivo)) {

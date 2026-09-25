@@ -29,7 +29,7 @@ Copiados **byte a byte**. Os hashes existem para isso ser verificável, não
 declarado: qualquer edição, inclusive um fim de linha trocado, muda o valor.
 
 ```
-sha256sum src/Win/lib/*.ps1 src/Win/config/*.json
+sha256sum src/Win/lib/*.ps1 src/Win/config/{dns,preset,tweaks}.json
 ```
 
 | Arquivo | SHA-256 |
@@ -64,8 +64,8 @@ carregar por algo que ninguém executa.
 
 `applications.json` (74 KB) não tem leitor nenhum, e `feature.json` (11 KB) só
 é lido por `Invoke-WinUtilFeatureInstall`, que também não tem chamador. São
-86 KB que ninguém abre. `$sync.configs` passa a ter três chaves em vez de
-cinco — ver a nota no `bootstrap.ps1`.
+86 KB que ninguém abre. Do upstream, `$sync.configs` tem três chaves em vez de
+cinco; a quarta, `debloat`, é do projeto — ver a seção 2.
 
 ### Por que estes arquivos não têm BOM
 
@@ -112,6 +112,15 @@ recolocar o prompt que acabou de sair, e num host não interativo a mensagem é
 pior que a nossa. Quem torna o parâmetro obrigatório são as duas allowlists: a
 `WinAction` do lado PHP e o `$ALLOWLIST` do worker já recusam `network` sem
 `Interface` e `exporter`/`gpu` sem `SubAction`.
+
+### Editado depois da migração
+
+| Arquivo | O que mudou |
+|---|---|
+| `Invoke-Debloat.ps1` | a lista dos 22 pacotes saiu do corpo da função para `config/debloat.json`, que a tela `/win` também lê |
+
+`config/debloat.json` é, portanto, do projeto e não do upstream: fica fora da
+tabela de hashes da seção 1, e pode ser editado.
 
 ### Uma divergência conhecida da regra de encoding
 

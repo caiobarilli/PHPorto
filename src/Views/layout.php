@@ -157,6 +157,10 @@ use App\Http\Respond;
   .kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
   .provider { font: 600 22px/1 var(--sans); letter-spacing: -0.01em; }
 
+  .colunas-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 16px; list-style: none; padding: 0; margin: 10px 0 0; font: 12px/1.5 var(--mono); }
+  .colunas-4 li { overflow-wrap: anywhere; }
+  @media (max-width: 720px) { .colunas-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
   /* ---- Interruptor da /config -------------------------------------------
      Um checkbox de verdade por baixo: o rótulo continua clicável, o teclado
      continua funcionando e o formulário continua enviando sem JS. O visual

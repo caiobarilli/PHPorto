@@ -39,6 +39,8 @@ final readonly class WinView
      * @param string          $tz             fuso das datas exibidas
      * @param int             $maxOutputBytes teto de saída de uma execução
      * @param int             $maxParamBytes  teto de um campo de texto livre
+     * @param list<string>    $debloatPackages os pacotes APPX do config/debloat.json
+     * @param string|null     $debloatProblem  por que a lista não pôde ser lida
      */
     public function __construct(
         public array $rows,
@@ -52,6 +54,8 @@ final readonly class WinView
         public string $tz,
         public int $maxOutputBytes,
         public int $maxParamBytes,
+        public array $debloatPackages,
+        public ?string $debloatProblem,
     ) {
     }
 }

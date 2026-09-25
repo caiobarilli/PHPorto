@@ -130,7 +130,16 @@ $dis     = $travado ? ' disabled' : '';
 
   <!-- ---------------------------------------------------------- [3] debloat -->
   <section>
-    <?= $secao(3, 'Debloat', 'Remove 22 pacotes APPX: Xbox, Teams, Bing, Clipchamp, Solitaire, YourPhone…') ?>
+    <?= $secao(3, 'Debloat', 'Remove os pacotes APPX abaixo, lidos do src/Win/config/debloat.json — o mesmo arquivo que a ação lê.') ?>
+    <?php if ($view->debloatProblem !== null): ?>
+      <p class="bad"><?= Respond::e($view->debloatProblem) ?></p>
+    <?php else: ?>
+      <ul class="colunas-4">
+        <?php foreach ($view->debloatPackages as $pacote): ?>
+          <li><?= Respond::e($pacote) ?></li>
+        <?php endforeach; ?>
+      </ul>
+    <?php endif; ?>
     <form method="post">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="acao" value="debloat">

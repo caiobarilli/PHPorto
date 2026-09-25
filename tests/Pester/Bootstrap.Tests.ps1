@@ -232,9 +232,9 @@ Describe 'bootstrap - o ambiente que as acoes assumem' {
         Test-Path (Join-Path $global:root 'tools') | Should -BeTrue
     }
 
-    It '$sync.configs tem as tres chaves, e nao as cinco do winutil-cli' {
+    It '$sync.configs tem as quatro chaves: as tres do upstream e o debloat' {
         $chaves = @($global:sync.configs.Keys | Sort-Object)
-        $chaves | Should -Be @('dns', 'preset', 'tweaks')
+        $chaves | Should -Be @('debloat', 'dns', 'preset', 'tweaks')
     }
 
     It 'dns.json carregou com os providers que a WinAction espelha' {

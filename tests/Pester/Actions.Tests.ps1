@@ -145,6 +145,34 @@ Describe "Execution with Mock" {
         }
     }
 
+    Context "-Action debloat" {
+        It "removes exactly the packages in config/debloat.json, in file order" {
+            $script:removidos = @()
+            Mock Remove-WinUtilAPPX { $script:removidos += $Name }
+
+            Invoke-Debloat 6>$null
+
+            # Two steps on purpose: in 5.1, ConvertFrom-Json emits a JSON array as ONE
+            # pipeline object, and @(... | ConvertFrom-Json) would wrap it into a single item.
+            $esperados = Get-Content (Join-Path $Script:PastaWin 'config\debloat.json') -Raw | ConvertFrom-Json
+            $esperados.Count | Should -Be 22
+            $script:removidos | Should -Be $esperados
+        }
+
+        It "warns and removes nothing when the list is empty" {
+            Mock Remove-WinUtilAPPX { }
+            $salvo = $global:sync.configs.debloat
+            try {
+                $global:sync.configs.debloat = @()
+                $output = (Invoke-Debloat) 6>&1 | Out-String
+            } finally {
+                $global:sync.configs.debloat = $salvo
+            }
+            $output | Should -Match '\[ WARNING \] No packages defined for removal'
+            Should -Invoke Remove-WinUtilAPPX -Times 0 -Exactly
+        }
+    }
+
     Context "-Action performance" {
         It "calls powercfg without throwing an exception" {
             # Returns simulated list already containing the original GUID (Priority 1)

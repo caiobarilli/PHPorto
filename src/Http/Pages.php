@@ -15,6 +15,7 @@ use App\Services\ExecutionLogService;
 use App\Win\Elevation;
 use App\Win\JobChannel;
 use App\Win\WinAction;
+use App\Win\WinConfig;
 use App\Wsl\Distro;
 use App\Wsl\InputLimit;
 use App\Wsl\Runner;
@@ -293,6 +294,15 @@ final class Pages
             $failed = 'Não foi possível ler os registros: ' . $e->getMessage();
         }
 
+        $debloat        = [];
+        $debloatProblem = null;
+
+        try {
+            $debloat = WinConfig::debloat();
+        } catch (RuntimeException $e) {
+            $debloatProblem = $e->getMessage();
+        }
+
         $view = new WinView(
             rows: $rows,
             result: $rows[0] ?? null,
@@ -305,6 +315,8 @@ final class Pages
             tz: $this->config['tz'],
             maxOutputBytes: OutputCap::MAX_OUTPUT_BYTES,
             maxParamBytes: WinAction::MAX_PARAM_BYTES,
+            debloatPackages: $debloat,
+            debloatProblem: $debloatProblem,
         );
 
         Respond::html('PHPorto — Windows', Respond::render('win.php', $view));

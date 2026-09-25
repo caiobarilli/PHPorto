@@ -87,7 +87,7 @@ src/             todo o código (PSR-4, App\)
     bootstrap.ps1  monta o ambiente das ações e despacha por nome
     actions/     as treze ações, um Invoke-*.ps1 cada
     lib/         primitivas do WinUtil (MIT — ver THIRD-PARTY.md)
-    config/      dns.json, preset.json, tweaks.json
+    config/      dns.json, preset.json, tweaks.json (upstream) e debloat.json
     audit/       audit.ps1
   Wsl/           Runner, ScriptBuilder, Distro
 storage/         o banco — FORA do public
