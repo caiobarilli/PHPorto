@@ -66,12 +66,32 @@ it('as ações sem parâmetro devolvem lista vazia', function (WinAction $acao) 
     WinAction::Processes,
 ]);
 
-it('performance DESCARTA um state que venha no POST', function () {
-    // Agora esta lista é a ÚNICA coisa que descarta. Antes havia duas travas:
-    // esta e o param() do winutil-cli.ps1, que não declarava State. Aquele
-    // ponto de entrada não existe mais e o bootstrap faz splatting direto em
-    // Invoke-Performance, que DECLARA -State [ValidateSet('on','off')].
-    expect(WinAction::Performance->validate(['State' => 'off']))->toBe([]);
+it('performance aceita State on e off, na grafia da lista', function () {
+    expect(WinAction::Performance->validate(['State' => 'off']))->toBe(['State' => 'off'])
+        ->and(WinAction::Performance->validate(['State' => 'ON']))->toBe(['State' => 'on']);
+});
+
+it('performance recusa State fora de on e off', function () {
+    WinAction::Performance->validate(['State' => 'turbo']);
+})->throws(InvalidArgumentException::class, 'Valor inválido para State.');
+
+it('performance off reverte o estado aplicado', function () {
+    expect(WinAction::Performance->stateChange(['State' => 'off'])?->applied)->toBeFalse()
+        ->and(WinAction::Performance->stateChange(['State' => 'on'])?->applied)->toBeTrue();
+});
+
+// ---------------------------------------------------------------- audit
+
+it('audit aceita as subações run e open', function (string $sub) {
+    expect(WinAction::Audit->validate(['SubAction' => $sub]))->toBe(['SubAction' => $sub]);
+})->with(['run', 'open']);
+
+it('audit recusa subação que não existe', function () {
+    WinAction::Audit->validate(['SubAction' => 'delete']);
+})->throws(InvalidArgumentException::class, 'Valor inválido para SubAction.');
+
+it('audit open não afirma nada sobre estado', function () {
+    expect(WinAction::Audit->stateChange(['SubAction' => 'open']))->toBeNull();
 });
 
 // ---------------------------------------------------------------- tweaks

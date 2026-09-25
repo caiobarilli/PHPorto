@@ -109,20 +109,15 @@ $CONFIG_DIR  = Join-Path $PSScriptRoot 'config'
 $MAX_PARAM_BYTES = 4096
 
 $ALLOWLIST = @{
-    'audit'       = @{}
     'memory'      = @{}
     'processes'   = @{}
 
-    # Sem 'State', e AGORA A ALLOWLIST E' A UNICA COISA QUE O IMPEDE.
-    #
-    # Antes havia duas trancas: esta lista e o param() do winutil-cli.ps1, que
-    # nao declarava State — passar -State devolvia NamedParameterNotFound e
-    # nada executava. Aquele ponto de entrada nao existe mais, e o bootstrap
-    # faz splatting direto em Invoke-Performance, que DECLARA
-    # -State [ValidateSet('on','off')]. Ou seja: pos ou nao, 'State' aqui
-    # decide sozinho se o desligar do plano de energia fica alcancavel pela
-    # tela. Deixar de fora e' escolha, nao heranca.
-    'performance' = @{}
+    'audit'       = @{
+        'SubAction' = @{ tipo = 'set'; valores = @('run', 'open') }
+    }
+    'performance' = @{
+        'State' = @{ tipo = 'set'; valores = @('on', 'off') }
+    }
 
     'tweaks'      = @{
         'Preset' = @{ tipo = 'set'; valores = @('standard', 'minimal', 'advanced') }

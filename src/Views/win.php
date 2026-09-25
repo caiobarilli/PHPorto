@@ -101,11 +101,24 @@ foreach ($view->tweaks as $tw) {
   <!-- ------------------------------------------------------------ [1] audit -->
   <section>
     <?= $secao(1, 'Audit', 'Gera o log completo do sistema em C:\log\DD.MM.AAAA — oito blocos.') ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="audit">
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Gerar auditoria</button></div>
-    </form>
+    <div class="row">
+      <form method="post">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="audit">
+        <input type="hidden" name="SubAction" value="run">
+        <button type="submit" class="btn btn-sm"<?= $dis ?>>Gerar auditoria</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="audit">
+        <input type="hidden" name="SubAction" value="open">
+        <button type="submit" class="btn btn-sm btn-ghost"<?= $dis ?>>Explorar</button>
+      </form>
+    </div>
+    <p class="dica">
+      <strong>Explorar</strong> abre a pasta do log de hoje no Explorer — da máquina onde o servidor
+      roda, não da que está com o navegador. Sem auditoria de hoje, abre <code>C:\log</code>.
+    </p>
   </section>
 
   <!-- ----------------------------------------------------------- [2] tweaks -->
@@ -226,17 +239,28 @@ foreach ($view->tweaks as $tw) {
 
   <!-- ------------------------------------------------------ [5] performance -->
   <section>
-    <?= $secao(5, 'Performance', 'Ativa o plano Ultimate Performance, detectando o GUID pelo powercfg.') ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="performance">
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Ativar Ultimate Performance</button></div>
-      <p class="dica">
-        <strong>Só ativa.</strong> Restaurar o Balanceado ainda não tem controle aqui — não por
-        limitação da ação, que aceita ligar e desligar, mas porque <code>State</code> não está nas
-        duas allowlists. É omissão a resolver, não impedimento.
-      </p>
-    </form>
+    <?= $secao(5, 'Performance', 'Troca o plano de energia do Windows.') ?>
+    <div class="row">
+      <form method="post">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="performance">
+        <input type="hidden" name="State" value="on">
+        <button type="submit" class="btn btn-sm"<?= $dis ?>>Ativar desempenho máximo</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="performance">
+        <input type="hidden" name="State" value="off">
+        <button type="submit" class="btn btn-sm btn-ghost"<?= $dis ?>>Voltar ao Balanceado</button>
+      </form>
+    </div>
+    <p class="dica">
+      <strong>Desempenho máximo</strong> deixa o processador sempre pronto para trabalhar no limite: a
+      máquina responde mais rápido, mas gasta mais energia e esquenta mais. Se o Windows não tiver esse
+      plano, usa o de alto desempenho. Em notebook, a bateria dura menos.
+      <strong>Voltar ao Balanceado</strong> devolve o plano padrão do Windows, que economiza quando a
+      máquina está parada.
+    </p>
   </section>
 
   <!-- ---------------------------------------------------------- [6] install -->

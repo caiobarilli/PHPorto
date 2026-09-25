@@ -102,6 +102,12 @@ enum WinAction: string
      */
     public const GDID_SUBACTIONS = ['status', 'disable', 'enable'];
 
+    /** run gera a auditoria; open abre a pasta do log no Explorer. Sem subação, run. */
+    public const AUDIT_SUBACTIONS = ['run', 'open'];
+
+    /** on ativa o plano de desempenho máximo; off volta ao Balanceado. Sem State, on. */
+    public const PERFORMANCE_STATES = ['on', 'off'];
+
     public const NETWORK_DURATION_MIN = 1;
 
     public const NETWORK_DURATION_MAX = 3600;
@@ -121,23 +127,11 @@ enum WinAction: string
     public function validate(array $input): array
     {
         return match ($this) {
-            // O performance NÃO recebe state, e AGORA ESTA LISTA É A ÚNICA
-            // COISA QUE O IMPEDE.
-            //
-            // Havia duas travas: esta e o param() do winutil-cli.ps1, que não
-            // declarava State — passar -State devolvia NamedParameterNotFound
-            // e nada executava. Aquele ponto de entrada não existe mais: o
-            // bootstrap.ps1 faz splatting direto em Invoke-Performance, que
-            // DECLARA -State [ValidateSet('on','off')].
-            //
-            // Ou seja, "off" deixou de ser inalcançável por acidente e passou
-            // a ser omissão deliberada. Pôr State aqui e no worker faria o
-            // desligar do plano de energia funcionar — é decisão em aberto,
-            // não impedimento técnico.
-            self::Audit,
-            self::Performance,
             self::Memory,
             self::Processes => [],
+
+            self::Audit       => $this->opcional($input, 'SubAction', self::AUDIT_SUBACTIONS),
+            self::Performance => $this->opcional($input, 'State', self::PERFORMANCE_STATES),
 
             self::Tweaks    => $this->tweaks($input),
             self::Debloat   => $this->debloat($input),
@@ -173,9 +167,7 @@ enum WinAction: string
      *   gdid      'disable' aplica e 'enable' reverte — não há -Undo, são duas
      *             subações. O estado real também vive em
      *             C:\WinUtil\gdid-state.json, escrito pela própria ação.
-     *   performance  -State on/off. Hoje só 'on' chega, porque State não está
-     *             nas allowlists; a regra já trata os dois para o dia em que
-     *             entrar, e o caminho de reverter não fica escrito pela metade.
+     *   performance  -State on aplica, -State off reverte ao Balanceado.
      *
      * POR QUE O ESTADO NÃO É LIDO DA MÁQUINA, apesar de optimize e gdid
      * guardarem arquivo próprio e o plano de energia ser consultável por
@@ -543,6 +535,24 @@ enum WinAction: string
         }
 
         return $params;
+    }
+
+    /**
+     * Valida um campo opcional de conjunto fechado.
+     *
+     * Recebe os campos do POST, o nome do campo e os valores permitidos.
+     * Devolve [campo => valor] na grafia da lista, ou vazio se o campo não veio.
+     *
+     * @param array<string, string> $input
+     * @param list<string>          $permitidos
+     *
+     * @return array<string, string>
+     */
+    private function opcional(array $input, string $campo, array $permitidos): array
+    {
+        $valor = $this->pick($input, $campo, $permitidos, obrigatorio: false);
+
+        return $valor === '' ? [] : [$campo => $valor];
     }
 
     /**

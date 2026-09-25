@@ -145,6 +145,53 @@ Describe "Execution with Mock" {
         }
     }
 
+    Context "-Action audit -SubAction open" {
+        It "opens today's folder when it exists" {
+            $hoje = "C:\log\$(Get-Date -Format 'dd.MM.yyyy')"
+            Mock Test-Path { $true }
+            Mock Start-Process { }
+            $output = (Invoke-Audit -SubAction open) 6>&1 | Out-String
+
+            Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter {
+                $FilePath -eq 'explorer.exe' -and $ArgumentList -eq ('"' + $hoje + '"')
+            }
+            $output | Should -Match ([regex]::Escape("Explorer asked to open $hoje"))
+        }
+
+        It "falls back to C:\log when there is no audit from today" {
+            Mock Test-Path { $Path -eq 'C:\log' }
+            Mock Start-Process { }
+            $output = (Invoke-Audit -SubAction open) 6>&1 | Out-String
+
+            Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $ArgumentList -eq '"C:\log"' }
+            $output | Should -Match 'No audit from today'
+        }
+
+        It "is an ERROR when there is no log at all, and opens nothing" {
+            Mock Test-Path { $false }
+            Mock Start-Process { }
+            $output = (Invoke-Audit -SubAction open) 6>&1 | Out-String
+
+            $output | Should -Match '\[ ERROR \] No audit log yet'
+            Should -Invoke Start-Process -Times 0 -Exactly
+        }
+
+        It "refuses an unknown subaction" {
+            $output = (Invoke-Audit -SubAction delete) 6>&1 | Out-String
+            $output | Should -Match "\[ ERROR \] Unknown subaction 'delete'"
+        }
+    }
+
+    Context "-Action performance -State off" {
+        It "switches back to the Balanced plan" {
+            Mock powercfg { }
+            $output = (Invoke-Performance -State off) 6>&1 | Out-String
+
+            Should -Invoke powercfg -Times 1 -Exactly -ParameterFilter { ($args -join ' ') -eq '-setactive 381b4222-f694-41f0-9685-ff5bb260df2e' }
+            $output | Should -Match '\[ OK \] Balanced plan activated'
+        }
+    }
+
     Context "-Action debloat" {
         It "removes exactly the packages in config/debloat.json, in file order" {
             $script:removidos = @()

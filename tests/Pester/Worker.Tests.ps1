@@ -397,6 +397,34 @@ Describe 'worker - as regras lista' {
     }
 }
 
+Describe 'worker - audit e performance ganham parametro' {
+
+    It 'aceita audit com <_>' -ForEach @('run', 'open') {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'audit'; params = [PSCustomObject]@{ SubAction = $_ } }
+        (Test-Job $job).params['SubAction'] | Should -Be $_
+    }
+
+    It 'audit sem parametro continua aceito' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'audit'; params = [PSCustomObject]@{} }
+        (Test-Job $job).params.Count | Should -Be 0
+    }
+
+    It 'recusa subacao de audit que nao existe' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'audit'; params = [PSCustomObject]@{ SubAction = 'delete' } }
+        { Test-Job $job } | Should -Throw -ExpectedMessage "valor fora do conjunto em 'SubAction'"
+    }
+
+    It 'aceita performance com State <_>' -ForEach @('on', 'off') {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'performance'; params = [PSCustomObject]@{ State = $_ } }
+        (Test-Job $job).params['State'] | Should -Be $_
+    }
+
+    It 'recusa State fora de on e off' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'performance'; params = [PSCustomObject]@{ State = 'turbo' } }
+        { Test-Job $job } | Should -Throw -ExpectedMessage "valor fora do conjunto em 'State'"
+    }
+}
+
 Describe 'worker - o provider do dns vem do dns.json' {
 
     It 'aceita <_>' -ForEach @('Google', 'Custom', 'AdGuard_Ads_Trackers_Malware_Adult', 'DHCP') {

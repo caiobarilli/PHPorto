@@ -149,6 +149,7 @@ pior que a nossa. Quem torna o parâmetro obrigatório são as duas allowlists: 
 | Arquivo | O que mudou |
 |---|---|
 | `Invoke-Debloat.ps1` | a lista dos 22 pacotes saiu do corpo da função para `config/debloat.json`, que a tela `/win` também lê; ganhou `-Packages`, e sem ele remove o arquivo inteiro; o resumo final deixa de dizer "complete" quando algum pacote deu erro |
+| `Invoke-Audit.ps1` | ganhou `-SubAction`: `run` (o padrão, a auditoria de antes) e `open`, que abre a pasta do log no Explorer |
 | `Invoke-Install.ps1` | lê o código de saída de cada pacote: já instalado é OK, "reinicie para terminar" é WARNING, o resto é ERROR com o código; o resumo deixa de dizer "complete" quando algum falhou |
 | `Invoke-DNS.ps1` | o provider `Custom` passa a aplicar os endereços de `-PrimaryDNS` e `-SecondaryDNS`, adaptador por adaptador, em vez de chamar o `Set-WinUtilDNS` — que lia os IPs vazios do `dns.json` e nunca usava os digitados |
 | `Invoke-Tweaks.ps1` | antes de aplicar cada tweak, confere se os comandos que o script dele alcança existem; se falta algum, o item sai como `ERROR` e não é aplicado, e o resumo final deixa de dizer sucesso; ganhou `-Items`, a lista de tweaks, de que o `-Preset` é atalho |
