@@ -233,6 +233,40 @@ it('install aceita exatamente no teto', function () {
     expect(WinAction::Install->validate(['Apps' => $valor]))->toBe(['Apps' => $valor]);
 });
 
+it('os principais do install são os sete IDs conferidos no winget', function () {
+    expect(array_keys(WinAction::INSTALL_SUGGESTIONS))->toBe([
+        'Git.Git', 'Microsoft.VisualStudioCode', 'Docker.DockerDesktop', 'Microsoft.WSL',
+        'Debian.Debian', '7zip.7zip', 'VB-Audio.Voicemeeter.Potato',
+    ]);
+});
+
+it('install só com caixas marcadas vira a lista dos marcados', function () {
+    expect(WinAction::Install->validate(['AppsMarcados' => 'Git.Git,7zip.7zip']))
+        ->toBe(['Apps' => 'Git.Git,7zip.7zip']);
+});
+
+it('install SOMA os marcados ao campo, sem repetir o que o campo já tem', function () {
+    expect(WinAction::Install->validate([
+        'Apps'         => 'Mozilla.Firefox, git.git',
+        'AppsMarcados' => 'Git.Git,Microsoft.WSL',
+    ]))->toBe(['Apps' => 'Mozilla.Firefox,git.git,Microsoft.WSL']);
+});
+
+it('install recusa caixa que não é dos principais', function () {
+    WinAction::Install->validate(['AppsMarcados' => 'Mozilla.Firefox']);
+})->throws(InvalidArgumentException::class, 'App desconhecido: Mozilla.Firefox.');
+
+it('install sem campo e sem caixa diz as duas saídas', function () {
+    WinAction::Install->validate(['Apps' => '']);
+})->throws(InvalidArgumentException::class, 'Informe ao menos um app, separados por vírgula, ou marque um dos principais.');
+
+it('install recusa quando a soma passa do teto', function () {
+    WinAction::Install->validate([
+        'Apps'         => str_repeat('a', WinAction::MAX_PARAM_BYTES - 5),
+        'AppsMarcados' => 'Git.Git',
+    ]);
+})->throws(InvalidArgumentException::class, 'Apps passou do teto de 4096 bytes.');
+
 // ---------------------------------------------------------------- network
 
 it('network exige a interface, porque sem ela a ação recusa', function () {

@@ -1,4 +1,16 @@
 Function Install-WinUtilProgramWinget {
+    <#
+
+    .SYNOPSIS
+        Installs or uninstalls each program with winget, one at a time, and returns each exit code
+
+    .PARAMETER Action
+        Install or Uninstall
+
+    .PARAMETER Programs
+        The winget package IDs, matched exactly
+
+    #>
     param (
         [Parameter(Mandatory=$true)]
         [ValidateSet("Install", "Uninstall")]
@@ -8,9 +20,13 @@ Function Install-WinUtilProgramWinget {
         [string[]]$Programs
     )
 
-    if ($Action -eq 'Install') {
-        Start-Process -FilePath winget -ArgumentList "install $Programs --accept-package-agreements --source winget --silent" -NoNewWindow -Wait
-    } else {
-        Start-Process -FilePath winget -ArgumentList "uninstall $Programs --source winget --silent" -NoNewWindow -Wait
+    foreach ($Program in $Programs) {
+        if ($Action -eq 'Install') {
+            $Arguments = "install --id `"$Program`" --exact --accept-package-agreements --accept-source-agreements --source winget --silent --disable-interactivity"
+        } else {
+            $Arguments = "uninstall --id `"$Program`" --exact --accept-source-agreements --source winget --silent --disable-interactivity"
+        }
+        $Process = Start-Process -FilePath winget -ArgumentList $Arguments -NoNewWindow -Wait -PassThru
+        [PSCustomObject]@{ Program = $Program; ExitCode = $Process.ExitCode }
     }
 }

@@ -625,3 +625,71 @@ Describe "Invoke-Tweaks with a tweak that reaches a missing command" {
         $achados | Should -BeNullOrEmpty -Because 'a tweak that reaches a missing command is reported as ERROR and never applied'
     }
 }
+
+# ==============================================================
+# INSTALL — one exact ID at a time, and each exit code read
+# ==============================================================
+Describe "Install-WinUtilProgramWinget builds a command that cannot stop to ask" {
+
+    It "runs winget once per program, by exact ID, accepting both agreements" {
+        $script:argumentos = @()
+        Mock Start-Process { $script:argumentos += $ArgumentList; [PSCustomObject]@{ ExitCode = 0 } }
+
+        $r = @(Install-WinUtilProgramWinget -Action Install -Programs @('Git.Git', 'VB-Audio.Voicemeeter.Potato'))
+
+        $script:argumentos.Count | Should -Be 2
+        $script:argumentos[0] | Should -Be 'install --id "Git.Git" --exact --accept-package-agreements --accept-source-agreements --source winget --silent --disable-interactivity'
+        $script:argumentos[1] | Should -Match '^install --id "VB-Audio.Voicemeeter.Potato" --exact '
+        $r.Program  | Should -Be @('Git.Git', 'VB-Audio.Voicemeeter.Potato')
+        $r.ExitCode | Should -Be @(0, 0)
+    }
+
+    It "waits for each process and returns its exit code" {
+        Mock Start-Process { [PSCustomObject]@{ ExitCode = -1978335189 } }
+
+        (Install-WinUtilProgramWinget -Action Install -Programs 'Git.Git').ExitCode | Should -Be -1978335189
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $Wait -and $PassThru }
+    }
+}
+
+Describe "Invoke-Install reports each package from its winget exit code" {
+
+    BeforeEach {
+        Mock Install-WinUtilWinget { }
+    }
+
+    It "classifies the exit codes winget documents" {
+        Get-PhportoWingetOutcome -ExitCode 0           | Should -Be 'ok'
+        Get-PhportoWingetOutcome -ExitCode -1978335189 | Should -Be 'installed'
+        Get-PhportoWingetOutcome -ExitCode -1978335135 | Should -Be 'installed'
+        Get-PhportoWingetOutcome -ExitCode -1978334967 | Should -Be 'reboot'
+        Get-PhportoWingetOutcome -ExitCode 1           | Should -Be 'error'
+        Get-PhportoWingetOutcome -ExitCode $null       | Should -Be 'error'
+    }
+
+    It "all installed says complete" {
+        Mock Install-WinUtilProgramWinget { [PSCustomObject]@{ Program = 'Git.Git'; ExitCode = 0 }; [PSCustomObject]@{ Program = '7zip.7zip'; ExitCode = -1978335135 } }
+        $output = (Invoke-Install -Apps 'Git.Git,7zip.7zip') 6>&1 | Out-String
+
+        $output | Should -Match '\[ OK \] Git.Git installed'
+        $output | Should -Match '\[ OK \] 7zip.7zip was already installed'
+        $output | Should -Match '\[ OK \] Installation complete'
+    }
+
+    It "a failed package is an ERROR with the code in hex, and the summary is not complete" {
+        Mock Install-WinUtilProgramWinget { [PSCustomObject]@{ Program = 'Git.Git'; ExitCode = 0 }; [PSCustomObject]@{ Program = 'Nada.Disso'; ExitCode = -1978335212 } }
+        $output = (Invoke-Install -Apps 'Git.Git,Nada.Disso') 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \] Nada.Disso -> winget exit code 0x8A150014'
+        $output | Should -Match '\[ ERROR \] Installation finished with 1 error\(s\): Nada.Disso'
+        $output | Should -Not -Match 'Installation complete'
+    }
+
+    It "a package that needs a restart is a WARNING, and the summary says to restart" {
+        Mock Install-WinUtilProgramWinget { [PSCustomObject]@{ Program = 'VB-Audio.Voicemeeter.Potato'; ExitCode = -1978334967 } }
+        $output = (Invoke-Install -Apps 'VB-Audio.Voicemeeter.Potato') 6>&1 | Out-String
+
+        $output | Should -Match '\[ WARNING \] VB-Audio.Voicemeeter.Potato installed; Windows must restart to finish'
+        $output | Should -Match '\[ WARNING \] Installation complete; restart Windows to finish: VB-Audio.Voicemeeter.Potato'
+    }
+}

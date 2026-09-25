@@ -241,20 +241,33 @@ foreach ($view->tweaks as $tw) {
 
   <!-- ---------------------------------------------------------- [6] install -->
   <section>
-    <?= $secao(6, 'Install', 'Instala apps pelo winget, por ID, separados por vírgula.') ?>
+    <?= $secao(6, 'Install', 'Instala apps pelo winget, por ID, separados por vírgula. As caixas abaixo somam os principais ao campo.') ?>
     <form method="post">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="acao" value="install">
       <div class="campo">
         <label for="ins-apps">Apps</label>
         <input type="text" id="ins-apps" name="Apps"
-               placeholder="Git.Git,Microsoft.VSCode,Docker.DockerDesktop"<?= $dis ?>>
+               placeholder="Mozilla.Firefox,Notepad++.Notepad++"<?= $dis ?>>
+        <button type="submit" class="btn btn-campo"<?= $dis ?>>Instalar</button>
       </div>
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Instalar</button></div>
+      <div class="colunas-4">
+        <?php foreach (\App\Win\WinAction::INSTALL_SUGGESTIONS as $id => $nome): ?>
+          <label class="caixa">
+            <input type="checkbox" name="AppsMarcados[]" value="<?= Respond::e($id) ?>"<?= $dis ?>>
+            <span>
+              <?= Respond::e($nome) ?>
+              <small><code><?= Respond::e($id) ?></code></small>
+              <?php if ($id === 'VB-Audio.Voicemeeter.Potato'): ?><small class="nota">Exige reiniciar o Windows para funcionar.</small><?php endif; ?>
+            </span>
+          </label>
+        <?php endforeach; ?>
+      </div>
       <p class="dica">
-        Texto livre: o catálogo do winget é aberto demais para uma lista curada, que envelheceria
-        em semanas. O teto de <?= number_format($view->maxParamBytes, 0, ',', '.') ?> bytes é
-        recusado <strong>no servidor</strong>, não no navegador.
+        O campo é texto livre e manda: o catálogo do winget é aberto demais para uma lista curada.
+        Cada app é instalado pelo ID exato. O teto de <?= number_format($view->maxParamBytes, 0, ',', '.') ?>
+        bytes é recusado <strong>no servidor</strong>, não no navegador. O VoiceMeeter Potato só passa
+        a funcionar depois de reiniciar o Windows.
       </p>
     </form>
   </section>

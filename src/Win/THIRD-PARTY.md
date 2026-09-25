@@ -34,7 +34,7 @@ sha256sum src/Win/lib/*.ps1 src/Win/config/{dns,preset,tweaks}.json
 
 | Arquivo | SHA-256 |
 |---|---|
-| `lib/Install-WinUtilProgramWinget.ps1` | `6f6c8c7dcc89e18140ac23c8c6eae13506152726a2b0eb9c0ef4f6f8e79d7740` |
+| `lib/Install-WinUtilProgramWinget.ps1` ⚠ editado | `3033060596ec8ee00a037b053d598b3ca46b12cf4fb1ef9b3e970b5013cb4005` |
 | `lib/Install-WinUtilWinget.ps1` | `c97374d0d64ccd597c34407a7c0aa7e7b7efcb2c8a4b4a85261046c4ab7da499` |
 | `lib/Invoke-WinUtilExplorerUpdate.ps1` ⚠ editado | `a60d7020607f49c6ca891d1b5e56b8639c8d02249be90e5fa174699a6beb038e` |
 | `lib/Invoke-WinUtilRemoveEdge.ps1` | `ca2b9ebd53c4fc715245056503cf10535f9e07d55f234af5e763cdfcd5252a7c` |
@@ -75,18 +75,20 @@ exatamente o conteúdo dos daqui, e a função não muda nesse intervalo;
 `.gitattributes` do upstream entrega em CRLF; conferível com
 `git archive 153900a functions/public/Invoke-WinUtilRemoveEdge.ps1`.
 
-### As duas que divergem da origem
+### Os três que divergem da origem
 
 `Invoke-WinUtilExplorerUpdate` e `Invoke-WinutilThemeChange` vieram do mesmo
 `153900a` e são chamadas por seis tweaks do `tweaks.json` (`WPFTweaksWidget` e
 os toggles DarkMode, ShowExt, HiddenFiles, StartMenuRecommendations e
-TaskbarAlignment). As duas foram **editadas**, e são os únicos arquivos desta
-seção que não batem com a origem. A tabela acima traz o hash do arquivo
+TaskbarAlignment). `Install-WinUtilProgramWinget` veio com os nove da migração.
+Os três foram **editados**, e são os únicos arquivos desta seção que não batem
+com a origem. A tabela acima traz o hash do arquivo
 daqui; o da origem está abaixo, para a divergência ser conferível.
 
 | Arquivo | SHA-256 da origem (checkout de `153900a`) | O que mudou, e por quê |
 |---|---|---|
 | `lib/Invoke-WinUtilExplorerUpdate.ps1` | `e5299b43cae5a8d92896889f7ea1a69a4773e9262e9705789798f4dad5f5baa0` | O aviso ao shell (`SendMessageTimeout` com `WM_SETTINGCHANGE`) roda **síncrono**, no próprio fluxo, em vez de dentro de `Invoke-WPFRunspace`. Aquele helper usa `$sync.runspace`, o pool de runspaces da janela do WinUtil, que não existe no worker. O retorno da chamada vai para `Out-Null`, porque fora do pool ele cairia na saída da ação. O modo `restart` ficou como estava. |
+| `lib/Install-WinUtilProgramWinget.ps1` | `6f6c8c7dcc89e18140ac23c8c6eae13506152726a2b0eb9c0ef4f6f8e79d7740` | Instala **um pacote por vez**, por `--id` com `--exact`, com `--accept-source-agreements` e `--disable-interactivity`, e **devolve o código de saída** de cada um (`-Wait -PassThru`). Na origem era um `winget install` só, com a lista juntada por espaço, busca por nome e sem aceitar os termos da fonte: nome ambíguo e primeira execução numa máquina limpa fazem o winget perguntar, e dentro do worker elevado não há quem responda. E sem `-PassThru` o código de saída se perdia. |
 | `lib/Invoke-WinutilThemeChange.ps1` | `0984330830806ca60ea617b70673993f3870b59e53f17f75e01c56c72c0fc1a4` | O corpo saiu e a função **não faz nada**, com a mesma assinatura. Na origem ela repinta a janela do WinUtil (`$sync.Form`, temas, preferências); aqui não há janela. O modo escuro do Windows é a parte de registro do `WPFToggleDarkMode`, que continua sendo aplicada. |
 
 ### Por que três JSON, e não cinco
@@ -147,6 +149,7 @@ pior que a nossa. Quem torna o parâmetro obrigatório são as duas allowlists: 
 | Arquivo | O que mudou |
 |---|---|
 | `Invoke-Debloat.ps1` | a lista dos 22 pacotes saiu do corpo da função para `config/debloat.json`, que a tela `/win` também lê; ganhou `-Packages`, e sem ele remove o arquivo inteiro; o resumo final deixa de dizer "complete" quando algum pacote deu erro |
+| `Invoke-Install.ps1` | lê o código de saída de cada pacote: já instalado é OK, "reinicie para terminar" é WARNING, o resto é ERROR com o código; o resumo deixa de dizer "complete" quando algum falhou |
 | `Invoke-DNS.ps1` | o provider `Custom` passa a aplicar os endereços de `-PrimaryDNS` e `-SecondaryDNS`, adaptador por adaptador, em vez de chamar o `Set-WinUtilDNS` — que lia os IPs vazios do `dns.json` e nunca usava os digitados |
 | `Invoke-Tweaks.ps1` | antes de aplicar cada tweak, confere se os comandos que o script dele alcança existem; se falta algum, o item sai como `ERROR` e não é aplicado, e o resumo final deixa de dizer sucesso; ganhou `-Items`, a lista de tweaks, de que o `-Preset` é atalho |
 

@@ -164,6 +164,7 @@ use App\Http\Respond;
   .caixa small { display: block; color: var(--mut); font-size: 11.5px; line-height: 1.4; margin-top: 2px; }
   .caixa .nota { color: #92400e; }
   .caixa-mono { font: 12px/1.5 var(--mono); }
+  .btn-campo { align-self: stretch; min-width: 0; padding: 0 18px; border-radius: 8px; flex: none; }
   .grupo { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; margin: 12px 0 0; }
   .grupo legend { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); padding: 0 6px; }
   .grupo.cuidado { border-color: #d97706; background: #fffbeb; }

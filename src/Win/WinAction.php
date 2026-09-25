@@ -67,6 +67,24 @@ enum WinAction: string
 
     public const TWEAK_PRESETS = ['standard', 'minimal', 'advanced'];
 
+    /**
+     * Os principais que a tela oferece como caixa no install, por ID do winget.
+     *
+     * Cada ID foi conferido com winget show --id --exact na fonte winget. As
+     * caixas só somam ao campo livre, que continua aceitando qualquer ID.
+     *
+     * @var array<string, string>
+     */
+    public const INSTALL_SUGGESTIONS = [
+        'Git.Git'                     => 'Git',
+        'Microsoft.VisualStudioCode'  => 'Visual Studio Code',
+        'Docker.DockerDesktop'        => 'Docker Desktop',
+        'Microsoft.WSL'               => 'WSL',
+        'Debian.Debian'               => 'Debian',
+        '7zip.7zip'                   => '7-Zip',
+        'VB-Audio.Voicemeeter.Potato' => 'VoiceMeeter Potato',
+    ];
+
     public const OPTIMIZE_PRESETS = ['ssh', 'kill-rdp'];
 
     public const EXPORTER_SUBACTIONS = ['install', 'status', 'start', 'stop', 'metrics', 'firewall'];
@@ -407,24 +425,47 @@ enum WinAction: string
      * previu. O valor nunca entra em linha de comando (ver PsScriptBuilder),
      * então texto livre aqui não é execução de código em nenhum lugar.
      *
+     * As caixas dos principais (AppsMarcados, IDs de INSTALL_SUGGESTIONS) só
+     * SOMAM ao campo: o ID marcado que o campo ainda não tem entra no fim.
+     *
      * @param array<string, string> $input
      *
      * @return array<string, string>
      */
     private function install(array $input): array
     {
-        $apps = $this->texto($input, 'Apps', obrigatorio: true);
+        $apps     = $this->texto($input, 'Apps', obrigatorio: false);
+        $marcados = $this->lista($input, 'AppsMarcados', 'App', static fn (): array => array_keys(self::INSTALL_SUGGESTIONS));
 
         // O Invoke-Install parte por vírgula e descarta vazios; uma entrada
         // que só tem vírgulas passaria por aqui e morreria lá com mensagem
         // pior que esta.
-        $itens = array_filter(array_map('trim', explode(',', $apps)), static fn (string $i): bool => $i !== '');
+        $itens = array_values(array_filter(array_map('trim', explode(',', $apps)), static fn (string $i): bool => $i !== ''));
 
-        if ($itens === []) {
-            throw new InvalidArgumentException('Informe ao menos um app, separados por vírgula.');
+        if ($marcados === '') {
+            if ($itens === []) {
+                throw new InvalidArgumentException('Informe ao menos um app, separados por vírgula, ou marque um dos principais.');
+            }
+
+            return ['Apps' => $apps];
         }
 
-        return ['Apps' => $apps];
+        $jaTem = array_map('strtolower', $itens);
+
+        foreach (explode(',', $marcados) as $id) {
+            if (!in_array(strtolower($id), $jaTem, true)) {
+                $itens[] = $id;
+                $jaTem[]  = strtolower($id);
+            }
+        }
+
+        $juntos = implode(',', $itens);
+
+        if (strlen($juntos) > self::MAX_PARAM_BYTES) {
+            throw new InvalidArgumentException(sprintf('Apps passou do teto de %d bytes.', self::MAX_PARAM_BYTES));
+        }
+
+        return ['Apps' => $juntos];
     }
 
     /**
