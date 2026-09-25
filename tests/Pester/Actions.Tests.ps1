@@ -409,3 +409,84 @@ Describe "Execution with Mock" {
         }
     }
 }
+
+# ==============================================================
+# INVOKE-TWEAKS — missing commands are errors, never OK
+# ==============================================================
+Describe "Invoke-Tweaks with a tweak that reaches a missing command" {
+
+    BeforeAll {
+        $tweaks = $global:sync.configs.tweaks
+        $tweaks | Add-Member -Force -NotePropertyName 'PhportoTestOk' -NotePropertyValue (
+            [pscustomobject]@{ InvokeScript = @('Get-Date | Out-Null'); UndoScript = @('Get-Date | Out-Null') })
+        $tweaks | Add-Member -Force -NotePropertyName 'PhportoTestMissing' -NotePropertyValue (
+            [pscustomobject]@{ InvokeScript = @('Invoke-PhportoDoesNotExist'); UndoScript = @('Get-Date | Out-Null') })
+        $tweaks | Add-Member -Force -NotePropertyName 'PhportoTestNested' -NotePropertyValue (
+            [pscustomobject]@{ InvokeScript = @('Invoke-PhportoTestWrapper') })
+
+        function global:Invoke-PhportoTestWrapper { Invoke-PhportoAlsoMissing }
+
+        $global:sync.configs.preset | Add-Member -Force -NotePropertyName 'Phportotest' -NotePropertyValue @(
+            'PhportoTestOk', 'PhportoTestMissing', 'PhportoTestNested')
+        $global:sync.configs.preset | Add-Member -Force -NotePropertyName 'Phportoclean' -NotePropertyValue @('PhportoTestOk')
+    }
+
+    AfterAll {
+        foreach ($k in 'PhportoTestOk', 'PhportoTestMissing', 'PhportoTestNested') {
+            $global:sync.configs.tweaks.PSObject.Properties.Remove($k)
+        }
+        foreach ($k in 'Phportotest', 'Phportoclean') {
+            $global:sync.configs.preset.PSObject.Properties.Remove($k)
+        }
+        Remove-Item function:global:Invoke-PhportoTestWrapper -ErrorAction SilentlyContinue
+    }
+
+    It "reports the item as ERROR and does not apply it" {
+        Mock Invoke-WinUtilTweaks { }
+        $output = (Invoke-Tweaks -Preset phportotest) 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \] PhportoTestMissing -> not applied, missing command: Invoke-PhportoDoesNotExist'
+        $output | Should -Not -Match '\[ OK \] PhportoTestMissing'
+        Should -Invoke Invoke-WinUtilTweaks -Times 1 -Exactly -ParameterFilter { $CheckBox -eq 'PhportoTestOk' }
+        Should -Invoke Invoke-WinUtilTweaks -Times 0 -Exactly -ParameterFilter { $CheckBox -ne 'PhportoTestOk' }
+    }
+
+    It "follows a function that exists into the command it is missing" {
+        Mock Invoke-WinUtilTweaks { }
+        $output = (Invoke-Tweaks -Preset phportotest) 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \] PhportoTestNested -> not applied, missing command: Invoke-PhportoAlsoMissing'
+    }
+
+    It "ends with an ERROR summary instead of success" {
+        Mock Invoke-WinUtilTweaks { }
+        $output = (Invoke-Tweaks -Preset phportotest) 6>&1 | Out-String
+
+        $output | Should -Match "\[ ERROR \] Preset 'Phportotest' applying finished with 2 error\(s\): PhportoTestMissing, PhportoTestNested"
+        $output | Should -Not -Match 'successfully'
+    }
+
+    It "checks the undo script when reverting, not the apply script" {
+        Mock Invoke-WinUtilTweaks { }
+        $output = (Invoke-Tweaks -Preset phportotest -Undo) 6>&1 | Out-String
+
+        $output | Should -Match "\[ OK \] Preset 'Phportotest' reverting successfully"
+    }
+
+    It "still reports success when every command resolves" {
+        Mock Invoke-WinUtilTweaks { }
+        $output = (Invoke-Tweaks -Preset phportoclean) 6>&1 | Out-String
+
+        $output | Should -Match "\[ OK \] Preset 'Phportoclean' applying successfully"
+    }
+
+    It "among the real presets, only WPFTweaksWidget reaches a missing command today" {
+        $achados = @()
+        foreach ($preset in 'Standard', 'Minimal', 'Advanced') {
+            foreach ($tweak in $global:sync.configs.preset.$preset) {
+                if (@(Get-PhportoMissingTweakCommand -CheckBox $tweak).Count -gt 0) { $achados += $tweak }
+            }
+        }
+        @($achados | Sort-Object -Unique) | Should -Be @('WPFTweaksWidget') -Because 'if this changes, the missing function arrived or a new one is missing'
+    }
+}

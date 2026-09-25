@@ -118,6 +118,7 @@ pior que a nossa. Quem torna o parâmetro obrigatório são as duas allowlists: 
 | Arquivo | O que mudou |
 |---|---|
 | `Invoke-Debloat.ps1` | a lista dos 22 pacotes saiu do corpo da função para `config/debloat.json`, que a tela `/win` também lê |
+| `Invoke-Tweaks.ps1` | antes de aplicar cada tweak, confere se os comandos que o script dele alcança existem; se falta algum, o item sai como `ERROR` e não é aplicado, e o resumo final deixa de dizer sucesso |
 
 `config/debloat.json` é, portanto, do projeto e não do upstream: fica fora da
 tabela de hashes da seção 1, e pode ser editado.
