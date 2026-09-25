@@ -29,6 +29,11 @@ $secao = static function (int $n, string $titulo, string $descricao): string {
 $travado = $view->blocked !== null;
 $dis     = $travado ? ' disabled' : '';
 
+$grupos = [];
+foreach ($view->tweaks as $tw) {
+    $grupos[$tw['category']][] = $tw;
+}
+
 ?>
 <div class="wrap">
   <div class="topbar">
@@ -105,46 +110,77 @@ $dis     = $travado ? ' disabled' : '';
 
   <!-- ----------------------------------------------------------- [2] tweaks -->
   <section>
-    <?= $secao(2, 'Tweaks', 'Aplica os tweaks do WinUtil por preset. Registro e serviços do Windows.') ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="tweaks">
-      <div class="campo">
-        <label for="tw-preset">Preset</label>
-        <select id="tw-preset" name="Preset"<?= $dis ?>>
-          <option value="standard">standard — telemetria, DVR, serviços</option>
-          <option value="minimal">minimal — só o essencial</option>
-          <option value="advanced">advanced — + OneDrive, widgets, Copilot</option>
-        </select>
-      </div>
-      <div class="row">
-        <label class="switch">
-          <input type="checkbox" name="Undo" value="1"<?= $dis ?>>
-          <span class="trilho"></span>
-          <span class="rotulo">Reverter (-Undo)</span>
-        </label>
-        <button type="submit" class="btn btn-sm"<?= $dis ?>>Aplicar</button>
-      </div>
-    </form>
+    <?= $secao(2, 'Tweaks', 'Os tweaks do WinUtil, lidos do src/Win/config/tweaks.json. Registro e serviços do Windows. Nenhum vem marcado: marque um a um, ou comece por um preset.') ?>
+    <?php if ($view->tweaksProblem !== null): ?>
+      <p class="bad"><?= Respond::e($view->tweaksProblem) ?></p>
+    <?php else: ?>
+      <form method="post" id="form-tweaks">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="tweaks">
+        <div class="row">
+          <span class="meta" style="margin:0">Preset</span>
+          <?php foreach ($view->tweakPresets as $nome => $chaves): ?>
+            <button type="button" class="btn btn-sm btn-ghost" data-preset="<?= Respond::e($nome) ?>"<?= $dis ?>><?= Respond::e($nome) ?></button>
+          <?php endforeach; ?>
+          <button type="button" class="btn btn-sm btn-ghost" data-preset=""<?= $dis ?>>desmarcar tudo</button>
+          <span class="meta" style="margin:0">Seleção: <strong id="tw-match"><?= Respond::e($view->tweaksMatch !== '' ? $view->tweaksMatch : 'nenhuma') ?></strong></span>
+        </div>
+        <?php foreach ($grupos as $categoria => $itens): ?>
+          <fieldset class="grupo<?= $itens[0]['caution'] ? ' cuidado' : '' ?>">
+            <legend><?= Respond::e((string) $categoria) ?></legend>
+            <div class="colunas-4">
+              <?php foreach ($itens as $tw): ?>
+                <label class="caixa">
+                  <input type="checkbox" name="Items[]" value="<?= Respond::e($tw['key']) ?>"<?= in_array($tw['key'], $view->tweaksChecked, true) ? ' checked' : '' ?><?= $dis ?>>
+                  <span>
+                    <?= Respond::e($tw['content']) ?>
+                    <?php if ($tw['description'] !== ''): ?><small><?= Respond::e($tw['description']) ?></small><?php endif; ?>
+                    <?php if ($tw['explorer']): ?><small class="nota">Pode só valer no próximo login ou depois de reiniciar o Explorer.</small><?php endif; ?>
+                  </span>
+                </label>
+              <?php endforeach; ?>
+            </div>
+          </fieldset>
+        <?php endforeach; ?>
+        <div class="row">
+          <label class="switch">
+            <input type="checkbox" name="Undo" value="1"<?= $dis ?>>
+            <span class="trilho"></span>
+            <span class="rotulo">Reverter (-Undo)</span>
+          </label>
+          <button type="submit" class="btn btn-sm"<?= $dis ?>>Aplicar</button>
+        </div>
+        <p class="dica">
+          O preset marca as caixas dele; a seleção que não corresponde a nenhum se chama
+          <code>custom</code>. O que vai para a ação são as caixas marcadas, e elas ficam guardadas
+          para a próxima visita.
+        </p>
+      </form>
+    <?php endif; ?>
   </section>
 
   <!-- ---------------------------------------------------------- [3] debloat -->
   <section>
-    <?= $secao(3, 'Debloat', 'Remove os pacotes APPX abaixo, lidos do src/Win/config/debloat.json — o mesmo arquivo que a ação lê.') ?>
+    <?= $secao(3, 'Debloat', 'Remove os pacotes APPX marcados, lidos do src/Win/config/debloat.json — o mesmo arquivo que a ação lê.') ?>
     <?php if ($view->debloatProblem !== null): ?>
       <p class="bad"><?= Respond::e($view->debloatProblem) ?></p>
     <?php else: ?>
-      <ul class="colunas-4">
-        <?php foreach ($view->debloatPackages as $pacote): ?>
-          <li><?= Respond::e($pacote) ?></li>
-        <?php endforeach; ?>
-      </ul>
+      <form method="post">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="debloat">
+        <input type="hidden" name="PackagesForm" value="1">
+        <div class="colunas-4">
+          <?php foreach ($view->debloatPackages as $pacote): ?>
+            <label class="caixa caixa-mono">
+              <input type="checkbox" name="Packages[]" value="<?= Respond::e($pacote) ?>"<?= in_array($pacote, $view->debloatChecked, true) ? ' checked' : '' ?><?= $dis ?>>
+              <span><?= Respond::e($pacote) ?></span>
+            </label>
+          <?php endforeach; ?>
+        </div>
+        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Remover marcados</button></div>
+        <p class="dica">Sem seleção guardada, os <?= count($view->debloatPackages) ?> vêm marcados, que é a lista inteira do arquivo.</p>
+      </form>
     <?php endif; ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="debloat">
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Remover pacotes</button></div>
-    </form>
   </section>
 
   <!-- -------------------------------------------------------------- [4] dns -->
@@ -489,6 +525,42 @@ $dis     = $travado ? ' disabled' : '';
   if (dnsProv) {
     dnsProv.addEventListener('change', pintarDns);
     pintarDns();
+  }
+
+  // ---- Tweaks: o preset marca as caixas, e a seleção diz o nome ---------
+  var PRESETS = <?= json_encode((object) $view->tweakPresets, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+  var formTw  = document.getElementById('form-tweaks');
+
+  function nomeDaSelecao(marcadas) {
+    if (marcadas.length === 0) { return 'nenhuma'; }
+    var alvo = marcadas.slice().sort().join(',');
+    for (var nome in PRESETS) {
+      if (Object.prototype.hasOwnProperty.call(PRESETS, nome) && PRESETS[nome].slice().sort().join(',') === alvo) {
+        return nome;
+      }
+    }
+    return 'custom';
+  }
+
+  if (formTw) {
+    var caixasTw = formTw.querySelectorAll('input[name="Items[]"]');
+    var rotuloTw = document.getElementById('tw-match');
+
+    var pintarTw = function () {
+      var marcadas = [];
+      caixasTw.forEach(function (c) { if (c.checked) { marcadas.push(c.value); } });
+      rotuloTw.textContent = nomeDaSelecao(marcadas);
+    };
+
+    caixasTw.forEach(function (c) { c.addEventListener('change', pintarTw); });
+
+    formTw.querySelectorAll('[data-preset]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var chaves = PRESETS[b.getAttribute('data-preset')] || [];
+        caixasTw.forEach(function (c) { c.checked = chaves.indexOf(c.value) !== -1; });
+        pintarTw();
+      });
+    });
   }
 
   // ---- Optimize: cada preset tem o seu aviso -----------------------------

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Win;
 
 use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * As treze ações do Windows, e a allowlist do lado PHP.
@@ -138,12 +139,12 @@ enum WinAction: string
             // desligar do plano de energia funcionar — é decisão em aberto,
             // não impedimento técnico.
             self::Audit,
-            self::Debloat,
             self::Performance,
             self::Memory,
             self::Processes => [],
 
             self::Tweaks    => $this->tweaks($input),
+            self::Debloat   => $this->debloat($input),
             self::Dns       => $this->dns($input),
             self::Install   => $this->install($input),
             self::Network   => $this->network($input),
@@ -166,11 +167,9 @@ enum WinAction: string
      *
      * QUATRO AÇÕES SÃO REVERSÍVEIS, e cada uma diz a reversão de um jeito:
      *
-     *   tweaks    -Undo, e ele EXIGE -Preset. Medido no Invoke-Tweaks: o -Undo
-     *             lê a lista daquele preset no preset.json e reverte item por
-     *             item, então reverter sem saber o preset é impossível. É a
-     *             razão mais forte para este estado existir: essa informação
-     *             não está em nenhum outro lugar do sistema.
+     *   tweaks    -Undo com a lista dos tweaks a reverter (-Items) ou um
+     *             -Preset. O payload guarda as chaves aplicadas; ver
+     *             mergeState().
      *   optimize  -Undo, e ele NÃO precisa de parâmetro: o Invoke-Optimize lê
      *             o próprio C:\WinUtil\optimize-state.json e recusa sem ele. O
      *             payload guarda o preset só para a tela poder dizer o que
@@ -199,9 +198,9 @@ enum WinAction: string
         return match ($this) {
             self::Tweaks => new WinStateChange(
                 applied: !isset($params['Undo']),
-                // Só o Preset: é o que o -Undo exige de volta. Guardar o resto
-                // seria guardar o que ninguém vai ler.
-                payload: isset($params['Preset']) ? ['Preset' => $params['Preset']] : [],
+                payload: isset($params['Items'])
+                    ? ['Items' => $params['Items']]
+                    : (isset($params['Preset']) ? ['Preset' => $params['Preset']] : []),
             ),
 
             self::Optimize => new WinStateChange(
@@ -227,19 +226,164 @@ enum WinAction: string
     }
 
     /**
+     * O payload aplicado que fica guardado depois de uma mudança de estado.
+     *
+     * Recebe o payload guardado antes (null se não havia linha), a mudança e
+     * os presets reduzidos por WinConfig::presets(). Devolve o payload a
+     * gravar, ou null para esquecer a linha.
+     *
+     * Nos tweaks o aplicado é um CONJUNTO de chaves: aplicar soma ao que
+     * estava guardado, reverter subtrai, e o conjunto vazio esquece a linha.
+     * Um Preset, guardado ou vindo da mudança, conta como as chaves dele. Nas
+     * outras ações a mudança substitui o guardado.
+     *
+     * @param array<string, string|int|bool>|null $antes
+     * @param array<string, list<string>>         $presets
+     *
+     * @return array<string, string|int|bool>|null
+     */
+    public function mergeState(?array $antes, WinStateChange $mudanca, array $presets): ?array
+    {
+        if ($this !== self::Tweaks) {
+            return $mudanca->applied ? $mudanca->payload : null;
+        }
+
+        $chaves = static function (?array $payload) use ($presets): array {
+            if ($payload === null) {
+                return [];
+            }
+
+            if (isset($payload['Items']) && is_string($payload['Items'])) {
+                return array_values(array_filter(array_map('trim', explode(',', $payload['Items'])), static fn (string $k): bool => $k !== ''));
+            }
+
+            if (isset($payload['Preset']) && is_string($payload['Preset'])) {
+                return $presets[strtolower($payload['Preset'])] ?? [];
+            }
+
+            return [];
+        };
+
+        $guardadas = $chaves($antes);
+        $destaVez  = $chaves($mudanca->payload);
+
+        $resultado = $mudanca->applied
+            ? array_values(array_unique(array_merge($guardadas, $destaVez)))
+            : array_values(array_diff($guardadas, $destaVez));
+
+        return $resultado === [] ? null : ['Items' => implode(',', $resultado)];
+    }
+
+    /**
      * @param array<string, string> $input
      *
      * @return array<string, string|bool>
      */
     private function tweaks(array $input): array
     {
-        $params = ['Preset' => $this->pick($input, 'Preset', self::TWEAK_PRESETS, obrigatorio: true)];
+        $preset = $this->pick($input, 'Preset', self::TWEAK_PRESETS, obrigatorio: false);
+        $itens  = $this->lista($input, 'Items', 'Tweak', static fn (): array => WinConfig::tweakKeys());
+
+        if ($preset !== '' && $itens !== '') {
+            throw new InvalidArgumentException('Escolha um preset ou marque tweaks, não os dois.');
+        }
+
+        if ($preset === '' && $itens === '') {
+            throw new InvalidArgumentException('Marque ao menos um tweak.');
+        }
+
+        $params = $itens !== '' ? ['Items' => $itens] : ['Preset' => $preset];
 
         if ($this->flag($input, 'Undo')) {
             $params['Undo'] = true;
         }
 
         return $params;
+    }
+
+    /**
+     * Valida os pacotes do debloat.
+     *
+     * Recebe os campos do POST. Sem Packages, devolve vazio, e a ação remove
+     * os pacotes do debloat.json inteiro. Com o campo PackagesForm, que só o
+     * formulário da tela envia, uma lista vazia é recusada em vez de virar
+     * "todos".
+     *
+     * @param array<string, string> $input
+     *
+     * @return array<string, string>
+     */
+    private function debloat(array $input): array
+    {
+        $pacotes = $this->lista($input, 'Packages', 'Pacote', static fn (): array => WinConfig::debloat());
+
+        if ($pacotes === '') {
+            if (($input['PackagesForm'] ?? '') === '1') {
+                throw new InvalidArgumentException('Marque ao menos um pacote.');
+            }
+
+            return [];
+        }
+
+        return ['Packages' => $pacotes];
+    }
+
+    /**
+     * Valida uma lista separada por vírgula contra os itens permitidos.
+     *
+     * Recebe os campos do POST, o nome do campo, o rótulo do item para a
+     * mensagem e quem fornece os itens permitidos. Devolve os itens na grafia
+     * da lista permitida, unidos por vírgula, ou string vazia se o campo veio
+     * vazio.
+     *
+     * @param array<string, string>  $input
+     * @param callable(): list<string> $permitidos
+     *
+     * @throws InvalidArgumentException com a frase que vai para a tela
+     */
+    private function lista(array $input, string $campo, string $rotulo, callable $permitidos): string
+    {
+        $bruto = $this->texto($input, $campo, obrigatorio: false);
+
+        if ($bruto === '') {
+            return '';
+        }
+
+        try {
+            $validos = $permitidos();
+        } catch (RuntimeException $e) {
+            throw new InvalidArgumentException('Não foi possível ler a lista de ' . $campo . ': ' . $e->getMessage());
+        }
+
+        $porMinuscula = [];
+
+        foreach ($validos as $valido) {
+            $porMinuscula[strtolower($valido)] = $valido;
+        }
+
+        $aceitos = [];
+
+        foreach (explode(',', $bruto) as $item) {
+            $item = trim($item);
+
+            if ($item === '') {
+                continue;
+            }
+
+            $canonico = $porMinuscula[strtolower($item)] ?? null;
+
+            if ($canonico === null) {
+                throw new InvalidArgumentException(sprintf('%s desconhecido: %s.', $rotulo, $item));
+            }
+
+            if (in_array($canonico, $aceitos, true)) {
+                throw new InvalidArgumentException(sprintf('%s repetido: %s.', $rotulo, $canonico));
+            }
+
+            $aceitos[] = $canonico;
+        }
+
+        return implode(',', $aceitos);
     }
 
     /**

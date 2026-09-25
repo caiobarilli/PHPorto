@@ -9,15 +9,11 @@ use App\Win\WinAction;
  * estado aplicado.
  *
  * A TABELA DAS QUATRO REVERSÍVEIS está aqui e no docblock do stateChange(), e
- * o que ela guarda vem de medição nas próprias ações — o -Undo do tweaks exige
- * -Preset, o do optimize não exige nada, o gdid reverte por subação e o
- * performance por -State.
+ * o que ela guarda vem de medição nas próprias ações — o -Undo do tweaks recebe
+ * os itens (ou o preset), o do optimize não exige nada, o gdid reverte por
+ * subação e o performance por -State.
  */
-it('tweaks aplicado guarda o PRESET, porque o -Undo exige ele de volta', function () {
-    // Medido no Invoke-Tweaks: o -Undo lê a lista daquele preset no
-    // preset.json e reverte item por item. Reverter sem saber o preset é
-    // impossível, e essa informação não existe em nenhum outro lugar — é a
-    // razão mais forte para este estado existir.
+it('tweaks por preset guarda o PRESET, que o -Undo aceita de volta', function () {
     $mudanca = WinAction::Tweaks->stateChange(['Preset' => 'standard']);
 
     expect($mudanca)->not->toBeNull()
@@ -98,4 +94,52 @@ it('toda ação do enum passa pelo stateChange sem estourar', function () {
     foreach (WinAction::cases() as $acao) {
         expect(fn () => $acao->stateChange([]))->not->toThrow(Throwable::class);
     }
+});
+
+it('tweaks por itens guarda os ITENS, que o -Undo precisa de volta', function () {
+    $mudanca = WinAction::Tweaks->stateChange(['Items' => 'WPFTweaksTelemetry,WPFTweaksServices']);
+
+    expect($mudanca->applied)->toBeTrue()
+        ->and($mudanca->payload)->toBe(['Items' => 'WPFTweaksTelemetry,WPFTweaksServices']);
+});
+
+// ------------------------------------------------------------- mergeState
+
+it('aplicar tweaks SOMA ao conjunto guardado, sem repetir', function () {
+    $mudanca = WinAction::Tweaks->stateChange(['Items' => 'B,C']);
+
+    expect(WinAction::Tweaks->mergeState(['Items' => 'A,B'], $mudanca, []))->toBe(['Items' => 'A,B,C']);
+});
+
+it('reverter tweaks SUBTRAI do conjunto guardado', function () {
+    $mudanca = WinAction::Tweaks->stateChange(['Items' => 'A', 'Undo' => true]);
+
+    expect(WinAction::Tweaks->mergeState(['Items' => 'A,B,C'], $mudanca, []))->toBe(['Items' => 'B,C']);
+});
+
+it('reverter o que sobrava esquece a linha', function () {
+    $mudanca = WinAction::Tweaks->stateChange(['Items' => 'A,B', 'Undo' => true]);
+
+    expect(WinAction::Tweaks->mergeState(['Items' => 'A,B'], $mudanca, []))->toBeNull();
+});
+
+it('um Preset guardado conta como as chaves dele', function () {
+    $presets = ['standard' => ['A', 'B']];
+    $mudanca = WinAction::Tweaks->stateChange(['Items' => 'B', 'Undo' => true]);
+
+    expect(WinAction::Tweaks->mergeState(['Preset' => 'standard'], $mudanca, $presets))->toBe(['Items' => 'A']);
+});
+
+it('aplicar sem nada guardado grava só o desta vez', function () {
+    $mudanca = WinAction::Tweaks->stateChange(['Preset' => 'minimal']);
+
+    expect(WinAction::Tweaks->mergeState(null, $mudanca, ['minimal' => ['X', 'Y']]))->toBe(['Items' => 'X,Y']);
+});
+
+it('nas outras ações a mudança substitui o guardado', function () {
+    $aplica = WinAction::Optimize->stateChange(['Preset' => 'ssh']);
+    $desfaz = WinAction::Optimize->stateChange(['Undo' => true]);
+
+    expect(WinAction::Optimize->mergeState(['Preset' => 'kill-rdp'], $aplica, []))->toBe(['Preset' => 'ssh'])
+        ->and(WinAction::Optimize->mergeState(['Preset' => 'ssh'], $desfaz, []))->toBeNull();
 });

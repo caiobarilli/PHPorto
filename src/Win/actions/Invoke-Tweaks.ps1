@@ -1,22 +1,44 @@
 function Invoke-Tweaks {
     param(
         [string]$Preset,
+        [string[]]$Items,
         [switch]$Undo
     )
 
-    # preset.json uses Title-Case keys (Standard / Minimal / Advanced)
-    $key = (Get-Culture).TextInfo.ToTitleCase($Preset.ToLower())
+    if ($Preset -and $Items) {
+        Write-Status ERROR "Use -Preset or -Items, not both."
+        return
+    }
 
-    $list = $sync.configs.preset.$key
-    if (-not $list) {
-        Write-Status ERROR "Preset '$key' not found in preset.json"
+    if ($Items) {
+        $list   = @($Items | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        $rotulo = 'Selection'
+        $alvo   = 'selection'
+    } elseif ($Preset) {
+        # preset.json uses Title-Case keys (Standard / Minimal / Advanced)
+        $key = (Get-Culture).TextInfo.ToTitleCase($Preset.ToLower())
+
+        $list = $sync.configs.preset.$key
+        if (-not $list) {
+            Write-Status ERROR "Preset '$key' not found in preset.json"
+            return
+        }
+        $rotulo = "Preset '$key'"
+        $alvo   = "preset '$key'"
+    } else {
+        Write-Status ERROR "No preset or items given."
         return
     }
 
     $modo = if ($Undo) { "Reverting" } else { "Applying" }
-    Write-Status INFO "$modo preset '$key' ($($list.Count) tweaks)..."
+    Write-Status INFO "$modo $alvo ($($list.Count) tweaks)..."
     $falhas = @()
     foreach ($checkbox in $list) {
+        if ($Items -and -not $sync.configs.tweaks.$checkbox) {
+            Write-Status ERROR "$checkbox -> not applied, not in tweaks.json"
+            $falhas += $checkbox
+            continue
+        }
         $ausentes = @(Get-PhportoMissingTweakCommand -CheckBox $checkbox -Undo:$Undo)
         if ($ausentes.Count -gt 0) {
             Write-Status ERROR "$checkbox -> not applied, missing command: $($ausentes -join ', ')"
@@ -32,10 +54,10 @@ function Invoke-Tweaks {
         }
     }
     if ($falhas.Count -gt 0) {
-        Write-Status ERROR "Preset '$key' $($modo.ToLower()) finished with $($falhas.Count) error(s): $($falhas -join ', ')"
+        Write-Status ERROR "$rotulo $($modo.ToLower()) finished with $($falhas.Count) error(s): $($falhas -join ', ')"
         return
     }
-    Write-Status OK "Preset '$key' $($modo.ToLower()) successfully."
+    Write-Status OK "$rotulo $($modo.ToLower()) successfully."
 }
 
 <#

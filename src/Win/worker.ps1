@@ -77,6 +77,9 @@ $F_LOG       = Join-Path $Dir 'win-worker.log'
 # esta, e o teste que a extrai por AST nao teria como dizer.
 $BOOTSTRAP   = Join-Path $PSScriptRoot 'bootstrap.ps1'
 
+# A pasta dos JSON que as regras 'lista' consultam, irma do bootstrap.
+$CONFIG_DIR  = Join-Path $PSScriptRoot 'config'
+
 # ============================================================
 # ALLOWLIST — a tranca de verdade
 # ============================================================
@@ -99,12 +102,13 @@ $BOOTSTRAP   = Join-Path $PSScriptRoot 'bootstrap.ps1'
 # 'text' = texto livre, com teto de bytes
 # 'int'  = inteiro numa faixa
 # 'flag' = switch, so entra na chamada quando verdadeiro
+# 'lista' = itens separados por virgula, cada um da lista que 'fonte' nomeia
+#           (ver Get-PhportoListaPermitida), sem repetir, com teto de bytes
 
 $MAX_PARAM_BYTES = 4096
 
 $ALLOWLIST = @{
     'audit'       = @{}
-    'debloat'     = @{}
     'memory'      = @{}
     'processes'   = @{}
 
@@ -121,7 +125,11 @@ $ALLOWLIST = @{
 
     'tweaks'      = @{
         'Preset' = @{ tipo = 'set'; valores = @('standard', 'minimal', 'advanced') }
+        'Items'  = @{ tipo = 'lista'; fonte = 'tweaks' }
         'Undo'   = @{ tipo = 'flag' }
+    }
+    'debloat'     = @{
+        'Packages' = @{ tipo = 'lista'; fonte = 'debloat' }
     }
     'dns'         = @{
         'Provider'     = @{ tipo = 'set'; valores = @(
@@ -201,6 +209,29 @@ function ConvertTo-PsLiteral([string]$value) {
 }
 
 <#
+    Os itens que uma regra 'lista' aceita, lidos do config na hora.
+
+    Recebe o nome da fonte. Devolve, para 'tweaks', as chaves do tweaks.json
+    cujo Type nao e' Button nem Combobox; para 'debloat', os pacotes do
+    debloat.json. Fonte desconhecida ou arquivo ilegivel devolve lista vazia,
+    e lista vazia recusa todo item.
+#>
+function Get-PhportoListaPermitida([string]$fonte) {
+    try {
+        $dados = Get-Content -Path (Join-Path $CONFIG_DIR ($fonte + '.json')) -Raw -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        Write-Log "lista '$fonte' ilegivel: $($_.Exception.Message)"
+        return @()
+    }
+
+    switch ($fonte) {
+        'tweaks'  { return @($dados.PSObject.Properties | Where-Object { $_.Value.Type -notin 'Button', 'Combobox' } | ForEach-Object { $_.Name }) }
+        'debloat' { return @($dados | ForEach-Object { [string]$_ }) }
+        default   { return @() }
+    }
+}
+
+<#
     Valida um job contra a allowlist e devolve os pares nome/valor aceitos.
 
     Lanca em qualquer desvio. Quem chama trata a excecao como recusa: nada
@@ -270,6 +301,29 @@ function Test-Job($job) {
                 'flag' {
                     if ($valor -eq $true) { $aceitos[$nome] = $true }
                 }
+                'lista' {
+                    $texto = [string]$valor
+                    if ([System.Text.Encoding]::UTF8.GetByteCount($texto) -gt $MAX_PARAM_BYTES) {
+                        throw "'$nome' passou do teto de bytes"
+                    }
+                    if ($texto.Contains([char]0)) { throw "'$nome' tem byte nulo" }
+
+                    $permitidos = @(Get-PhportoListaPermitida $regra.fonte)
+                    if ($permitidos.Count -eq 0) { throw "lista '$($regra.fonte)' indisponivel" }
+
+                    $itens = New-Object System.Collections.Generic.List[string]
+                    foreach ($bruto in ($texto -split ',')) {
+                        $item = $bruto.Trim()
+                        if ($item -eq '') { continue }
+                        $casou = $permitidos | Where-Object { $_ -ieq $item } | Select-Object -First 1
+                        if (-not $casou) { throw "item fora da lista em '$nome': '$item'" }
+                        if ($itens.Contains([string]$casou)) { throw "item repetido em '$nome': '$casou'" }
+                        $itens.Add([string]$casou)
+                    }
+                    if ($itens.Count -eq 0) { throw "'$nome' sem nenhum item" }
+                    # Guarda a grafia da LISTA, como o 'set'.
+                    $aceitos[$nome] = [string[]]$itens.ToArray()
+                }
                 default { throw "regra desconhecida para '$nome'" }
             }
         }
@@ -323,6 +377,9 @@ function New-InvocationScript($validado, [string]$id) {
             if ($valor) { $pares.Add((ConvertTo-PsLiteral $nome) + ' = $true') }
         } elseif ($valor -is [int]) {
             $pares.Add((ConvertTo-PsLiteral $nome) + " = $valor")
+        } elseif ($valor -is [array]) {
+            $literais = @($valor | ForEach-Object { ConvertTo-PsLiteral ([string]$_) })
+            $pares.Add((ConvertTo-PsLiteral $nome) + ' = @(' + ($literais -join ', ') + ')')
         } else {
             $pares.Add((ConvertTo-PsLiteral $nome) + ' = ' + (ConvertTo-PsLiteral ([string]$valor)))
         }

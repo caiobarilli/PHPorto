@@ -303,6 +303,28 @@ final class Pages
             $debloatProblem = $e->getMessage();
         }
 
+        $tweaks        = [];
+        $presets       = [];
+        $tweaksProblem = null;
+
+        try {
+            $tweaks  = WinConfig::tweaks();
+            $presets = WinConfig::presets();
+        } catch (RuntimeException $e) {
+            $tweaksProblem = $e->getMessage();
+        }
+
+        $selecoes = [];
+
+        try {
+            $selecoes = ($this->makeService)()->winStates(WinStateScope::Selection);
+        } catch (Throwable) {
+            // Sem seleção guardada a tela nasce no padrão; não há o que avisar.
+        }
+
+        $tweaksMarcados  = self::savedSelection($selecoes, WinAction::Tweaks, 'Items') ?? [];
+        $debloatMarcados = self::savedSelection($selecoes, WinAction::Debloat, 'Packages') ?? $debloat;
+
         $view = new WinView(
             rows: $rows,
             result: $rows[0] ?? null,
@@ -317,6 +339,12 @@ final class Pages
             maxParamBytes: WinAction::MAX_PARAM_BYTES,
             debloatPackages: $debloat,
             debloatProblem: $debloatProblem,
+            debloatChecked: $debloatMarcados,
+            tweaks: $tweaks,
+            tweakPresets: $presets,
+            tweaksChecked: $tweaksMarcados,
+            tweaksMatch: WinConfig::matchPreset($tweaksMarcados, $presets),
+            tweaksProblem: $tweaksProblem,
         );
 
         Respond::html('PHPorto — Windows', Respond::render('win.php', $view));
@@ -367,12 +395,20 @@ final class Pages
             Respond::redirect('/win');
         }
 
-        // Só os campos que chegaram como texto: o resto não é entrada válida
-        // de formulário, e deixar passar viraria um TypeError lá dentro.
+        // Só os campos que chegaram como texto, ou como lista de textos — a
+        // lista de checkboxes (Items[], Packages[]), que vira texto separado
+        // por vírgula. O resto não é entrada válida de formulário, e deixar
+        // passar viraria um TypeError lá dentro.
         $entrada = [];
         foreach ($_POST as $chave => $valor) {
-            if (is_string($chave) && is_string($valor)) {
+            if (!is_string($chave)) {
+                continue;
+            }
+
+            if (is_string($valor)) {
                 $entrada[$chave] = $valor;
+            } elseif (is_array($valor) && array_is_list($valor) && array_filter($valor, 'is_string') === $valor) {
+                $entrada[$chave] = implode(',', $valor);
             }
         }
 
@@ -382,6 +418,8 @@ final class Pages
             $this->flash($e->getMessage());
             Respond::redirect('/win');
         }
+
+        $this->saveWinSelection($acao, $params);
 
         $nonce = $this->elevation->nonce();
 
@@ -481,20 +519,23 @@ final class Pages
 
         try {
             $servico = ($this->makeService)();
+            $antes   = $servico->winStates(WinStateScope::Applied)[$acao->value] ?? null;
+            $presets = $acao === WinAction::Tweaks ? WinConfig::presets() : [];
+            $depois  = $acao->mergeState($antes?->payload, $mudanca, $presets);
 
-            if ($mudanca->applied) {
+            if ($depois !== null) {
                 $servico->putWinState(new WinState(
                     scope: WinStateScope::Applied,
                     action: $acao->value,
-                    payload: $mudanca->payload,
+                    payload: $depois,
                 ));
 
                 return;
             }
 
-            // Reverteu: APAGA em vez de gravar "não aplicado". Ausência e "não
-            // aplicado" têm de significar a mesma coisa — ver a nota na
-            // interface do provider.
+            // Nada ficou aplicado: APAGA em vez de gravar "não aplicado".
+            // Ausência e "não aplicado" têm de significar a mesma coisa — ver
+            // a nota na interface do provider.
             $servico->forgetWinState(WinStateScope::Applied, $acao->value);
         } catch (Throwable $e) {
             $this->flash(
@@ -502,6 +543,59 @@ final class Pages
                 . $e->getMessage() . ' O botão pode aparecer como "aplicar" no que já está aplicado.'
             );
         }
+    }
+
+    /**
+     * Guarda as caixas marcadas de uma ação que tem lista de checkboxes.
+     *
+     * Recebe a ação e os parâmetros já validados. Grava a lista no escopo de
+     * seleção quando a ação é tweaks (Items) ou debloat (Packages); nas outras,
+     * não faz nada. Falha de banco vira aviso, sem impedir a execução.
+     *
+     * @param array<string, string|int|bool> $params
+     */
+    private function saveWinSelection(WinAction $acao, array $params): void
+    {
+        $campo = match ($acao) {
+            WinAction::Tweaks  => 'Items',
+            WinAction::Debloat => 'Packages',
+            default            => null,
+        };
+
+        if ($campo === null || !isset($params[$campo]) || !is_string($params[$campo])) {
+            return;
+        }
+
+        try {
+            ($this->makeService)()->putWinState(new WinState(
+                scope: WinStateScope::Selection,
+                action: $acao->value,
+                payload: [$campo => $params[$campo]],
+            ));
+        } catch (Throwable $e) {
+            $this->flash('Não foi possível guardar as caixas marcadas: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Devolve as caixas marcadas guardadas de uma ação.
+     *
+     * Recebe as linhas do escopo de seleção, a ação e o campo da lista.
+     * Devolve as chaves guardadas, ou null se não há seleção guardada.
+     *
+     * @param array<string, WinState> $selecoes
+     *
+     * @return list<string>|null
+     */
+    private static function savedSelection(array $selecoes, WinAction $acao, string $campo): ?array
+    {
+        $valor = $selecoes[$acao->value]->payload[$campo] ?? null;
+
+        if (!is_string($valor)) {
+            return null;
+        }
+
+        return array_values(array_filter(array_map('trim', explode(',', $valor)), static fn (string $k): bool => $k !== ''));
     }
 
     /**

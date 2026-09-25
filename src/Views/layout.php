@@ -157,9 +157,17 @@ use App\Http\Respond;
   .kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
   .provider { font: 600 22px/1 var(--sans); letter-spacing: -0.01em; }
 
-  .colunas-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 16px; list-style: none; padding: 0; margin: 10px 0 0; font: 12px/1.5 var(--mono); }
-  .colunas-4 li { overflow-wrap: anywhere; }
+  .colunas-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 16px; margin: 10px 0 0; }
   @media (max-width: 720px) { .colunas-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .caixa { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; cursor: pointer; }
+  .caixa input { margin: 2px 0 0; flex: none; }
+  .caixa small { display: block; color: var(--mut); font-size: 11.5px; line-height: 1.4; margin-top: 2px; }
+  .caixa .nota { color: #92400e; }
+  .caixa-mono { font: 12px/1.5 var(--mono); }
+  .grupo { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; margin: 12px 0 0; }
+  .grupo legend { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); padding: 0 6px; }
+  .grupo.cuidado { border-color: #d97706; background: #fffbeb; }
+  .grupo.cuidado legend { color: #b45309; font-weight: 600; }
 
   /* ---- Interruptor da /config -------------------------------------------
      Um checkbox de verdade por baixo: o rótulo continua clicável, o teclado

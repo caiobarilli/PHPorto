@@ -361,8 +361,16 @@ final class JobChannel
         // quebraria o rótulo na hora de montar a linha.
         if (isset($data['params']) && is_array($data['params'])) {
             foreach ($data['params'] as $nome => $valor) {
-                if (is_string($nome) && (is_string($valor) || is_int($valor) || is_bool($valor))) {
+                if (!is_string($nome)) {
+                    continue;
+                }
+
+                if (is_string($valor) || is_int($valor) || is_bool($valor)) {
                     $params[$nome] = $valor;
+                } elseif (is_array($valor) && array_is_list($valor) && array_filter($valor, 'is_string') === $valor) {
+                    // Lista de itens (-Items, -Packages): volta à forma de
+                    // texto separado por vírgula que a WinAction produz.
+                    $params[$nome] = implode(',', $valor);
                 }
             }
         }

@@ -159,6 +159,33 @@ Describe "Execution with Mock" {
             $script:removidos | Should -Be $esperados
         }
 
+        It "-Packages removes only the listed packages, in the given order" {
+            $script:removidos = @()
+            Mock Remove-WinUtilAPPX { $script:removidos += $Name }
+
+            $params = @{ 'Packages' = @('MicrosoftTeams', 'Microsoft.BingNews') }
+            $output = (Invoke-Debloat @params) 6>&1 | Out-String
+
+            $script:removidos | Should -Be @('MicrosoftTeams', 'Microsoft.BingNews')
+            $output | Should -Match '\[ OK \] Debloat complete'
+        }
+
+        It "-Packages with a package outside debloat.json is an ERROR, and the summary says so" {
+            Mock Remove-WinUtilAPPX { }
+            $output = (Invoke-Debloat -Packages 'Microsoft.BingNews,Microsoft.WindowsCalculator') 6>&1 | Out-String
+
+            $output | Should -Match '\[ ERROR \] Microsoft.WindowsCalculator -> not in debloat.json, not removed'
+            $output | Should -Match '\[ ERROR \] Debloat finished with 1 error\(s\): Microsoft.WindowsCalculator'
+            Should -Invoke Remove-WinUtilAPPX -Times 1 -Exactly
+        }
+
+        It "a removal that throws makes the summary an ERROR, not 'complete'" {
+            Mock Remove-WinUtilAPPX { throw 'boom' }
+            $output = (Invoke-Debloat -Packages 'Microsoft.BingNews') 6>&1 | Out-String
+
+            $output | Should -Match '\[ ERROR \] Microsoft.BingNews -> boom'
+            $output | Should -Not -Match 'Debloat complete'
+        }
         It "warns and removes nothing when the list is empty" {
             Mock Remove-WinUtilAPPX { }
             $salvo = $global:sync.configs.debloat
@@ -480,6 +507,59 @@ Describe "Invoke-Tweaks with a tweak that reaches a missing command" {
         $output | Should -Match "\[ OK \] Preset 'Phportoclean' applying successfully"
     }
 
+    It "-Items applies exactly the listed tweaks, as a selection" {
+        Mock Invoke-WinUtilTweaks { }
+        $output = (Invoke-Tweaks -Items 'PhportoTestOk') 6>&1 | Out-String
+
+        Should -Invoke Invoke-WinUtilTweaks -Times 1 -Exactly -ParameterFilter { $CheckBox -eq 'PhportoTestOk' }
+        $output | Should -Match 'Applying selection \(1 tweaks\)'
+        $output | Should -Match "\[ OK \] Selection applying successfully"
+    }
+
+    It "-Items binds the string array the worker splats, and still reports missing commands" {
+        Mock Invoke-WinUtilTweaks { }
+        $params = @{ 'Items' = @('PhportoTestOk', 'PhportoTestMissing') }
+        $output = (Invoke-Tweaks @params) 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \] PhportoTestMissing -> not applied, missing command'
+        $output | Should -Match "\[ ERROR \] Selection applying finished with 1 error\(s\): PhportoTestMissing"
+    }
+
+    It "-Items also accepts a comma-separated string" {
+        Mock Invoke-WinUtilTweaks { }
+        (Invoke-Tweaks -Items 'PhportoTestOk, PhportoTestOk') 6>&1 | Out-Null
+
+        Should -Invoke Invoke-WinUtilTweaks -Times 2 -Exactly
+    }
+
+    It "-Items with a key that is not in tweaks.json is an ERROR and is not applied" {
+        Mock Invoke-WinUtilTweaks { }
+        $output = (Invoke-Tweaks -Items 'PhportoNoSuchTweak') 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \] PhportoNoSuchTweak -> not applied, not in tweaks.json'
+        Should -Invoke Invoke-WinUtilTweaks -Times 0 -Exactly
+    }
+
+    It "-Undo with -Items reverts the listed tweaks" {
+        Mock Invoke-WinUtilTweaks { }
+        $output = (Invoke-Tweaks -Items 'PhportoTestOk' -Undo) 6>&1 | Out-String
+
+        Should -Invoke Invoke-WinUtilTweaks -Times 1 -Exactly -ParameterFilter { $undo -eq $true }
+        $output | Should -Match "\[ OK \] Selection reverting successfully"
+    }
+
+    It "refuses -Preset and -Items together" {
+        Mock Invoke-WinUtilTweaks { }
+        $output = (Invoke-Tweaks -Preset phportoclean -Items 'PhportoTestOk') 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \] Use -Preset or -Items, not both'
+        Should -Invoke Invoke-WinUtilTweaks -Times 0 -Exactly
+    }
+
+    It "refuses a call with neither" {
+        $output = (Invoke-Tweaks) 6>&1 | Out-String
+        $output | Should -Match '\[ ERROR \] No preset or items given'
+    }
     It "no tweak in tweaks.json reaches a missing command, applying or reverting" {
         $achados = @()
         foreach ($tweak in $global:sync.configs.tweaks.PSObject.Properties.Name) {

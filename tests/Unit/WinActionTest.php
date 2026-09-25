@@ -76,9 +76,54 @@ it('performance DESCARTA um state que venha no POST', function () {
 
 // ---------------------------------------------------------------- tweaks
 
-it('tweaks exige preset', function () {
+it('tweaks exige preset ou itens', function () {
     WinAction::Tweaks->validate([]);
-})->throws(InvalidArgumentException::class);
+})->throws(InvalidArgumentException::class, 'Marque ao menos um tweak.');
+
+it('tweaks aceita itens e devolve a grafia do tweaks.json', function () {
+    expect(WinAction::Tweaks->validate(['Items' => 'wpftweakstelemetry, WPFTweaksServices']))
+        ->toBe(['Items' => 'WPFTweaksTelemetry,WPFTweaksServices']);
+});
+
+it('tweaks recusa item que não está no tweaks.json', function () {
+    WinAction::Tweaks->validate(['Items' => 'WPFTweaksTelemetry,WPFTweaksInventado']);
+})->throws(InvalidArgumentException::class, 'Tweak desconhecido: WPFTweaksInventado.');
+
+it('tweaks recusa os controles da janela do WinUtil, pelo Type', function (string $chave) {
+    WinAction::Tweaks->validate(['Items' => $chave]);
+})->throws(InvalidArgumentException::class, 'Tweak desconhecido')->with(['WPFOOSUbutton', 'WPFchangedns', 'WPFAddUltPerf', 'WPFRemoveUltPerf']);
+
+it('tweaks recusa item repetido', function () {
+    WinAction::Tweaks->validate(['Items' => 'WPFTweaksTelemetry,wpftweakstelemetry']);
+})->throws(InvalidArgumentException::class, 'Tweak repetido: WPFTweaksTelemetry.');
+
+it('tweaks recusa preset e itens juntos', function () {
+    WinAction::Tweaks->validate(['Preset' => 'minimal', 'Items' => 'WPFTweaksTelemetry']);
+})->throws(InvalidArgumentException::class, 'Escolha um preset ou marque tweaks, não os dois.');
+
+it('tweaks por itens leva o Undo junto', function () {
+    expect(WinAction::Tweaks->validate(['Items' => 'WPFTweaksTelemetry', 'Undo' => '1']))
+        ->toBe(['Items' => 'WPFTweaksTelemetry', 'Undo' => true]);
+});
+
+// --------------------------------------------------------------- debloat
+
+it('debloat sem lista devolve vazio: a ação remove o arquivo inteiro', function () {
+    expect(WinAction::Debloat->validate([]))->toBe([]);
+});
+
+it('debloat aceita pacotes do debloat.json', function () {
+    expect(WinAction::Debloat->validate(['Packages' => 'microsoftteams,Microsoft.BingNews']))
+        ->toBe(['Packages' => 'MicrosoftTeams,Microsoft.BingNews']);
+});
+
+it('debloat recusa pacote fora do arquivo', function () {
+    WinAction::Debloat->validate(['Packages' => 'Microsoft.WindowsCalculator']);
+})->throws(InvalidArgumentException::class, 'Pacote desconhecido: Microsoft.WindowsCalculator.');
+
+it('debloat vindo do formulário da tela sem nenhuma caixa é recusado, e não vira todos', function () {
+    WinAction::Debloat->validate(['PackagesForm' => '1']);
+})->throws(InvalidArgumentException::class, 'Marque ao menos um pacote.');
 
 it('tweaks aceita os três presets', function (string $preset) {
     expect(WinAction::Tweaks->validate(['Preset' => $preset]))->toBe(['Preset' => $preset]);

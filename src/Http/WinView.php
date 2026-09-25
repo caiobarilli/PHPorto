@@ -41,6 +41,12 @@ final readonly class WinView
      * @param int             $maxParamBytes  teto de um campo de texto livre
      * @param list<string>    $debloatPackages os pacotes APPX do config/debloat.json
      * @param string|null     $debloatProblem  por que a lista não pôde ser lida
+     * @param list<string>    $debloatChecked  os pacotes que nascem marcados
+     * @param list<array{key: string, content: string, description: string, category: string, caution: bool, explorer: bool}> $tweaks os tweaks oferecidos
+     * @param array<string, list<string>> $tweakPresets os presets, reduzidos às chaves existentes
+     * @param list<string>    $tweaksChecked   os tweaks que nascem marcados
+     * @param string          $tweaksMatch     o preset que a seleção reproduz, "custom", ou vazio
+     * @param string|null     $tweaksProblem   por que os tweaks não puderam ser lidos
      */
     public function __construct(
         public array $rows,
@@ -56,6 +62,12 @@ final readonly class WinView
         public int $maxParamBytes,
         public array $debloatPackages,
         public ?string $debloatProblem,
+        public array $debloatChecked,
+        public array $tweaks,
+        public array $tweakPresets,
+        public array $tweaksChecked,
+        public string $tweaksMatch,
+        public ?string $tweaksProblem,
     ) {
     }
 }

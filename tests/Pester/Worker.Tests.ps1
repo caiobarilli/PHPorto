@@ -61,6 +61,7 @@ BeforeAll {
 
     $global:Dir       = $Script:Trabalho
     $global:BOOTSTRAP = Join-Path $Script:PastaWin 'bootstrap.ps1'
+    $global:CONFIG_DIR = Join-Path $Script:PastaWin 'config'
 
     function Get-ScriptGerado {
         param([string]$Acao, [hashtable]$Params = @{})
@@ -306,6 +307,115 @@ Describe 'worker - a allowlist do lado elevado' {
 # ==============================================================
 # O ALVO
 # ==============================================================
+# ==============================================================
+# A REGRA 'lista' — tweaks -Items e debloat -Packages
+# ==============================================================
+Describe 'worker - as regras lista' {
+
+    It 'a lista de tweaks tem as 62 chaves, sem os quatro Button/Combobox' {
+        $chaves = @(Get-PhportoListaPermitida 'tweaks')
+        $chaves.Count | Should -Be 62
+        foreach ($fora in 'WPFOOSUbutton', 'WPFchangedns', 'WPFAddUltPerf', 'WPFRemoveUltPerf') {
+            $chaves | Should -Not -Contain $fora
+        }
+    }
+
+    It 'a lista de debloat tem os 22 pacotes do arquivo' {
+        @(Get-PhportoListaPermitida 'debloat').Count | Should -Be 22
+    }
+
+    It 'fonte desconhecida devolve lista vazia' {
+        @(Get-PhportoListaPermitida 'nada').Count | Should -Be 0
+    }
+
+    It 'aceita tweaks por lista, na grafia do arquivo, como array' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'tweaks'
+            params = [PSCustomObject]@{ Items = 'wpftweakstelemetry, WPFTweaksServices' }
+        }
+
+        $itens = (Test-Job $job).params['Items']
+        ,$itens | Should -BeOfType [string[]]
+        $itens | Should -Be @('WPFTweaksTelemetry', 'WPFTweaksServices')
+    }
+
+    It 'recusa um tweak que e controle da janela do WinUtil (Type Button)' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'tweaks'
+            params = [PSCustomObject]@{ Items = 'WPFTweaksTelemetry,WPFAddUltPerf' }
+        }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage "item fora da lista em 'Items': 'WPFAddUltPerf'"
+    }
+
+    It 'recusa item repetido' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'tweaks'
+            params = [PSCustomObject]@{ Items = 'WPFTweaksTelemetry,wpftweakstelemetry' }
+        }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage "item repetido em 'Items': 'WPFTweaksTelemetry'"
+    }
+
+    It 'recusa lista so de virgulas' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'debloat'
+            params = [PSCustomObject]@{ Packages = ' , ,' }
+        }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage "'Packages' sem nenhum item"
+    }
+
+    It 'recusa pacote fora do debloat.json' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'debloat'
+            params = [PSCustomObject]@{ Packages = 'Microsoft.BingNews,Microsoft.WindowsCalculator' }
+        }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage "item fora da lista em 'Packages': 'Microsoft.WindowsCalculator'"
+    }
+
+    It 'debloat sem parametro continua aceito: remove o arquivo inteiro' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'debloat'; params = [PSCustomObject]@{} }
+
+        (Test-Job $job).params.Count | Should -Be 0
+    }
+
+    It 'lista acima do teto de bytes e recusada antes de ler o config' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'tweaks'
+            params = [PSCustomObject]@{ Items = ('a' * ($global:MAX_PARAM_BYTES + 1)) }
+        }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage "'Items' passou do teto de bytes"
+    }
+}
+
+# ==============================================================
+# LISTA NO SCRIPT GERADO — vira array literal
+# ==============================================================
+Describe 'worker - lista vira array no script gerado' {
+
+    It 'o array sai como @(literal, literal)' {
+        $g = Get-ScriptGerado 'tweaks' @{ Items = [string[]]@('WPFTweaksTelemetry', 'WPFTweaksServices') }
+        $g.Texto | Should -Match ([regex]::Escape("@{ 'Items' = @('WPFTweaksTelemetry', 'WPFTweaksServices') }"))
+    }
+
+    It 'item com apostrofo e escapado, e o script continua valido' {
+        $g = Get-ScriptGerado 'debloat' @{ Packages = [string[]]@("a'b") }
+        $g.Texto | Should -Match ([regex]::Escape("@('a''b')"))
+
+        $erros = $null
+        [System.Management.Automation.Language.Parser]::ParseInput($g.Texto, [ref]$null, [ref]$erros) | Out-Null
+        $erros.Count | Should -Be 0
+    }
+}
 Describe 'worker - o script gerado aponta para o bootstrap' {
 
     It 'carrega o bootstrap.ps1 de src/Win, e nao um winutil externo' {

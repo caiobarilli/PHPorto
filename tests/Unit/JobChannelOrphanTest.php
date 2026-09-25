@@ -224,6 +224,22 @@ it('param aninhado é descartado: o rótulo só monta com escalar', function () 
     expect($this->canal->collectOrphans()[0]->params)->toBe(['Provider' => 'Cloudflare']);
 });
 
+it('lista de itens do worker volta como texto separado por vírgula', function () {
+    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-lll111.txt', "x\n");
+    deixarConclusaoCrua($this, 'lll111', (string) json_encode([
+        'id'     => 'lll111',
+        'exit'   => 0,
+        'ms'     => 1,
+        'nota'   => '',
+        'acao'   => 'tweaks',
+        'params' => ['Items' => ['WPFTweaksTelemetry', 'WPFTweaksServices'], 'Undo' => true, 'Misto' => ['a', 1]],
+        'fim'    => '2026-09-09 10:00:00',
+    ]));
+
+    expect($this->canal->collectOrphans()[0]->params)
+        ->toBe(['Items' => 'WPFTweaksTelemetry,WPFTweaksServices', 'Undo' => true]);
+});
+
 // ---------------------------------------------------------------- o descarte
 
 it('discardOrphan apaga os dois arquivos, e só os do id pedido', function () {
