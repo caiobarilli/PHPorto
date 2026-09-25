@@ -165,3 +165,23 @@ it('o tweaks.json cru não é JSON estrito, e é por isso que o escape existe', 
 
     expect(json_last_error())->toBe(JSON_ERROR_CTRL_CHAR);
 });
+
+// ------------------------------------------------------------------- dns
+
+it('dnsProviders devolve as nove chaves do dns.json, na ordem do arquivo', function () {
+    expect(WinConfig::dnsProviders())->toBe([
+        'Google', 'Cloudflare', 'Cloudflare_Malware', 'Cloudflare_Malware_Adult', 'Open_DNS',
+        'Quad9', 'AdGuard_Ads_Trackers', 'AdGuard_Ads_Trackers_Malware_Adult', 'Custom',
+    ]);
+});
+
+it('toda opção de DNS da tela tem rótulo e texto, e não sobra texto sem opção', function () {
+    $opcoes = [...WinConfig::dnsProviders(), ...\App\Win\WinAction::DNS_EXTRA];
+
+    expect(array_keys(WinConfig::DNS_TEXTS))->toBe($opcoes);
+
+    foreach (WinConfig::DNS_TEXTS as [$rotulo, $texto]) {
+        expect($rotulo)->not->toBe('')
+            ->and($texto)->not->toBe('');
+    }
+});

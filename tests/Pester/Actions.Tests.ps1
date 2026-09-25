@@ -210,6 +210,59 @@ Describe "Execution with Mock" {
         }
     }
 
+    Context "-Action dns -Provider custom" {
+        BeforeEach {
+            Mock Get-NetAdapter {
+                @(
+                    [PSCustomObject]@{ Name = 'Ethernet'; ifIndex = 3; Status = 'Up' }
+                    [PSCustomObject]@{ Name = 'Wi-Fi'; ifIndex = 7; Status = 'Up' }
+                    [PSCustomObject]@{ Name = 'Parada'; ifIndex = 9; Status = 'Disconnected' }
+                )
+            }
+            Mock Set-WinUtilDNS { }
+        }
+
+        It "sets the typed servers on every adapter that is up, and not through dns.json" {
+            Mock Set-DnsClientServerAddress { }
+            $output = (Invoke-DNS -Provider 'Custom' -PrimaryDNS '192.168.1.10' -SecondaryDNS '1.0.0.1') 6>&1 | Out-String
+
+            Should -Invoke Set-DnsClientServerAddress -Times 2 -Exactly -ParameterFilter {
+                ($ServerAddresses -join ',') -eq '192.168.1.10,1.0.0.1'
+            }
+            Should -Invoke Set-DnsClientServerAddress -Times 0 -Exactly -ParameterFilter { $InterfaceIndex -eq 9 }
+            Should -Invoke Set-WinUtilDNS -Times 0 -Exactly
+            $output | Should -Match "\[ OK \] DNS 'Custom' applied"
+        }
+
+        It "with only the primary, sets only the primary" {
+            Mock Set-DnsClientServerAddress { }
+            (Invoke-DNS -Provider 'Custom' -PrimaryDNS '192.168.1.10') 6>&1 | Out-Null
+
+            Should -Invoke Set-DnsClientServerAddress -Times 2 -Exactly -ParameterFilter {
+                ($ServerAddresses -join ',') -eq '192.168.1.10'
+            }
+        }
+
+        It "an adapter that refuses is an ERROR, and the summary says so" {
+            Mock Set-DnsClientServerAddress { if ($InterfaceIndex -eq 7) { throw 'recusado' } }
+            $output = (Invoke-DNS -Provider 'Custom' -PrimaryDNS '192.168.1.10') 6>&1 | Out-String
+
+            $output | Should -Match '\[ OK \] Ethernet'
+            $output | Should -Match '\[ ERROR \] Wi-Fi -> recusado'
+            $output | Should -Match '\[ ERROR \] Custom DNS finished with 1 error\(s\): Wi-Fi'
+            $output | Should -Not -Match "DNS 'Custom' applied"
+        }
+
+        It "with no adapter up, says nothing changed" {
+            Mock Get-NetAdapter { @() }
+            Mock Set-DnsClientServerAddress { }
+            $output = (Invoke-DNS -Provider 'Custom' -PrimaryDNS '192.168.1.10') 6>&1 | Out-String
+
+            $output | Should -Match '\[ ERROR \] No network adapter is up; nothing changed'
+            Should -Invoke Set-DnsClientServerAddress -Times 0 -Exactly
+        }
+    }
+
     Context "-Action dns -Provider cloudflare" {
         It "calls Set-WinUtilDNS with the correct provider" {
             Mock Set-WinUtilDNS { }

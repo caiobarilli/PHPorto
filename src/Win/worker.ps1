@@ -98,7 +98,8 @@ $CONFIG_DIR  = Join-Path $PSScriptRoot 'config'
 # puder reescrever worker.ps1 e' dono da proxima elevacao, do mesmo jeito que
 # quem puder reescrever src/ e' dono da aplicacao. Nao e' exposicao nova.
 #
-# 'set'  = conjunto fechado de valores aceitos
+# 'set'  = conjunto fechado de valores aceitos: os de 'valores', mais os da
+#          lista que 'fonte' nomeia, quando houver
 # 'text' = texto livre, com teto de bytes
 # 'int'  = inteiro numa faixa
 # 'flag' = switch, so entra na chamada quando verdadeiro
@@ -132,12 +133,7 @@ $ALLOWLIST = @{
         'Packages' = @{ tipo = 'lista'; fonte = 'debloat' }
     }
     'dns'         = @{
-        'Provider'     = @{ tipo = 'set'; valores = @(
-                'Google', 'Cloudflare', 'Cloudflare_Malware', 'Cloudflare_Malware_Adult',
-                'Open_DNS', 'Quad9', 'AdGuard_Ads_Trackers',
-                'AdGuard_Ads_Trackers_Malware_Adult', 'Custom', 'Default', 'DHCP'
-            )
-        }
+        'Provider'     = @{ tipo = 'set'; fonte = 'dns'; valores = @('DHCP') }
         'PrimaryDNS'   = @{ tipo = 'text' }
         'SecondaryDNS' = @{ tipo = 'text' }
     }
@@ -213,7 +209,7 @@ function ConvertTo-PsLiteral([string]$value) {
 
     Recebe o nome da fonte. Devolve, para 'tweaks', as chaves do tweaks.json
     cujo Type nao e' Button nem Combobox; para 'debloat', os pacotes do
-    debloat.json. Fonte desconhecida ou arquivo ilegivel devolve lista vazia,
+    debloat.json; para 'dns', as chaves do dns.json. Fonte desconhecida ou arquivo ilegivel devolve lista vazia,
     e lista vazia recusa todo item.
 #>
 function Get-PhportoListaPermitida([string]$fonte) {
@@ -227,6 +223,7 @@ function Get-PhportoListaPermitida([string]$fonte) {
     switch ($fonte) {
         'tweaks'  { return @($dados.PSObject.Properties | Where-Object { $_.Value.Type -notin 'Button', 'Combobox' } | ForEach-Object { $_.Name }) }
         'debloat' { return @($dados | ForEach-Object { [string]$_ }) }
+        'dns'     { return @($dados.PSObject.Properties | ForEach-Object { $_.Name }) }
         default   { return @() }
     }
 }
@@ -276,8 +273,10 @@ function Test-Job($job) {
 
             switch ($regra.tipo) {
                 'set' {
-                    $texto = [string]$valor
-                    $casou = $regra.valores | Where-Object { $_ -ieq $texto } | Select-Object -First 1
+                    $texto   = [string]$valor
+                    $aceitas = @($regra.valores)
+                    if ($regra.fonte) { $aceitas += @(Get-PhportoListaPermitida $regra.fonte) }
+                    $casou = $aceitas | Where-Object { $_ -ieq $texto } | Select-Object -First 1
                     if (-not $casou) { throw "valor fora do conjunto em '$nome'" }
                     # Guarda a grafia da LISTA, nao a que veio no arquivo.
                     $aceitos[$nome] = [string]$casou

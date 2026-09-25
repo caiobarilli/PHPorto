@@ -322,6 +322,25 @@ final class Pages
             // Sem seleção guardada a tela nasce no padrão; não há o que avisar.
         }
 
+        $dnsProviders = [];
+        $dnsProblem   = null;
+
+        try {
+            foreach ([...WinConfig::dnsProviders(), ...WinAction::DNS_EXTRA] as $chave) {
+                [$rotulo, $texto] = WinConfig::DNS_TEXTS[$chave] ?? [str_replace('_', ' ', $chave), ''];
+                $dnsProviders[]    = ['key' => $chave, 'label' => $rotulo, 'text' => $texto];
+            }
+        } catch (RuntimeException $e) {
+            $dnsProblem = $e->getMessage();
+        }
+
+        $dnsEscolha = [];
+        foreach ($selecoes[WinAction::Dns->value]->payload ?? [] as $campo => $valor) {
+            if (is_string($valor)) {
+                $dnsEscolha[$campo] = $valor;
+            }
+        }
+
         $tweaksMarcados  = self::savedSelection($selecoes, WinAction::Tweaks, 'Items') ?? [];
         $debloatMarcados = self::savedSelection($selecoes, WinAction::Debloat, 'Packages') ?? $debloat;
 
@@ -345,6 +364,9 @@ final class Pages
             tweaksChecked: $tweaksMarcados,
             tweaksMatch: WinConfig::matchPreset($tweaksMarcados, $presets),
             tweaksProblem: $tweaksProblem,
+            dnsProviders: $dnsProviders,
+            dnsChosen: $dnsEscolha,
+            dnsProblem: $dnsProblem,
         );
 
         Respond::html('PHPorto — Windows', Respond::render('win.php', $view));
@@ -546,23 +568,25 @@ final class Pages
     }
 
     /**
-     * Guarda as caixas marcadas de uma ação que tem lista de checkboxes.
+     * Guarda o que a pessoa escolheu numa ação que a tela lembra.
      *
-     * Recebe a ação e os parâmetros já validados. Grava a lista no escopo de
-     * seleção quando a ação é tweaks (Items) ou debloat (Packages); nas outras,
-     * não faz nada. Falha de banco vira aviso, sem impedir a execução.
+     * Recebe a ação e os parâmetros já validados. Grava no escopo de seleção a
+     * lista do tweaks (Items) ou do debloat (Packages), ou o provedor do DNS
+     * com os endereços do DNS próprio; nas outras ações, não faz nada. Falha
+     * de banco vira aviso, sem impedir a execução.
      *
      * @param array<string, string|int|bool> $params
      */
     private function saveWinSelection(WinAction $acao, array $params): void
     {
-        $campo = match ($acao) {
-            WinAction::Tweaks  => 'Items',
-            WinAction::Debloat => 'Packages',
+        $payload = match ($acao) {
+            WinAction::Tweaks  => isset($params['Items']) ? ['Items' => $params['Items']] : null,
+            WinAction::Debloat => isset($params['Packages']) ? ['Packages' => $params['Packages']] : null,
+            WinAction::Dns     => $params,
             default            => null,
         };
 
-        if ($campo === null || !isset($params[$campo]) || !is_string($params[$campo])) {
+        if ($payload === null) {
             return;
         }
 
@@ -570,10 +594,10 @@ final class Pages
             ($this->makeService)()->putWinState(new WinState(
                 scope: WinStateScope::Selection,
                 action: $acao->value,
-                payload: [$campo => $params[$campo]],
+                payload: $payload,
             ));
         } catch (Throwable $e) {
-            $this->flash('Não foi possível guardar as caixas marcadas: ' . $e->getMessage());
+            $this->flash('Não foi possível guardar a escolha desta seção: ' . $e->getMessage());
         }
     }
 

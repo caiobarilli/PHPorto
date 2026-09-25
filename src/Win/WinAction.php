@@ -62,30 +62,8 @@ enum WinAction: string
      */
     public const MAX_PARAM_BYTES = 4096;
 
-    /**
-     * Providers de DNS, lidos do config/dns.json do winutil-cli.
-     *
-     * NÃO É LISTA INVENTADA: são as nove chaves do arquivo, mais Default e
-     * DHCP, que o Invoke-DNS aceita por fora da lista para restaurar o
-     * padrão. Uma lista curta aqui esconderia providers que existem lá.
-     *
-     * A comparação do winutil é -notin, insensível a caixa no PowerShell, e a
-     * leitura do JSON também é — então a caixa não quebra nada. Mantida como
-     * no arquivo para quem for conferir não precisar traduzir.
-     */
-    public const DNS_PROVIDERS = [
-        'Google',
-        'Cloudflare',
-        'Cloudflare_Malware',
-        'Cloudflare_Malware_Adult',
-        'Open_DNS',
-        'Quad9',
-        'AdGuard_Ads_Trackers',
-        'AdGuard_Ads_Trackers_Malware_Adult',
-        'Custom',
-        'Default',
-        'DHCP',
-    ];
+    /** Provider que o Invoke-DNS aceita além das chaves do dns.json: devolve o DNS ao automático. */
+    public const DNS_EXTRA = ['DHCP'];
 
     public const TWEAK_PRESETS = ['standard', 'minimal', 'advanced'];
 
@@ -393,7 +371,13 @@ enum WinAction: string
      */
     private function dns(array $input): array
     {
-        $provider = $this->pick($input, 'Provider', self::DNS_PROVIDERS, obrigatorio: true);
+        try {
+            $providers = [...WinConfig::dnsProviders(), ...self::DNS_EXTRA];
+        } catch (RuntimeException $e) {
+            throw new InvalidArgumentException('Não foi possível ler a lista de DNS: ' . $e->getMessage());
+        }
+
+        $provider = $this->pick($input, 'Provider', $providers, obrigatorio: true);
         $params   = ['Provider' => $provider];
 
         // O Invoke-DNS recusa custom sem primário; recusar aqui evita gastar

@@ -185,32 +185,43 @@ foreach ($view->tweaks as $tw) {
 
   <!-- -------------------------------------------------------------- [4] dns -->
   <section>
-    <?= $secao(4, 'DNS', 'Troca o DNS dos adaptadores ativos. A lista vem do src/Win/config/dns.json.') ?>
-    <form method="post" id="form-dns">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="dns">
-      <div class="campo">
-        <label for="dns-prov">Provider</label>
-        <select id="dns-prov" name="Provider"<?= $dis ?>>
-          <?php foreach (\App\Win\WinAction::DNS_PROVIDERS as $p): ?>
-            <option value="<?= Respond::e($p) ?>"><?= Respond::e($p) ?></option>
+    <?= $secao(4, 'DNS', 'Troca o DNS dos adaptadores de rede ativos. A lista vem do src/Win/config/dns.json.') ?>
+    <?php if ($view->dnsProblem !== null): ?>
+      <p class="bad"><?= Respond::e($view->dnsProblem) ?></p>
+    <?php else: ?>
+      <form method="post" id="form-dns">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="dns">
+        <div class="colunas-4">
+          <?php foreach ($view->dnsProviders as $dns): ?>
+            <label class="caixa">
+              <input type="radio" name="Provider" value="<?= Respond::e($dns['key']) ?>"<?= strcasecmp($view->dnsChosen['Provider'] ?? '', $dns['key']) === 0 ? ' checked' : '' ?><?= $dis ?>>
+              <span>
+                <?= Respond::e($dns['label']) ?>
+                <?php if ($dns['text'] !== ''): ?><small><?= Respond::e($dns['text']) ?></small><?php endif; ?>
+              </span>
+            </label>
           <?php endforeach; ?>
-        </select>
-      </div>
-      <div id="dns-custom" hidden>
-        <div class="campo">
-          <label for="dns-p1">Primário</label>
-          <input type="text" id="dns-p1" name="PrimaryDNS" placeholder="192.168.1.10"<?= $dis ?>>
         </div>
-        <div class="campo">
-          <label for="dns-p2">Secundário</label>
-          <input type="text" id="dns-p2" name="SecondaryDNS" placeholder="opcional"<?= $dis ?>>
+        <div id="dns-custom">
+          <div class="campo">
+            <label for="dns-p1">Primário</label>
+            <input type="text" id="dns-p1" name="PrimaryDNS" placeholder="192.168.1.10"
+                   value="<?= Respond::e($view->dnsChosen['PrimaryDNS'] ?? '') ?>"<?= $dis ?>>
+          </div>
+          <div class="campo">
+            <label for="dns-p2">Secundário</label>
+            <input type="text" id="dns-p2" name="SecondaryDNS" placeholder="opcional"
+                   value="<?= Respond::e($view->dnsChosen['SecondaryDNS'] ?? '') ?>"<?= $dis ?>>
+          </div>
         </div>
-      </div>
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Aplicar DNS</button></div>
-      <p class="dica"><code>Custom</code> exige o primário, e só aceita endereço IP válido.
-        <code>Default</code> e <code>DHCP</code> voltam ao padrão.</p>
-    </form>
+        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Aplicar DNS</button></div>
+        <p class="dica">
+          O DNS próprio exige o primário, e só aceita endereço IP válido. A escolha e os endereços
+          ficam guardados para a próxima visita.
+        </p>
+      </form>
+    <?php endif; ?>
   </section>
 
   <!-- ------------------------------------------------------ [5] performance -->
@@ -514,16 +525,18 @@ foreach ($view->tweaks as $tw) {
     b.addEventListener('click', function () { b.closest('dialog').close(); });
   });
 
-  // ---- DNS: os campos de IP só aparecem no Custom ------------------------
-  var dnsProv   = document.getElementById('dns-prov');
+  // ---- DNS: os campos de IP só aparecem no DNS próprio -------------------
+  // Sem JavaScript eles ficam sempre à vista, e o DNS próprio continua usável.
+  var dnsForm   = document.getElementById('form-dns');
   var dnsCustom = document.getElementById('dns-custom');
 
   function pintarDns() {
-    dnsCustom.hidden = dnsProv.value.toLowerCase() !== 'custom';
+    var marcado = dnsForm.querySelector('input[name="Provider"]:checked');
+    dnsCustom.hidden = !marcado || marcado.value.toLowerCase() !== 'custom';
   }
 
-  if (dnsProv) {
-    dnsProv.addEventListener('change', pintarDns);
+  if (dnsForm) {
+    dnsForm.querySelectorAll('input[name="Provider"]').forEach(function (r) { r.addEventListener('change', pintarDns); });
     pintarDns();
   }
 

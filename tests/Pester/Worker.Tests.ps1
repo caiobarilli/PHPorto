@@ -397,6 +397,24 @@ Describe 'worker - as regras lista' {
     }
 }
 
+Describe 'worker - o provider do dns vem do dns.json' {
+
+    It 'aceita <_>' -ForEach @('Google', 'Custom', 'AdGuard_Ads_Trackers_Malware_Adult', 'DHCP') {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'dns'; params = [PSCustomObject]@{ Provider = $_ } }
+        (Test-Job $job).params['Provider'] | Should -Be $_
+    }
+
+    It 'guarda a grafia do arquivo' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'dns'; params = [PSCustomObject]@{ Provider = 'open_dns' } }
+        (Test-Job $job).params['Provider'] | Should -Be 'Open_DNS'
+    }
+
+    It 'recusa o Default, que nao faz nada' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'dns'; params = [PSCustomObject]@{ Provider = 'Default' } }
+        { Test-Job $job } | Should -Throw -ExpectedMessage "valor fora do conjunto em 'Provider'"
+    }
+}
+
 # ==============================================================
 # LISTA NO SCRIPT GERADO — vira array literal
 # ==============================================================

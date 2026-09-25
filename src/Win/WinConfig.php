@@ -46,6 +46,44 @@ final class WinConfig
     }
 
     /**
+     * O rótulo e o texto de cada opção de DNS da tela: as chaves do dns.json e o DHCP.
+     *
+     * @var array<string, array{0: string, 1: string}>
+     */
+    public const DNS_TEXTS = [
+        'Google'                             => ['Google', 'O DNS público do Google. Rápido e estável, não bloqueia nada. O Google fica sabendo quais sites você abre.'],
+        'Cloudflare'                         => ['Cloudflare', 'O DNS público da Cloudflare, costuma ser o mais rápido. Não bloqueia nada e promete não guardar o que você acessa.'],
+        'Cloudflare_Malware'                 => ['Cloudflare contra vírus', 'O mesmo da Cloudflare, mas impede de abrir sites conhecidos por espalhar vírus e golpes.'],
+        'Cloudflare_Malware_Adult'           => ['Cloudflare família', 'Cloudflare bloqueando vírus, golpes e também sites adultos. Serve para computador usado por criança.'],
+        'Open_DNS'                           => ['OpenDNS', 'O DNS da Cisco. Bloqueia sites de golpe que imitam banco e loja para roubar senha.'],
+        'Quad9'                              => ['Quad9', 'Serviço sem fins lucrativos, na Suíça. Bloqueia sites de vírus e golpes e não guarda quem fez o acesso.'],
+        'AdGuard_Ads_Trackers'               => ['AdGuard sem propaganda', 'Bloqueia propaganda e rastreadores em todos os programas, não só no navegador. Um ou outro site pode parar de funcionar direito.'],
+        'AdGuard_Ads_Trackers_Malware_Adult' => ['AdGuard família', 'Bloqueia propaganda, rastreadores, vírus e sites adultos, e obriga a busca segura no Google e no YouTube.'],
+        'Custom'                             => ['DNS próprio', 'Os endereços que você digitar abaixo — o do roteador, ou o de um servidor da sua rede.'],
+        'DHCP'                               => ['Automático (DHCP)', 'Volta ao padrão do Windows: usa o DNS que o roteador entregar. Desfaz qualquer escolha acima.'],
+    ];
+
+    /**
+     * Os provedores de DNS do dns.json, na ordem do arquivo.
+     *
+     * Recebe, opcionalmente, outra pasta de config. Devolve as chaves.
+     *
+     * @return list<string>
+     *
+     * @throws RuntimeException se o arquivo faltar ou não for um mapa de provedores
+     */
+    public static function dnsProviders(?string $dir = null): array
+    {
+        $dados = self::json($dir, 'dns');
+
+        if (!is_array($dados) || array_is_list($dados)) {
+            throw new RuntimeException('dns.json não é um mapa de provedores.');
+        }
+
+        return array_values(array_filter(array_keys($dados), 'is_string'));
+    }
+
+    /**
      * Os tweaks que a tela oferece, na ordem do tweaks.json.
      *
      * Recebe, opcionalmente, outra pasta de config. Devolve um item por

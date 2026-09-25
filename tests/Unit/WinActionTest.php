@@ -148,21 +148,15 @@ it('tweaks só inclui Undo quando o checkbox veio marcado', function () {
 
 // ---------------------------------------------------------------- dns
 
-it('a lista de providers é a do dns.json, com os nove mais Default e DHCP', function () {
-    expect(WinAction::DNS_PROVIDERS)->toContain(
-        'Google',
-        'Cloudflare',
-        'Cloudflare_Malware',
-        'Cloudflare_Malware_Adult',
-        'Open_DNS',
-        'Quad9',
-        'AdGuard_Ads_Trackers',
-        'AdGuard_Ads_Trackers_Malware_Adult',
-        'Custom',
-        'Default',
-        'DHCP',
-    );
-});
+it('dns aceita cada chave do dns.json e o DHCP', function (string $provider) {
+    $params = $provider === 'Custom' ? ['Provider' => $provider, 'PrimaryDNS' => '192.168.1.1'] : ['Provider' => $provider];
+
+    expect(WinAction::Dns->validate($params)['Provider'])->toBe($provider);
+})->with(fn (): array => [...\App\Win\WinConfig::dnsProviders(), 'DHCP']);
+
+it('dns recusa o Default, que no WinUtil quer dizer "não mexer" e não faz nada', function () {
+    WinAction::Dns->validate(['Provider' => 'Default']);
+})->throws(InvalidArgumentException::class, 'Valor inválido para Provider.');
 
 it('dns exige provider', function () {
     WinAction::Dns->validate([]);
