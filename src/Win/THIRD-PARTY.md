@@ -36,6 +36,7 @@ sha256sum src/Win/lib/*.ps1 src/Win/config/{dns,preset,tweaks}.json
 |---|---|
 | `lib/Install-WinUtilProgramWinget.ps1` | `6f6c8c7dcc89e18140ac23c8c6eae13506152726a2b0eb9c0ef4f6f8e79d7740` |
 | `lib/Install-WinUtilWinget.ps1` | `c97374d0d64ccd597c34407a7c0aa7e7b7efcb2c8a4b4a85261046c4ab7da499` |
+| `lib/Invoke-WinUtilExplorerUpdate.ps1` ⚠ editado | `a60d7020607f49c6ca891d1b5e56b8639c8d02249be90e5fa174699a6beb038e` |
 | `lib/Invoke-WinUtilRemoveEdge.ps1` | `ca2b9ebd53c4fc715245056503cf10535f9e07d55f234af5e763cdfcd5252a7c` |
 | `lib/Invoke-WinUtilScript.ps1` | `e9ab2080f858f2e9cabcbda4df75e3df5404eed30b8746b6b2d0f2d8b461c460` |
 | `lib/Invoke-WinUtilTweaks.ps1` | `5f84ba82f9cc6ac4942d99632c7b7a500aadd6a512d8d36cb613dce169c0bfb1` |
@@ -43,6 +44,7 @@ sha256sum src/Win/lib/*.ps1 src/Win/config/{dns,preset,tweaks}.json
 | `lib/Set-WinUtilDNS.ps1` | `6f1c00d766d2080bb24128d03d0c3f8619bafcf5a6d01043dbd2f3a86e9970cd` |
 | `lib/Set-WinUtilRegistry.ps1` | `1c861fb3b5cef35193667134c28fb9357aa27d41f6ec30994be61d2bfc709ea9` |
 | `lib/Set-WinUtilService.ps1` | `4cc984238de200e0728f52e772a33a8d6328ebd6d32cbf980531f5075368b2e9` |
+| `lib/Invoke-WinutilThemeChange.ps1` ⚠ editado | `dcb73fc751222bafa3887fc7431186e12bbe2fa2f658b9aee218a4aef9944977` |
 | `lib/Test-WinUtilPackageManager.ps1` | `8a84508ddb17d2a6bae8185ce393f6ceb4fbf98e19885ce11ec8c701413789b6` |
 | `config/dns.json` | `10be9e7a1e0655ebd47463f79103eb25ca63a3898f4dc414d68a3d77d21b1343` |
 | `config/preset.json` | `ba264fc2916c0315bee7cacd60dd1d08b4770153f09bcd86ca7f13cd95e19dc1` |
@@ -72,6 +74,20 @@ exatamente o conteúdo dos daqui, e a função não muda nesse intervalo;
 `153900a` é o último deles. Os bytes são os do checkout daquele commit, que o
 `.gitattributes` do upstream entrega em CRLF; conferível com
 `git archive 153900a functions/public/Invoke-WinUtilRemoveEdge.ps1`.
+
+### As duas que divergem da origem
+
+`Invoke-WinUtilExplorerUpdate` e `Invoke-WinutilThemeChange` vieram do mesmo
+`153900a` e são chamadas por seis tweaks do `tweaks.json` (`WPFTweaksWidget` e
+os toggles DarkMode, ShowExt, HiddenFiles, StartMenuRecommendations e
+TaskbarAlignment). As duas foram **editadas**, e são os únicos arquivos desta
+seção que não batem com a origem. A tabela acima traz o hash do arquivo
+daqui; o da origem está abaixo, para a divergência ser conferível.
+
+| Arquivo | SHA-256 da origem (checkout de `153900a`) | O que mudou, e por quê |
+|---|---|---|
+| `lib/Invoke-WinUtilExplorerUpdate.ps1` | `e5299b43cae5a8d92896889f7ea1a69a4773e9262e9705789798f4dad5f5baa0` | O aviso ao shell (`SendMessageTimeout` com `WM_SETTINGCHANGE`) roda **síncrono**, no próprio fluxo, em vez de dentro de `Invoke-WPFRunspace`. Aquele helper usa `$sync.runspace`, o pool de runspaces da janela do WinUtil, que não existe no worker. O retorno da chamada vai para `Out-Null`, porque fora do pool ele cairia na saída da ação. O modo `restart` ficou como estava. |
+| `lib/Invoke-WinutilThemeChange.ps1` | `0984330830806ca60ea617b70673993f3870b59e53f17f75e01c56c72c0fc1a4` | O corpo saiu e a função **não faz nada**, com a mesma assinatura. Na origem ela repinta a janela do WinUtil (`$sync.Form`, temas, preferências); aqui não há janela. O modo escuro do Windows é a parte de registro do `WPFToggleDarkMode`, que continua sendo aplicada. |
 
 ### Por que três JSON, e não cinco
 

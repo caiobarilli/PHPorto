@@ -77,15 +77,17 @@ Describe 'bootstrap - arvore e encoding' {
 # ==============================================================
 Describe 'bootstrap - o que veio do upstream' {
 
-    It 'lib/ tem as dez primitivas vivas, e so elas' {
+    It 'lib/ tem as doze primitivas vivas, e so elas' {
         $nomes = @(Get-ChildItem -Path (Join-Path $Script:PastaWin 'lib') -Filter '*.ps1' -File |
             Select-Object -ExpandProperty BaseName | Sort-Object)
 
         $nomes | Should -Be @(
             'Install-WinUtilProgramWinget'
             'Install-WinUtilWinget'
+            'Invoke-WinUtilExplorerUpdate'
             'Invoke-WinUtilRemoveEdge'
             'Invoke-WinUtilScript'
+            'Invoke-WinutilThemeChange'
             'Invoke-WinUtilTweaks'
             'Remove-WinUtilAPPX'
             'Set-WinUtilDNS'
@@ -118,6 +120,8 @@ Describe 'bootstrap - o que veio do upstream' {
         'Install-WinUtilProgramWinget'
         'Test-WinUtilPackageManager'
         'Invoke-WinUtilRemoveEdge'
+        'Invoke-WinUtilExplorerUpdate'
+        'Invoke-WinutilThemeChange'
     ) {
         Get-Command -Name $_ -CommandType Function -ErrorAction SilentlyContinue |
             Should -Not -BeNullOrEmpty

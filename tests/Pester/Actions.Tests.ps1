@@ -480,13 +480,15 @@ Describe "Invoke-Tweaks with a tweak that reaches a missing command" {
         $output | Should -Match "\[ OK \] Preset 'Phportoclean' applying successfully"
     }
 
-    It "among the real presets, only WPFTweaksWidget reaches a missing command today" {
+    It "no tweak in tweaks.json reaches a missing command, applying or reverting" {
         $achados = @()
-        foreach ($preset in 'Standard', 'Minimal', 'Advanced') {
-            foreach ($tweak in $global:sync.configs.preset.$preset) {
-                if (@(Get-PhportoMissingTweakCommand -CheckBox $tweak).Count -gt 0) { $achados += $tweak }
+        foreach ($tweak in $global:sync.configs.tweaks.PSObject.Properties.Name) {
+            if ($tweak -like 'PhportoTest*') { continue }
+            foreach ($undo in $false, $true) {
+                $faltam = @(Get-PhportoMissingTweakCommand -CheckBox $tweak -Undo:$undo)
+                if ($faltam.Count -gt 0) { $achados += "$tweak undo=$undo -> $($faltam -join ', ')" }
             }
         }
-        @($achados | Sort-Object -Unique) | Should -Be @('WPFTweaksWidget') -Because 'if this changes, the missing function arrived or a new one is missing'
+        $achados | Should -BeNullOrEmpty -Because 'a tweak that reaches a missing command is reported as ERROR and never applied'
     }
 }
