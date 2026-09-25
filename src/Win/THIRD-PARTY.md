@@ -36,6 +36,7 @@ sha256sum src/Win/lib/*.ps1 src/Win/config/{dns,preset,tweaks}.json
 |---|---|
 | `lib/Install-WinUtilProgramWinget.ps1` | `6f6c8c7dcc89e18140ac23c8c6eae13506152726a2b0eb9c0ef4f6f8e79d7740` |
 | `lib/Install-WinUtilWinget.ps1` | `c97374d0d64ccd597c34407a7c0aa7e7b7efcb2c8a4b4a85261046c4ab7da499` |
+| `lib/Invoke-WinUtilRemoveEdge.ps1` | `ca2b9ebd53c4fc715245056503cf10535f9e07d55f234af5e763cdfcd5252a7c` |
 | `lib/Invoke-WinUtilScript.ps1` | `e9ab2080f858f2e9cabcbda4df75e3df5404eed30b8746b6b2d0f2d8b461c460` |
 | `lib/Invoke-WinUtilTweaks.ps1` | `5f84ba82f9cc6ac4942d99632c7b7a500aadd6a512d8d36cb613dce169c0bfb1` |
 | `lib/Remove-WinUtilAPPX.ps1` | `d027630815b72b45cd28a46e2984b990f9d31b98e94bb6ea600e24756bee5dcb` |
@@ -59,6 +60,18 @@ carga era `Invoke-*.ps1`. Ficaram lá: `Install-WinUtilChoco`,
 
 Migrar código morto é herdar manutenção de graça, e uma licença de terceiro a
 carregar por algo que ninguém executa.
+
+### A décima, trazida depois
+
+`Invoke-WinUtilRemoveEdge` deixou de ser código morto quando a tela `/win`
+passou a oferecer os tweaks um a um: o `WPFTweaksRemoveEdge` do `tweaks.json`
+a chama. Veio direto do upstream, e não do winutil-cli, no commit
+[`153900a`](https://github.com/ChrisTitusTech/winutil/commit/153900a). De
+`2ebc9bd` a `153900a` o `tweaks.json` e o `preset.json` do upstream têm
+exatamente o conteúdo dos daqui, e a função não muda nesse intervalo;
+`153900a` é o último deles. Os bytes são os do checkout daquele commit, que o
+`.gitattributes` do upstream entrega em CRLF; conferível com
+`git archive 153900a functions/public/Invoke-WinUtilRemoveEdge.ps1`.
 
 ### Por que três JSON, e não cinco
 
