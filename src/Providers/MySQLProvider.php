@@ -127,14 +127,14 @@ final class MySQLProvider implements DatabaseProviderInterface
         );
     }
 
-    public function recent(int $limit = 100, ?ExecutionKind $kind = null): array
+    public function recent(int $limit = 100, ?array $kinds = null): array
     {
         try {
             // Espelha o SQLite, inclusive na ausência de índice por tipo:
             // aqui não existe CREATE INDEX IF NOT EXISTS, então criá-lo em
             // tabela já existente exigiria consultar o INFORMATION_SCHEMA a
             // cada abertura de conexão para um ganho que este volume não tem.
-            $where = $kind === null ? '' : ' WHERE kind = :kind';
+            [$where, $binds] = self::kindFilter($kinds);
 
             $stmt = $this->pdo->prepare(
                 "SELECT command, output, exit_code, duration_ms, kind, timed_out, created_at
@@ -144,8 +144,8 @@ final class MySQLProvider implements DatabaseProviderInterface
             );
             $stmt->bindValue('limit', $limit, PDO::PARAM_INT);
 
-            if ($kind !== null) {
-                $stmt->bindValue('kind', $kind->value, PDO::PARAM_STR);
+            foreach ($binds as $nome => $valor) {
+                $stmt->bindValue($nome, $valor, PDO::PARAM_STR);
             }
 
             $stmt->execute();
@@ -172,14 +172,14 @@ final class MySQLProvider implements DatabaseProviderInterface
         }
     }
 
-    public function clear(?ExecutionKind $kind = null): int
+    public function clear(?array $kinds = null): int
     {
         try {
-            $where = $kind === null ? '' : ' WHERE kind = :kind';
-            $stmt  = $this->pdo->prepare("DELETE FROM `{$this->table}`{$where}");
+            [$where, $binds] = self::kindFilter($kinds);
+            $stmt            = $this->pdo->prepare("DELETE FROM `{$this->table}`{$where}");
 
-            if ($kind !== null) {
-                $stmt->bindValue('kind', $kind->value, PDO::PARAM_STR);
+            foreach ($binds as $nome => $valor) {
+                $stmt->bindValue($nome, $valor, PDO::PARAM_STR);
             }
 
             $stmt->execute();
@@ -188,6 +188,35 @@ final class MySQLProvider implements DatabaseProviderInterface
         } catch (PDOException $e) {
             throw new StorageException('Falha ao limpar as execuções: ' . $e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * O WHERE do filtro por tipos e os valores a ligar nele.
+     *
+     * Recebe a lista de tipos, ou null para todos. Devolve a cláusula (vazia
+     * para todos, sempre falsa para lista vazia) e os parâmetros nomeados, um
+     * por tipo, porque sem emulação o PDO não reusa named param.
+     *
+     * @param list<ExecutionKind>|null $kinds
+     *
+     * @return array{string, array<string, string>}
+     */
+    private static function kindFilter(?array $kinds): array
+    {
+        if ($kinds === null) {
+            return ['', []];
+        }
+
+        if ($kinds === []) {
+            return [' WHERE 1 = 0', []];
+        }
+
+        $binds = [];
+        foreach (array_values(array_unique(array_map(static fn (ExecutionKind $k): string => $k->value, $kinds))) as $i => $valor) {
+            $binds['kind' . $i] = $valor;
+        }
+
+        return [' WHERE kind IN (:' . implode(', :', array_keys($binds)) . ')', $binds];
     }
 
     public function putWinState(WinState $state): WinState

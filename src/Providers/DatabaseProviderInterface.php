@@ -58,8 +58,8 @@ interface DatabaseProviderInterface
      * mesmo segundo têm o mesmo created_at, e sem desempate a ordem entre elas
      * fica a critério do banco.
      *
-     * $kind NULO SIGNIFICA TODOS, e é o padrão de propósito: quem já chamava
-     * recent($limit) não muda de comportamento ao ganhar o parâmetro.
+     * $kinds NULO SIGNIFICA TODOS, e é o padrão de propósito: quem já chamava
+     * recent($limit) não muda de comportamento. Lista vazia significa nenhum.
      *
      * O FILTRO É AQUI, e não na tela, porque filtrar depois de ler mente em
      * silêncio: pedir as 100 mais recentes e descartar as de outro tipo pode
@@ -67,18 +67,23 @@ interface DatabaseProviderInterface
      * explicaria por quê. Cada tela mostra a última execução DELA, e é o
      * banco que sabe qual é.
      *
+     * @param list<ExecutionKind>|null $kinds
+     *
      * @return list<Execution>
      *
      * @throws StorageException em falha de consulta.
      */
-    public function recent(int $limit = 100, ?ExecutionKind $kind = null): array;
+    public function recent(int $limit = 100, ?array $kinds = null): array;
 
     /**
      * Apaga registros e devolve quantos foram apagados.
      *
-     * $kind nulo apaga TUDO — o comportamento anterior, preservado como
-     * padrão. Com tipo, apaga só aquele tipo: o "limpar" de uma tela não pode
-     * levar embora o histórico da outra, que quem clicou não estava olhando.
+     * $kinds nulo apaga TUDO — o comportamento anterior, preservado como
+     * padrão. Com lista, apaga só aqueles tipos, e lista vazia não apaga nada:
+     * o "limpar" de uma tela não pode levar embora o histórico da outra, que
+     * quem clicou não estava olhando.
+     *
+     * @param list<ExecutionKind>|null $kinds
      *
      * NÃO TOCA NO ESTADO DA /win, e há teste exigindo isso. Apagar registros e
      * mudar o que a tela afirma sobre a máquina são coisas diferentes: um
@@ -87,7 +92,7 @@ interface DatabaseProviderInterface
      *
      * @throws StorageException em falha de escrita.
      */
-    public function clear(?ExecutionKind $kind = null): int;
+    public function clear(?array $kinds = null): int;
 
     /**
      * Grava (ou sobrescreve) uma linha de estado da /win e devolve como ficou.
@@ -113,7 +118,7 @@ interface DatabaseProviderInterface
      * está na consulta pelo mesmo motivo que o do recent(): filtrar depois de
      * ler mente em silêncio.
      *
-     * O ESCOPO É OBRIGATÓRIO, ao contrário do $kind do recent(), e isso saiu
+     * O ESCOPO É OBRIGATÓRIO, ao contrário do $kinds do recent(), e isso saiu
      * de um teste que falhou. A chave do array é a AÇÃO — é assim que quem lê
      * quer perguntar, "o que há para 'tweaks'?" —, e isso só é inequívoco
      * DENTRO de um escopo: o tweaks aplicado e o tweaks selecionado têm a

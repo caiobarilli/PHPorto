@@ -30,6 +30,9 @@ enum ExecutionKind: string
      */
     case Windows = 'windows';
 
+    /** Os tipos da tela /wsl: tudo que não é do Windows. */
+    public const WSL = [self::Comando, self::Anexo];
+
     /**
      * Converte o que veio do banco, tolerando ausência.
      *

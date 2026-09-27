@@ -124,7 +124,7 @@ it('recent() repassa o tipo ao provider e devolve só aquele tipo', function () 
     $service->record(exec_('um comando'));
     $service->record(exec_('uma acao', 12, ExecutionKind::Windows));
 
-    $lidas = $service->recent(100, ExecutionKind::Windows);
+    $lidas = $service->recent(100, [ExecutionKind::Windows]);
 
     expect($lidas)->toHaveCount(1)
         ->and($lidas[0]->command)->toBe('uma acao')
@@ -132,7 +132,7 @@ it('recent() repassa o tipo ao provider e devolve só aquele tipo', function () 
 });
 
 it('recent() valida o limite mesmo com tipo informado', function () {
-    (new ExecutionLogService(new FakeProvider()))->recent(0, ExecutionKind::Windows);
+    (new ExecutionLogService(new FakeProvider()))->recent(0, [ExecutionKind::Windows]);
 })->throws(InvalidArgumentException::class);
 
 it('clear() repassa o tipo e não leva os outros', function () {
@@ -141,9 +141,22 @@ it('clear() repassa o tipo e não leva os outros', function () {
     $service->record(exec_('um comando'));
     $service->record(exec_('uma acao', 12, ExecutionKind::Windows));
 
-    expect($service->clear(ExecutionKind::Windows))->toBe(1)
+    expect($service->clear([ExecutionKind::Windows]))->toBe(1)
         ->and($service->recent(100))->toHaveCount(1)
         ->and($service->recent(100)[0]->kind)->toBe(ExecutionKind::Comando);
+});
+
+it('a lista do WSL lê e apaga comando e anexo, e deixa o Windows', function () {
+    $service = new ExecutionLogService(new FakeProvider());
+    $service->record(exec_('um comando'));
+    $service->record(exec_('um anexo', 12, ExecutionKind::Anexo));
+    $service->record(exec_('uma acao', 12, ExecutionKind::Windows));
+
+    expect($service->recent(100, ExecutionKind::WSL))->toHaveCount(2)
+        ->and($service->recent(100, []))->toBe([])
+        ->and($service->clear([]))->toBe(0)
+        ->and($service->clear(ExecutionKind::WSL))->toBe(2)
+        ->and($service->recent(100)[0]->kind)->toBe(ExecutionKind::Windows);
 });
 
 /*
@@ -199,7 +212,7 @@ it('CLEAR NÃO LEVA O ESTADO, nem com tipo nem sem', function () {
     $service->record(exec_('uma acao', 12, ExecutionKind::Windows));
     $service->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
 
-    expect($service->clear(ExecutionKind::Windows))->toBe(1)
+    expect($service->clear([ExecutionKind::Windows]))->toBe(1)
         ->and($service->winStates(WinStateScope::Applied))->toHaveCount(1);
 
     expect($service->clear())->toBe(0)

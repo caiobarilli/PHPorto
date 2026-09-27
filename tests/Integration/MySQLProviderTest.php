@@ -183,8 +183,8 @@ it('recent() sem filtro devolve todos os tipos, e filtrado devolve só o pedido'
     $p->insert(novaExecucaoMysql('uma acao do windows', '', 0, 1, ExecutionKind::Windows));
 
     expect($p->recent())->toHaveCount(3)
-        ->and($p->recent(100, ExecutionKind::Windows))->toHaveCount(1)
-        ->and($p->recent(100, ExecutionKind::Windows)[0]->command)->toBe('uma acao do windows');
+        ->and($p->recent(100, [ExecutionKind::Windows]))->toHaveCount(1)
+        ->and($p->recent(100, [ExecutionKind::Windows])[0]->command)->toBe('uma acao do windows');
 });
 
 it('recent() filtra antes de aplicar o limite', function () {
@@ -194,8 +194,8 @@ it('recent() filtra antes de aplicar o limite', function () {
         $p->insert(novaExecucaoMysql('comando ' . $i));
     }
 
-    expect($p->recent(1, ExecutionKind::Windows))->toHaveCount(1)
-        ->and($p->recent(1, ExecutionKind::Windows)[0]->command)->toBe('uma acao do windows');
+    expect($p->recent(1, [ExecutionKind::Windows]))->toHaveCount(1)
+        ->and($p->recent(1, [ExecutionKind::Windows])[0]->command)->toBe('uma acao do windows');
 });
 
 it('clear() de um tipo não leva o outro junto', function () {
@@ -203,9 +203,22 @@ it('clear() de um tipo não leva o outro junto', function () {
     $p->insert(novaExecucaoMysql('um comando', '', 0, 1, ExecutionKind::Comando));
     $p->insert(novaExecucaoMysql('uma acao do windows', '', 0, 1, ExecutionKind::Windows));
 
-    expect($p->clear(ExecutionKind::Windows))->toBe(1)
+    expect($p->clear([ExecutionKind::Windows]))->toBe(1)
         ->and($p->recent())->toHaveCount(1)
         ->and($p->recent()[0]->kind)->toBe(ExecutionKind::Comando);
+});
+
+it('lista de tipos filtra e apaga só os da lista, e lista vazia é nenhum', function () {
+    $p = new MySQLProvider(mysqlTestConfig());
+    $p->insert(novaExecucaoMysql('um comando', '', 0, 1, ExecutionKind::Comando));
+    $p->insert(novaExecucaoMysql('um anexo', '', 0, 1, ExecutionKind::Anexo));
+    $p->insert(novaExecucaoMysql('uma acao do windows', '', 0, 1, ExecutionKind::Windows));
+
+    expect($p->recent(100, ExecutionKind::WSL))->toHaveCount(2)
+        ->and($p->recent(100, []))->toBe([])
+        ->and($p->clear([]))->toBe(0)
+        ->and($p->clear(ExecutionKind::WSL))->toBe(2)
+        ->and($p->recent()[0]->kind)->toBe(ExecutionKind::Windows);
 });
 
 /*
@@ -265,7 +278,7 @@ it('limpar o histórico do Windows NÃO mexe no estado', function () {
     $p->insert(novaExecucaoMysql('tweaks -Preset standard', kind: ExecutionKind::Windows));
     $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
 
-    expect($p->clear(ExecutionKind::Windows))->toBe(1)
+    expect($p->clear([ExecutionKind::Windows]))->toBe(1)
         ->and($p->winStates(WinStateScope::Applied))->toHaveCount(1);
 });
 

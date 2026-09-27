@@ -53,14 +53,14 @@ final class FakeProvider implements DatabaseProviderInterface
      * query. Um fake que limitasse primeiro e filtrasse depois passaria em
      * teste e esconderia justamente o defeito que o filtro no banco evita.
      */
-    public function recent(int $limit = 100, ?ExecutionKind $kind = null): array
+    public function recent(int $limit = 100, ?array $kinds = null): array
     {
         $todas = array_reverse($this->inserted);
 
-        if ($kind !== null) {
+        if ($kinds !== null) {
             $todas = array_values(array_filter(
                 $todas,
-                static fn (Execution $e): bool => $e->kind === $kind
+                static fn (Execution $e): bool => in_array($e->kind, $kinds, true)
             ));
         }
 
@@ -73,11 +73,11 @@ final class FakeProvider implements DatabaseProviderInterface
      * diferentes. Um fake que apagasse os dois deixaria o teste passar e
      * esconderia o defeito.
      */
-    public function clear(?ExecutionKind $kind = null): int
+    public function clear(?array $kinds = null): int
     {
         $this->clearCalls++;
 
-        if ($kind === null) {
+        if ($kinds === null) {
             $n              = count($this->inserted);
             $this->inserted = [];
 
@@ -87,7 +87,7 @@ final class FakeProvider implements DatabaseProviderInterface
         $antes          = count($this->inserted);
         $this->inserted = array_values(array_filter(
             $this->inserted,
-            static fn (Execution $e): bool => $e->kind !== $kind
+            static fn (Execution $e): bool => !in_array($e->kind, $kinds, true)
         ));
 
         return $antes - count($this->inserted);

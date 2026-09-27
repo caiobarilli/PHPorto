@@ -218,7 +218,7 @@ it('recent() filtrado devolve só o tipo pedido', function (ExecutionKind $kind,
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
     tresTipos($p);
 
-    $lidas = $p->recent(100, $kind);
+    $lidas = $p->recent(100, [$kind]);
 
     expect($lidas)->toHaveCount(1)
         ->and($lidas[0]->command)->toBe($esperado)
@@ -240,7 +240,7 @@ it('recent() FILTRA ANTES DE APLICAR O LIMITE', function () {
         $p->insert(novaExecucao('comando ' . $i));
     }
 
-    $lidas = $p->recent(1, ExecutionKind::Windows);
+    $lidas = $p->recent(1, [ExecutionKind::Windows]);
 
     expect($lidas)->toHaveCount(1)
         ->and($lidas[0]->command)->toBe('uma acao do windows');
@@ -250,20 +250,20 @@ it('recent() filtrado devolve lista vazia quando não há daquele tipo', functio
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
     $p->insert(novaExecucao('só comando'));
 
-    expect($p->recent(100, ExecutionKind::Windows))->toBe([]);
+    expect($p->recent(100, [ExecutionKind::Windows]))->toBe([]);
 });
 
 it('CLEAR DE UM TIPO NÃO LEVA O OUTRO JUNTO', function () {
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
     tresTipos($p);
 
-    $apagados = $p->clear(ExecutionKind::Windows);
+    $apagados = $p->clear([ExecutionKind::Windows]);
 
     expect($apagados)->toBe(1)
         ->and($p->recent())->toHaveCount(2)
-        ->and($p->recent(100, ExecutionKind::Windows))->toBe([])
-        ->and($p->recent(100, ExecutionKind::Comando))->toHaveCount(1)
-        ->and($p->recent(100, ExecutionKind::Anexo))->toHaveCount(1);
+        ->and($p->recent(100, [ExecutionKind::Windows]))->toBe([])
+        ->and($p->recent(100, [ExecutionKind::Comando]))->toHaveCount(1)
+        ->and($p->recent(100, [ExecutionKind::Anexo]))->toHaveCount(1);
 });
 
 it('clear() SEM filtro continua apagando tudo', function () {
@@ -278,8 +278,57 @@ it('clear() de um tipo ausente devolve zero e não apaga nada', function () {
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
     $p->insert(novaExecucao('só comando'));
 
-    expect($p->clear(ExecutionKind::Windows))->toBe(0)
+    expect($p->clear([ExecutionKind::Windows]))->toBe(0)
         ->and($p->recent())->toHaveCount(1);
+});
+
+it('recent() com LISTA de tipos devolve os da lista, na ordem, e só eles', function () {
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    tresTipos($p);
+
+    $lidas = $p->recent(100, ExecutionKind::WSL);
+
+    expect(array_map(static fn (Execution $e): string => $e->command, $lidas))->toBe(['um anexo', 'um comando']);
+});
+
+it('recent() com lista filtra antes do limite, atravessando o que é de fora', function () {
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    $p->insert(novaExecucao('um comando'));
+    foreach (range(1, 5) as $i) {
+        $p->insert(novaExecucao('windows ' . $i, kind: ExecutionKind::Windows));
+    }
+
+    $lidas = $p->recent(1, ExecutionKind::WSL);
+
+    expect($lidas)->toHaveCount(1)
+        ->and($lidas[0]->command)->toBe('um comando');
+});
+
+it('tipo repetido na lista não duplica nem quebra a consulta', function () {
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    tresTipos($p);
+
+    expect($p->recent(100, [ExecutionKind::Anexo, ExecutionKind::Anexo]))->toHaveCount(1)
+        ->and($p->clear([ExecutionKind::Anexo, ExecutionKind::Anexo]))->toBe(1);
+});
+
+it('LISTA VAZIA É NENHUM: recent() devolve vazio e clear() não apaga nada', function () {
+    // O contrário — lista vazia virando "todos" — faria um clear([]) apagar
+    // o histórico inteiro.
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    tresTipos($p);
+
+    expect($p->recent(100, []))->toBe([])
+        ->and($p->clear([]))->toBe(0)
+        ->and($p->recent())->toHaveCount(3);
+});
+
+it('clear() com a lista do WSL deixa só o do Windows', function () {
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+    tresTipos($p);
+
+    expect($p->clear(ExecutionKind::WSL))->toBe(2)
+        ->and(array_map(static fn (Execution $e): ExecutionKind => $e->kind, $p->recent()))->toBe([ExecutionKind::Windows]);
 });
 
 it('grava e relê o tipo windows sem perder o valor', function () {

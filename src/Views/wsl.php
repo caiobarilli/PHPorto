@@ -158,7 +158,7 @@ $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 12
 
     <div class="row">
       <button type="button" class="btn btn-sm btn-ghost" id="btn-json">Copiar como JSON</button>
-      <button type="button" class="btn btn-sm btn-danger" id="btn-apagar">Apagar registros</button>
+      <button type="button" class="btn btn-sm btn-danger" id="btn-apagar">Apagar registros do WSL</button>
       <span class="meta"><?= count($view->rows) ?> registro(s)</span>
     </div>
   </section>
@@ -272,7 +272,7 @@ $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 12
 
   // Destrutivo e sem desfazer: confirma antes.
   document.getElementById('btn-apagar').addEventListener('click', function () {
-    if (confirm('Apagar todos os registros de execução? Não tem como desfazer.')) {
+    if (confirm('Apagar os registros do WSL? Os do Windows ficam. Não tem como desfazer.')) {
       document.getElementById('form-apagar').submit();
     }
   });

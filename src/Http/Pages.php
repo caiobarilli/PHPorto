@@ -289,7 +289,7 @@ final class Pages
         $failed = null;
 
         try {
-            $rows = ($this->makeService)()->recent(self::ROWS, ExecutionKind::Windows);
+            $rows = ($this->makeService)()->recent(self::ROWS, [ExecutionKind::Windows]);
         } catch (Throwable $e) {
             $failed = 'Não foi possível ler os registros: ' . $e->getMessage();
         }
@@ -405,7 +405,7 @@ final class Pages
 
         if ($acaoBruta === 'limpar') {
             try {
-                $n = ($this->makeService)()->clear(ExecutionKind::Windows);
+                $n = ($this->makeService)()->clear([ExecutionKind::Windows]);
                 $this->flash($n === 0 ? 'Não havia registro do Windows para apagar.' : $n . ' registro(s) do Windows apagado(s).');
             } catch (Throwable $e) {
                 $this->flash('Falha ao limpar: ' . $e->getMessage());
@@ -790,7 +790,7 @@ final class Pages
         $failed = null;
 
         try {
-            $rows = ($this->makeService)()->recent(self::ROWS);
+            $rows = ($this->makeService)()->recent(self::ROWS, ExecutionKind::WSL);
         } catch (Throwable $e) {
             $failed = 'Não foi possível ler os registros: ' . $e->getMessage();
         }
@@ -834,8 +834,8 @@ final class Pages
 
         if ($action === 'limpar') {
             try {
-                $n = ($this->makeService)()->clear();
-                $this->flash($n === 0 ? 'Não havia registro para apagar.' : $n . ' registro(s) apagado(s).');
+                $n = ($this->makeService)()->clear(ExecutionKind::WSL);
+                $this->flash($n === 0 ? 'Não havia registro do WSL para apagar.' : $n . ' registro(s) do WSL apagado(s).');
             } catch (Throwable $e) {
                 $this->flash('Falha ao limpar: ' . $e->getMessage());
             }

@@ -151,8 +151,8 @@ it('LIMPAR O HISTÓRICO DO WINDOWS NÃO MEXE NO ESTADO', function () {
     ));
     $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
 
-    expect($p->clear(ExecutionKind::Windows))->toBe(1)
-        ->and($p->recent(100, ExecutionKind::Windows))->toBe([])
+    expect($p->clear([ExecutionKind::Windows]))->toBe(1)
+        ->and($p->recent(100, [ExecutionKind::Windows]))->toBe([])
         ->and($p->winStates(WinStateScope::Applied))->toHaveCount(1);
 });
 

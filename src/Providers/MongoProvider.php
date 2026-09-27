@@ -110,13 +110,11 @@ final class MongoProvider implements DatabaseProviderInterface
         );
     }
 
-    public function recent(int $limit = 100, ?ExecutionKind $kind = null): array
+    public function recent(int $limit = 100, ?array $kinds = null): array
     {
         try {
             $cursor = $this->collection->find(
-                // Filtro vazio é "todos": aqui o Mongo é mais direto que o SQL,
-                // porque a ausência de cláusula é o próprio documento vazio.
-                $kind === null ? [] : ['kind' => $kind->value],
+                self::kindFilter($kinds),
                 [
                     // _id do Mongo é monotônico por processo e serve de desempate
                     // quando duas execuções caem no mesmo milissegundo.
@@ -139,15 +137,35 @@ final class MongoProvider implements DatabaseProviderInterface
         }
     }
 
-    public function clear(?ExecutionKind $kind = null): int
+    public function clear(?array $kinds = null): int
     {
         try {
             return $this->collection
-                ->deleteMany($kind === null ? [] : ['kind' => $kind->value])
+                ->deleteMany(self::kindFilter($kinds))
                 ->getDeletedCount();
         } catch (MongoDriverException $e) {
             throw new StorageException('Falha ao limpar as execuções: ' . $e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * O filtro do Mongo por tipos.
+     *
+     * Recebe a lista de tipos, ou null para todos. Devolve o documento vazio
+     * para todos, e um $in com os valores — vazio, para lista vazia, que não
+     * casa nada.
+     *
+     * @param list<ExecutionKind>|null $kinds
+     *
+     * @return array<string, mixed>
+     */
+    private static function kindFilter(?array $kinds): array
+    {
+        if ($kinds === null) {
+            return [];
+        }
+
+        return ['kind' => ['$in' => array_values(array_unique(array_map(static fn (ExecutionKind $k): string => $k->value, $kinds)))]];
     }
 
     public function putWinState(WinState $state): WinState

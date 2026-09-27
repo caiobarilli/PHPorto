@@ -52,27 +52,35 @@ final class ExecutionLogService
     }
 
     /**
-     * $kind nulo é "todos", e é o padrão: quem já chamava recent($limit) não
-     * muda de comportamento. O parâmetro só atravessa até o provider — a
-     * decisão de filtrar no banco em vez de na memória está registrada na
-     * DatabaseProviderInterface.
+     * $kinds nulo é "todos", e é o padrão: quem já chamava recent($limit) não
+     * muda de comportamento. Lista vazia é nenhum. O parâmetro só atravessa
+     * até o provider — a decisão de filtrar no banco em vez de na memória está
+     * registrada na DatabaseProviderInterface.
+     *
+     * @param list<ExecutionKind>|null $kinds
      *
      * @return list<Execution> mais recentes primeiro
      *
      * @throws InvalidArgumentException limite fora da faixa.
      */
-    public function recent(int $limit = 100, ?ExecutionKind $kind = null): array
+    public function recent(int $limit = 100, ?array $kinds = null): array
     {
         if ($limit < 1 || $limit > self::MAX_LIMIT) {
             throw new InvalidArgumentException('Limite fora da faixa (1-' . self::MAX_LIMIT . ').');
         }
 
-        return $this->provider->recent($limit, $kind);
+        return $this->provider->recent($limit, $kinds);
     }
 
-    public function clear(?ExecutionKind $kind = null): int
+    /**
+     * Apaga os registros dos tipos dados e devolve quantos. Nulo apaga todos;
+     * lista vazia, nenhum.
+     *
+     * @param list<ExecutionKind>|null $kinds
+     */
+    public function clear(?array $kinds = null): int
     {
-        return $this->provider->clear($kind);
+        return $this->provider->clear($kinds);
     }
 
     /**
