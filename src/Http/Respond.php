@@ -27,10 +27,6 @@ final class Respond
      * pareceria mais simples e quebraria a comparação entre registros
      * gravados antes e depois de uma mudança de horário.
      *
-     * MORA AQUI, e não na view do Windows, porque o /wsl vai reusar: hoje ele
-     * imprime o UTC cru do banco, e essa correção já está enfileirada. Nascer
-     * com o auxiliar num lugar compartilhado é o que evita a segunda cópia.
-     *
      * Valor ausente ou impossível de interpretar volta como veio — o log é
      * prova, e inventar data seria pior que mostrar o valor estranho.
      */

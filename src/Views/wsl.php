@@ -88,7 +88,7 @@ $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 12
           exit
           <strong class="<?= $view->result->exitCode === 0 ? 'ok' : 'bad' ?>"><?= $view->result->exitCode === null ? '-' : $view->result->exitCode ?></strong>
           &middot; <?= Respond::e(number_format($view->result->durationSeconds(), 2, ',', '.')) ?>s
-          &middot; <?= Respond::e($view->result->createdAt ?? '') ?>
+          &middot; <?= Respond::e(Respond::dateTime($view->result->createdAt, $view->tz)) ?>
         </span>
       <?php endif; ?>
     </div>
@@ -141,7 +141,7 @@ $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 12
             </td>
             <td><pre><?= Respond::e($corta($row->output)) ?></pre></td>
             <td>
-              <?= Respond::e($row->createdAt ?? '—') ?><br>
+              <?= Respond::e(Respond::dateTime($row->createdAt, $view->tz)) ?><br>
               <span class="meta">exit <?= $row->exitCode === null ? '-' : $row->exitCode ?>
                 &middot; <?= Respond::e(number_format($row->durationSeconds(), 2, ',', '.')) ?>s</span>
             </td>
