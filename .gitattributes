@@ -1,4 +1,4 @@
-# Uma regra só, de propósito. O repositório se apoia no core.autocrlf=true do
+# Regras estreitas, de propósito. O repositório se apoia no core.autocrlf=true do
 # Windows, e uma regra ampla (text=auto) renormalizaria a árvore inteira.
 #
 # O .ps1 é o único arquivo versionado cujo FIM DE LINHA e BOM são requisito de
@@ -10,3 +10,9 @@
 # É a regra INVERSA da do cmd.sh (LF, sem BOM), que não é versionado porque o
 # ScriptBuilder o gera a cada execução. Ver .claude/skills/php-wsl-interop.
 *.ps1 -text
+
+# Os três JSON do upstream, byte a byte: os hashes do src/Win/THIRD-PARTY.md
+# são dos bytes CRLF do checkout de lá, e têm de valer em qualquer clone.
+src/Win/config/dns.json -text
+src/Win/config/preset.json -text
+src/Win/config/tweaks.json -text
