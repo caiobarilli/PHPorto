@@ -41,7 +41,13 @@ $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 12
     <a href="/">voltar</a>
   </div>
   <p class="sub">
-    distro <code><?= Respond::e($view->distro) ?></code> &middot;
+    distro <code><?= Respond::e($view->distro) ?></code>
+    <?php if ($view->awake === true): ?>
+      <span class="ok">acordada</span>
+    <?php elseif ($view->awake === false): ?>
+      <span class="meta">dormindo — o primeiro comando a acorda, em ~<?= $view->coldStartSeconds ?> s</span>
+    <?php endif; ?>
+    &middot;
     raiz <code><?= Respond::e($view->root !== '' ? $view->root : '(não definida)') ?></code> &middot;
     timeout <?= $view->timeout ?>s &middot;
     <?= Respond::e($view->tz) ?> &middot; 127.0.0.1

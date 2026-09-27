@@ -25,6 +25,7 @@ final readonly class WslView
      * @param int             $maxOutputBytes  teto de saída de uma execução
      * @param int             $maxCommandBytes teto do texto de um comando
      * @param int             $maxPathBytes    teto de cada caminho de anexo
+     * @param ?bool           $awake           VM de pé (true), dormindo (false), ou não se sabe (null)
      */
     public function __construct(
         public array $rows,
@@ -41,6 +42,7 @@ final readonly class WslView
         public int $maxOutputBytes,
         public int $maxCommandBytes,
         public int $maxPathBytes,
+        public ?bool $awake = null,
     ) {
     }
 }

@@ -29,6 +29,12 @@ final class Distro
     /** Timeout curto: a listagem responde em dezenas de milissegundos. */
     private const LIST_TIMEOUT_S = 10;
 
+    /** Distros registradas, um nome por linha. */
+    private const ARGS_REGISTERED = '-l -q';
+
+    /** Distros com a VM de pé, um nome por linha, sem o "(Padrão)" da listagem longa. */
+    private const ARGS_RUNNING = '-l --running -q';
+
     public function __construct(
         private readonly string $distro,
     ) {
@@ -58,18 +64,41 @@ final class Distro
             return DistroStatus::DistroMissing;
         }
 
-        foreach ($list as $name) {
-            if (strcasecmp($name, $this->distro) === 0) {
-                return DistroStatus::Ok;
-            }
-        }
-
-        return DistroStatus::DistroMissing;
+        return self::contains($list, $this->distro) ? DistroStatus::Ok : DistroStatus::DistroMissing;
     }
 
     public function isAvailable(): bool
     {
         return $this->status() === DistroStatus::Ok;
+    }
+
+    /**
+     * Diz se a VM da distro configurada está de pé agora, sem acordá-la.
+     *
+     * Devolve true se a distro está em "wsl -l --running -q", false se não
+     * está, e null quando o wsl.exe não respondeu.
+     */
+    public function isRunning(): ?bool
+    {
+        $list = $this->listing(self::ARGS_RUNNING);
+
+        return $list === null ? null : ($this->distro !== '' && self::contains($list, $this->distro));
+    }
+
+    /**
+     * Diz se um nome de distro está na listagem, sem diferenciar caixa.
+     *
+     * @param list<string> $names
+     */
+    public static function contains(array $names, string $distro): bool
+    {
+        foreach ($names as $name) {
+            if (strcasecmp($name, $distro) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -79,6 +108,19 @@ final class Distro
      * @return list<string>|null
      */
     public function registered(): ?array
+    {
+        return $this->listing(self::ARGS_REGISTERED);
+    }
+
+    /**
+     * Roda wsl.exe com os argumentos de listagem dados.
+     *
+     * Devolve um nome por linha, ou null quando o wsl.exe não pôde ser
+     * executado ou saiu com erro sem escrever nada.
+     *
+     * @return list<string>|null
+     */
+    private function listing(string $args): ?array
     {
         $descriptors = [
             0 => ['file', DIRECTORY_SEPARATOR !== '/' ? 'NUL' : '/dev/null', 'r'],
@@ -93,7 +135,7 @@ final class Distro
         $pipes = [];
         // bypass_shell pelo mesmo motivo do Runner: a forma de array aspearia
         // o "-l" e o wsl.exe deixaria de reconhecer o próprio flag.
-        $proc = @proc_open('wsl.exe -l -q', $descriptors, $pipes, null, $env, ['bypass_shell' => true]);
+        $proc = @proc_open('wsl.exe ' . $args, $descriptors, $pipes, null, $env, ['bypass_shell' => true]);
 
         if (!is_resource($proc)) {
             return null;

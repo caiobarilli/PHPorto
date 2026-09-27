@@ -795,10 +795,12 @@ final class Pages
             $failed = 'Não foi possível ler os registros: ' . $e->getMessage();
         }
 
+        $blocked = $failed ?? $this->blockingReason();
+
         $view = new WslView(
             rows: $rows,
             result: $rows[0] ?? null,
-            blocked: $failed ?? $this->blockingReason(),
+            blocked: $blocked,
             notice: $this->takeFlash(),
             csrfToken: Csrf::token(),
             csrfField: Csrf::fieldName(),
@@ -810,6 +812,8 @@ final class Pages
             maxOutputBytes: OutputCap::MAX_OUTPUT_BYTES,
             maxCommandBytes: InputLimit::MAX_COMMAND_BYTES,
             maxPathBytes: InputLimit::MAX_PATH_BYTES,
+            // Só com a distro usável: distro ausente não está "dormindo".
+            awake: $blocked === null ? $this->distroChecker->isRunning() : null,
         );
 
         Respond::html('PHPorto — WSL', Respond::render('wsl.php', $view));

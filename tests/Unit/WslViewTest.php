@@ -8,11 +8,11 @@ use App\Http\Respond;
 use App\Http\WslView;
 
 /**
- * Monta a /wsl com as execuções dadas e devolve o HTML.
+ * Monta a /wsl com as execuções e o estado da VM dados e devolve o HTML.
  *
  * @param list<Execution> $rows
  */
-function wslHtml(array $rows): string
+function wslHtml(array $rows, ?bool $awake = null): string
 {
     return Respond::render('wsl.php', new WslView(
         rows: $rows,
@@ -29,6 +29,7 @@ function wslHtml(array $rows): string
         maxOutputBytes: 1048576,
         maxCommandBytes: 65536,
         maxPathBytes: 4096,
+        awake: $awake,
     ));
 }
 
@@ -48,4 +49,11 @@ it('o JSON que o botão de copiar entrega continua com o UTC gravado', function 
 
 it('o card de anexos tem o botão de inverter, que não envia o formulário', function () {
     expect(wslHtml([]))->toContain('<button type="button" class="btn btn-sm btn-ghost" id="btn-inverter">Inverter origem e destino</button>');
+});
+
+it('o indicador diz acordada, dormindo, ou se cala quando não se sabe', function () {
+    expect(wslHtml([], true))->toContain('<span class="ok">acordada</span>')
+        ->and(wslHtml([], false))->toContain('dormindo — o primeiro comando a acorda, em ~5 s')
+        ->and(wslHtml([]))->not->toContain('acordada')
+        ->and(wslHtml([]))->not->toContain('dormindo');
 });
