@@ -45,3 +45,7 @@ it('o JSON que o botão de copiar entrega continua com o UTC gravado', function 
 
     expect($html)->toContain('"created_at":"2026-09-09 02:54:17"');
 });
+
+it('o card de anexos tem o botão de inverter, que não envia o formulário', function () {
+    expect(wslHtml([]))->toContain('<button type="button" class="btn btn-sm btn-ghost" id="btn-inverter">Inverter origem e destino</button>');
+});

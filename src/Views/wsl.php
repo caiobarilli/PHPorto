@@ -111,6 +111,7 @@ $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 12
       </div>
       <div class="row">
         <button type="submit" class="btn btn-sm" id="btn-anexo">Enviar</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-inverter">Inverter origem e destino</button>
         <span class="meta" id="estado-anexo"></span>
       </div>
     </form>
@@ -248,6 +249,14 @@ $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 12
     document.getElementById('btn-anexo'),
     document.getElementById('estado-anexo')
   );
+
+  document.getElementById('btn-inverter').addEventListener('click', function () {
+    var origem  = document.getElementById('origem');
+    var destino = document.getElementById('destino');
+    var antes   = origem.value;
+    origem.value  = destino.value;
+    destino.value = antes;
+  });
 
   document.getElementById('btn-limpar-campo').addEventListener('click', function () {
     var input = document.getElementById('input');
