@@ -311,11 +311,74 @@ Describe "Execution with Mock" {
     }
 
     Context "-Action dns -Provider cloudflare" {
+        BeforeEach {
+            Mock Get-NetAdapter {
+                @(
+                    [PSCustomObject]@{ Name = 'Ethernet'; ifIndex = 3; Status = 'Up' }
+                    [PSCustomObject]@{ Name = 'Wi-Fi'; ifIndex = 7; Status = 'Up' }
+                )
+            }
+        }
+
         It "calls Set-WinUtilDNS with the correct provider" {
             Mock Set-WinUtilDNS { }
-            Invoke-DNS -Provider 'cloudflare'
+            Invoke-DNS -Provider 'cloudflare' 6>&1 | Out-Null
             Should -Invoke -CommandName Set-WinUtilDNS -Times 1 `
                 -ParameterFilter { $DNSProvider -eq 'cloudflare' }
+        }
+
+        It "with nothing going wrong, says applied" {
+            Mock Set-DnsClientServerAddress { }
+            $output = (Invoke-DNS -Provider 'cloudflare') 6>&1 | Out-String
+
+            Should -Invoke Set-DnsClientServerAddress -Times 4 -Exactly
+            $output | Should -Match "\[ OK \] DNS 'cloudflare' applied"
+        }
+
+        It "the WARNING that Set-WinUtilDNS writes on failure is an ERROR, and not applied" {
+            # O upstream captura a excecao e so escreve Write-Warning.
+            Mock Set-DnsClientServerAddress { throw 'recusado' }
+            $output = (Invoke-DNS -Provider 'cloudflare') 6>&1 | Out-String
+
+            $output | Should -Match '\[ ERROR \] Unable to set DNS Provider due to an unhandled exception'
+            $output | Should -Match "\[ ERROR \] DNS 'cloudflare' finished with \d+ problem\(s\)"
+            $output | Should -Not -Match "DNS 'cloudflare' applied"
+        }
+
+        It "a non-terminating error of one adapter is an ERROR, and not applied" {
+            Mock Set-DnsClientServerAddress { if ($InterfaceIndex -eq 7) { Write-Error 'adaptador recusou' } }
+            $output = (Invoke-DNS -Provider 'cloudflare') 6>&1 | Out-String
+
+            $output | Should -Match '\[ ERROR \] adaptador recusou'
+            $output | Should -Match "\[ ERROR \] DNS 'cloudflare' finished with 2 problem\(s\)"
+            $output | Should -Not -Match "DNS 'cloudflare' applied"
+        }
+
+        It "called the way the worker calls it (*>&1), the WARNING is still an ERROR" {
+            Mock Test-PhportoElevado { $true }
+            Mock Set-DnsClientServerAddress { throw 'recusado' }
+            $output = Invoke-PhportoWinAction -Action 'dns' -Params @{ 'Provider' = 'cloudflare' } *>&1 | Out-String
+
+            $output | Should -Match '\[ ERROR \] Unable to set DNS Provider due to an unhandled exception'
+            $output | Should -Not -Match "DNS 'cloudflare' applied"
+        }
+
+        It "DHCP goes the same way, and a failure there is not applied either" {
+            Mock Set-DnsClientServerAddress { Write-Error 'adaptador recusou' }
+            $output = (Invoke-DNS -Provider 'DHCP') 6>&1 | Out-String
+
+            $output | Should -Match '\[ ERROR \] adaptador recusou'
+            $output | Should -Not -Match "DNS 'DHCP' applied"
+        }
+
+        It "with no adapter up, says nothing changed instead of applied" {
+            Mock Get-NetAdapter { @() }
+            Mock Set-WinUtilDNS { }
+            $output = (Invoke-DNS -Provider 'cloudflare') 6>&1 | Out-String
+
+            $output | Should -Match '\[ ERROR \] No network adapter is up; nothing changed'
+            $output | Should -Not -Match 'applied'
+            Should -Invoke Set-WinUtilDNS -Times 0 -Exactly
         }
     }
 

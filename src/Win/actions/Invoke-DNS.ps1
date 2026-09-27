@@ -23,13 +23,47 @@ function Invoke-DNS {
         return
     }
 
-    Write-Status INFO "Applying DNS '$Provider'..."
-    try {
-        Set-WinUtilDNS -DNSProvider $Provider
-        Write-Status OK "DNS '$Provider' applied."
-    } catch {
-        Write-Status ERROR $_.Exception.Message
+    if (@(Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }).Count -eq 0) {
+        Write-Status ERROR "No network adapter is up; nothing changed."
+        return
     }
+
+    Write-Status INFO "Applying DNS '$Provider'..."
+    $falhas = @(Invoke-PhportoCapturingProblems { Set-WinUtilDNS -DNSProvider $Provider })
+
+    if ($falhas.Count -gt 0) {
+        foreach ($falha in $falhas) { Write-Status ERROR $falha }
+        Write-Status ERROR "DNS '$Provider' finished with $($falhas.Count) problem(s); it may be applied to some adapters only."
+        return
+    }
+    Write-Status OK "DNS '$Provider' applied."
+}
+
+<#
+    Runs a script block and collects every warning and error it writes.
+
+    Receives the script block. Returns the text of each warning, each
+    non-terminating error and the terminating one, if any, in order;
+    everything else it writes passes through unchanged.
+#>
+function Invoke-PhportoCapturingProblems {
+    param([scriptblock]$Bloco)
+
+    $problemas = @()
+    try {
+        & $Bloco 3>&1 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.WarningRecord]) {
+                if ($_.Message) { $problemas += $_.Message }
+            } elseif ($_ -is [System.Management.Automation.ErrorRecord]) {
+                $problemas += $_.Exception.Message
+            } else {
+                $_ | Out-Host
+            }
+        }
+    } catch {
+        $problemas += $_.Exception.Message
+    }
+    return $problemas
 }
 
 <#
