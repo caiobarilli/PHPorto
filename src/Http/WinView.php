@@ -47,6 +47,8 @@ final readonly class WinView
      * @param list<string>    $tweaksChecked   os tweaks que nascem marcados
      * @param string          $tweaksMatch     o preset que a seleção reproduz, "custom", ou vazio
      * @param string|null     $tweaksProblem   por que os tweaks não puderam ser lidos
+     * @param list<string>    $tweaksApplied   os tweaks no estado aplicado
+     * @param list<string>    $appliedActions  as ações com estado aplicado guardado
      * @param list<array{key: string, label: string, text: string}> $dnsProviders as opções de DNS
      * @param array<string, string> $dnsChosen   a última escolha de DNS guardada
      * @param string|null     $dnsProblem      por que a lista de DNS não pôde ser lida
@@ -71,6 +73,8 @@ final readonly class WinView
         public array $tweaksChecked,
         public string $tweaksMatch,
         public ?string $tweaksProblem,
+        public array $tweaksApplied,
+        public array $appliedActions,
         public array $dnsProviders,
         public array $dnsChosen,
         public ?string $dnsProblem,

@@ -143,3 +143,19 @@ it('nas outras ações a mudança substitui o guardado', function () {
     expect(WinAction::Optimize->mergeState(['Preset' => 'kill-rdp'], $aplica, []))->toBe(['Preset' => 'ssh'])
         ->and(WinAction::Optimize->mergeState(['Preset' => 'ssh'], $desfaz, []))->toBeNull();
 });
+
+it('tweakKeysOf lê Items, Preset, e devolve vazio sem linha', function () {
+    $presets = ['standard' => ['A', 'B']];
+
+    expect(WinAction::tweakKeysOf(['Items' => 'A, B,,C'], $presets))->toBe(['A', 'B', 'C'])
+        ->and(WinAction::tweakKeysOf(['Preset' => 'Standard'], $presets))->toBe(['A', 'B'])
+        ->and(WinAction::tweakKeysOf(['Preset' => 'sumiu'], $presets))->toBe([])
+        ->and(WinAction::tweakKeysOf(null, $presets))->toBe([]);
+});
+
+it('o botão dos tweaks só reverte quando TODAS as marcadas estão aplicadas', function () {
+    expect(WinAction::tweaksRevert(['A', 'B'], ['A', 'B', 'C']))->toBeTrue()
+        ->and(WinAction::tweaksRevert(['A', 'X'], ['A', 'B', 'C']))->toBeFalse()
+        ->and(WinAction::tweaksRevert([], ['A']))->toBeFalse()
+        ->and(WinAction::tweaksRevert(['A'], []))->toBeFalse();
+});

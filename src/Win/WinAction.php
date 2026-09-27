@@ -236,30 +236,57 @@ enum WinAction: string
             return $mudanca->applied ? $mudanca->payload : null;
         }
 
-        $chaves = static function (?array $payload) use ($presets): array {
-            if ($payload === null) {
-                return [];
-            }
-
-            if (isset($payload['Items']) && is_string($payload['Items'])) {
-                return array_values(array_filter(array_map('trim', explode(',', $payload['Items'])), static fn (string $k): bool => $k !== ''));
-            }
-
-            if (isset($payload['Preset']) && is_string($payload['Preset'])) {
-                return $presets[strtolower($payload['Preset'])] ?? [];
-            }
-
-            return [];
-        };
-
-        $guardadas = $chaves($antes);
-        $destaVez  = $chaves($mudanca->payload);
+        $guardadas = self::tweakKeysOf($antes, $presets);
+        $destaVez  = self::tweakKeysOf($mudanca->payload, $presets);
 
         $resultado = $mudanca->applied
             ? array_values(array_unique(array_merge($guardadas, $destaVez)))
             : array_values(array_diff($guardadas, $destaVez));
 
         return $resultado === [] ? null : ['Items' => implode(',', $resultado)];
+    }
+
+    /**
+     * As chaves de tweak que um payload dos tweaks guarda.
+     *
+     * Recebe o payload (null se não há linha) e os presets reduzidos por
+     * WinConfig::presets(). Devolve as chaves de Items, ou as do Preset, ou
+     * lista vazia.
+     *
+     * @param array<string, string|int|bool>|null $payload
+     * @param array<string, list<string>>         $presets
+     *
+     * @return list<string>
+     */
+    public static function tweakKeysOf(?array $payload, array $presets): array
+    {
+        if ($payload === null) {
+            return [];
+        }
+
+        if (isset($payload['Items']) && is_string($payload['Items'])) {
+            return array_values(array_filter(array_map('trim', explode(',', $payload['Items'])), static fn (string $k): bool => $k !== ''));
+        }
+
+        if (isset($payload['Preset']) && is_string($payload['Preset'])) {
+            return $presets[strtolower($payload['Preset'])] ?? [];
+        }
+
+        return [];
+    }
+
+    /**
+     * Diz se o botão dos tweaks reverte.
+     *
+     * Recebe as caixas marcadas e as chaves aplicadas. Devolve true quando há
+     * caixa marcada e todas estão entre as aplicadas.
+     *
+     * @param list<string> $marcadas
+     * @param list<string> $aplicadas
+     */
+    public static function tweaksRevert(array $marcadas, array $aplicadas): bool
+    {
+        return $marcadas !== [] && array_diff($marcadas, $aplicadas) === [];
     }
 
     /**

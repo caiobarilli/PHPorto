@@ -322,6 +322,14 @@ final class Pages
             // Sem seleção guardada a tela nasce no padrão; não há o que avisar.
         }
 
+        $aplicados = [];
+
+        try {
+            $aplicados = ($this->makeService)()->winStates(WinStateScope::Applied);
+        } catch (Throwable) {
+            // Sem estado a tela oferece "Aplicar", como antes da R1.
+        }
+
         $dnsProviders = [];
         $dnsProblem   = null;
 
@@ -364,6 +372,8 @@ final class Pages
             tweaksChecked: $tweaksMarcados,
             tweaksMatch: WinConfig::matchPreset($tweaksMarcados, $presets),
             tweaksProblem: $tweaksProblem,
+            tweaksApplied: WinAction::tweakKeysOf($aplicados[WinAction::Tweaks->value]->payload ?? null, $presets),
+            appliedActions: array_keys($aplicados),
             dnsProviders: $dnsProviders,
             dnsChosen: $dnsEscolha,
             dnsProblem: $dnsProblem,

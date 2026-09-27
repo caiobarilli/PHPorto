@@ -29,6 +29,27 @@ $secao = static function (int $n, string $titulo, string $descricao): string {
 $travado = $view->blocked !== null;
 $dis     = $travado ? ' disabled' : '';
 
+/**
+ * Um formulário de um botão só, com um campo oculto.
+ *
+ * Recebe a ação, o nome e o valor do campo, o rótulo e se o botão é
+ * secundário. Devolve o HTML do formulário.
+ */
+$botao = static function (string $acao, string $campo, string $valor, string $rotulo, bool $secundario) use ($view, $dis): string {
+    return '<form method="post">'
+        . '<input type="hidden" name="' . Respond::e($view->csrfField) . '" value="' . Respond::e($view->csrfToken) . '">'
+        . '<input type="hidden" name="acao" value="' . Respond::e($acao) . '">'
+        . '<input type="hidden" name="' . Respond::e($campo) . '" value="' . Respond::e($valor) . '">'
+        . '<button type="submit" class="btn btn-sm' . ($secundario ? ' btn-ghost' : '') . '"' . $dis . '>'
+        . Respond::e($rotulo) . '</button></form>';
+};
+
+$aplicado      = static fn (\App\Win\WinAction $a): bool => in_array($a->value, $view->appliedActions, true);
+$twReverte     = \App\Win\WinAction::tweaksRevert($view->tweaksChecked, $view->tweaksApplied);
+$perfAplicado  = $aplicado(\App\Win\WinAction::Performance);
+$optAplicado   = $aplicado(\App\Win\WinAction::Optimize);
+$gdidAplicado  = $aplicado(\App\Win\WinAction::Gdid);
+
 $grupos = [];
 foreach ($view->tweaks as $tw) {
     $grupos[$tw['category']][] = $tw;
@@ -149,6 +170,7 @@ foreach ($view->tweaks as $tw) {
                     <?= Respond::e($tw['content']) ?>
                     <?php if ($tw['description'] !== ''): ?><small><?= Respond::e($tw['description']) ?></small><?php endif; ?>
                     <?php if ($tw['explorer']): ?><small class="nota">Pode só valer no próximo login ou depois de reiniciar o Explorer.</small><?php endif; ?>
+                    <?php if (in_array($tw['key'], $view->tweaksApplied, true)): ?><small class="aplicado">aplicado</small><?php endif; ?>
                   </span>
                 </label>
               <?php endforeach; ?>
@@ -156,13 +178,17 @@ foreach ($view->tweaks as $tw) {
           </fieldset>
         <?php endforeach; ?>
         <div class="row">
+          <input type="hidden" name="Undo" value="1" id="tw-auto-undo"<?= $twReverte ? '' : ' disabled' ?>>
           <label class="switch">
-            <input type="checkbox" name="Undo" value="1"<?= $dis ?>>
+            <input type="checkbox" name="Undo" value="1" id="tw-undo"<?= $dis ?>>
             <span class="trilho"></span>
             <span class="rotulo">Reverter (-Undo)</span>
           </label>
-          <button type="submit" class="btn btn-sm"<?= $dis ?>>Aplicar</button>
+          <button type="submit" class="btn btn-sm" id="tw-botao"<?= $dis ?>><?= $twReverte ? 'Reverter' : 'Aplicar' ?></button>
         </div>
+        <?php if ($view->tweaksApplied !== []): ?>
+          <p class="dica">Reverter exige marcar só o que já está aplicado; com seleção mista, o botão aplica.</p>
+        <?php endif; ?>
         <p class="dica">
           O preset marca as caixas dele; a seleção que não corresponde a nenhum se chama
           <code>custom</code>. O que vai para a ação são as caixas marcadas, e elas ficam guardadas
@@ -241,25 +267,20 @@ foreach ($view->tweaks as $tw) {
   <section>
     <?= $secao(5, 'Performance', 'Troca o plano de energia do Windows.') ?>
     <div class="row">
-      <form method="post">
-        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-        <input type="hidden" name="acao" value="performance">
-        <input type="hidden" name="State" value="on">
-        <button type="submit" class="btn btn-sm"<?= $dis ?>>Ativar desempenho máximo</button>
-      </form>
-      <form method="post">
-        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-        <input type="hidden" name="acao" value="performance">
-        <input type="hidden" name="State" value="off">
-        <button type="submit" class="btn btn-sm btn-ghost"<?= $dis ?>>Voltar ao Balanceado</button>
-      </form>
+      <?php if ($perfAplicado): ?>
+        <?= $botao('performance', 'State', 'off', 'Reverter', false) ?>
+        <?= $botao('performance', 'State', 'on', 'Ativar desempenho máximo', true) ?>
+      <?php else: ?>
+        <?= $botao('performance', 'State', 'on', 'Ativar desempenho máximo', false) ?>
+        <?= $botao('performance', 'State', 'off', 'Voltar ao Balanceado', true) ?>
+      <?php endif; ?>
     </div>
     <p class="dica">
       <strong>Desempenho máximo</strong> deixa o processador sempre pronto para trabalhar no limite: a
       máquina responde mais rápido, mas gasta mais energia e esquenta mais. Se o Windows não tiver esse
       plano, usa o de alto desempenho. Em notebook, a bateria dura menos.
-      <strong>Voltar ao Balanceado</strong> devolve o plano padrão do Windows, que economiza quando a
-      máquina está parada.
+      <strong><?= $perfAplicado ? 'Reverter' : 'Voltar ao Balanceado' ?></strong> devolve o plano padrão
+      do Windows, o Balanceado, que economiza quando a máquina está parada.
     </p>
   </section>
 
@@ -362,6 +383,9 @@ foreach ($view->tweaks as $tw) {
   <!-- -------------------------------------------------------- [11] optimize -->
   <section>
     <?= $secao(11, 'Optimize', 'Para processos de interface e desabilita os serviços por trás deles.') ?>
+    <?php if ($optAplicado): ?>
+      <div class="row"><?= $botao('optimize', 'Undo', '1', 'Reverter', false) ?></div>
+    <?php endif; ?>
     <form method="post" id="form-optimize">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="acao" value="optimize">
@@ -387,7 +411,7 @@ foreach ($view->tweaks as $tw) {
           <span class="trilho"></span>
           <span class="rotulo">Restaurar (-Undo)</span>
         </label>
-        <button type="submit" class="btn btn-sm"<?= $dis ?>>Executar</button>
+        <button type="submit" class="btn btn-sm<?= $optAplicado ? ' btn-ghost' : '' ?>"<?= $dis ?>>Executar</button>
       </div>
       <p class="dica">
         Precisa de pelo menos um: preset, lista de processos, ou restaurar. Os dois presets
@@ -419,6 +443,9 @@ foreach ($view->tweaks as $tw) {
   <!-- ------------------------------------------------------------- [13] gdid -->
   <section>
     <?= $secao(13, 'GDID', 'Liga e desliga o pipeline de Connected Devices: serviços, histórico de atividades, domínios no hosts e o cache.') ?>
+    <?php if ($gdidAplicado): ?>
+      <div class="row"><?= $botao('gdid', 'SubAction', 'enable', 'Reverter', false) ?></div>
+    <?php endif; ?>
     <form method="post">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="acao" value="gdid">
@@ -430,7 +457,7 @@ foreach ($view->tweaks as $tw) {
           <?php endforeach; ?>
         </select>
       </div>
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Executar</button></div>
+      <div class="row"><button type="submit" class="btn btn-sm<?= $gdidAplicado ? ' btn-ghost' : '' ?>"<?= $dis ?>>Executar</button></div>
       <p class="dica">
         O <code>disable</code> <strong>corta as notificações do Windows</strong>: os domínios do
         WNS entram no bloqueio junto com os do GDID, e apps da Store param de receber aviso.
@@ -592,17 +619,28 @@ foreach ($view->tweaks as $tw) {
     return 'custom';
   }
 
+  // ---- Tweaks: o botão só diz Reverter quando todas as marcadas estão aplicadas
+  var APLICADOS = <?= json_encode($view->tweaksApplied, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
   if (formTw) {
     var caixasTw = formTw.querySelectorAll('input[name="Items[]"]');
     var rotuloTw = document.getElementById('tw-match');
+    var autoUndo = document.getElementById('tw-auto-undo');
+    var undoTw   = document.getElementById('tw-undo');
+    var botaoTw  = document.getElementById('tw-botao');
 
     var pintarTw = function () {
       var marcadas = [];
       caixasTw.forEach(function (c) { if (c.checked) { marcadas.push(c.value); } });
       rotuloTw.textContent = nomeDaSelecao(marcadas);
+
+      var reverte = marcadas.length > 0 && marcadas.every(function (k) { return APLICADOS.indexOf(k) !== -1; });
+      autoUndo.disabled = !reverte;
+      botaoTw.textContent = reverte || undoTw.checked ? 'Reverter' : 'Aplicar';
     };
 
     caixasTw.forEach(function (c) { c.addEventListener('change', pintarTw); });
+    undoTw.addEventListener('change', pintarTw);
 
     formTw.querySelectorAll('[data-preset]').forEach(function (b) {
       b.addEventListener('click', function () {
