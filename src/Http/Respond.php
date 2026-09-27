@@ -94,6 +94,52 @@ final class Respond
         exit;
     }
 
+    /**
+     * Responde a uma requisição que o portão de token não deixou passar.
+     *
+     * Recebe a decisão: 401 com o pedido de Basic, 429 com o tempo que falta,
+     * ou 503 dizendo para rodar o php token.php. Não serve para Allowed.
+     */
+    public static function authRefused(AuthDecision $decision): never
+    {
+        http_response_code($decision->outcome->status());
+        header('Content-Type: text/plain; charset=utf-8');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: no-store');
+        self::authHeaders($decision);
+
+        echo match ($decision->outcome) {
+            AuthOutcome::NotConfigured => "PHPORTO_AUTH_TOKEN não está configurado no .env, e sem ele nada é servido.\n"
+                . "Rode na raiz do projeto:  php token.php\n",
+            AuthOutcome::Locked => self::lockedMessage($decision->retryAfter),
+            default => "Token ausente ou errado. Cole o token no campo de senha; o usuário é ignorado.\n",
+        };
+
+        exit;
+    }
+
+    /** Os cabeçalhos da recusa: o pedido de Basic no 401, o Retry-After no 429. */
+    private static function authHeaders(AuthDecision $decision): void
+    {
+        if ($decision->outcome->status() === 401) {
+            header('WWW-Authenticate: Basic realm="' . Auth::REALM . '"');
+        }
+
+        if ($decision->outcome === AuthOutcome::Locked) {
+            header('Retry-After: ' . $decision->retryAfter);
+        }
+    }
+
+    /** O texto do 429, com o tempo que falta em minutos e segundos. */
+    private static function lockedMessage(int $segundos): string
+    {
+        return sprintf(
+            "Tentativas erradas demais: bloqueado por mais %d min %02d s.\n",
+            intdiv($segundos, 60),
+            $segundos % 60
+        );
+    }
+
     public static function redirect(string $path): never
     {
         header('Location: ' . $path, true, 303);

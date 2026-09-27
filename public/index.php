@@ -24,12 +24,21 @@ declare(strict_types=1);
  * O motivo completo está no docblock dele.
  *
  * E só 127.0.0.1. Nunca 0.0.0.0, nunca o IP da rede, nunca atrás de proxy:
- * esta página executa comando arbitrário com os privilégios do usuário do WSL
- * e não tem autenticação, por desenho. Exposta na rede, é acesso remoto
- * irrestrito para quem alcançar a porta.
+ * esta página executa comando arbitrário com os privilégios do usuário do WSL,
+ * e no Windows como Administrador. O token não muda isso: o Basic manda o token
+ * em base64, que é codificação e não cifra. Acesso remoto é pelo túnel SSH.
+ *
+ * O PORTÃO DE TOKEN vem antes de qualquer rota, e vale igual para as telas e
+ * para /api/*. Sem PHPORTO_AUTH_TOKEN nada é servido (503). Sem credencial, ou
+ * com a errada, a resposta é 401 — exceção deliberada à regra do 404: as
+ * superfícies desligadas respondem 404 para não confirmar que existem, mas
+ * aqui a pessoa precisa ser solicitada, e só o 401 com WWW-Authenticate abre
+ * o diálogo do navegador. Um 403 não abre diálogo nenhum.
  */
 
 use App\Http\Api;
+use App\Http\Auth;
+use App\Http\AuthOutcome;
 use App\Http\Pages;
 use App\Http\Respond;
 use App\Services\ExecutionLogService;
@@ -53,7 +62,8 @@ use App\Wsl\Distro;
  *         winutil: array{timeout: int},
  *         tz: string,
  *         dashboard_enabled: bool,
- *         api_enabled: bool
+ *         api_enabled: bool,
+ *         auth_token: string
  *     },
  *     makeService: callable(): ExecutionLogService
  * } $app
@@ -65,6 +75,17 @@ mb_internal_encoding('UTF-8');
 $config = $app['config'];
 
 date_default_timezone_set($config['tz']);
+
+// --- Portão de token ---------------------------------------------------------
+$senha    = $_SERVER['PHP_AUTH_PW'] ?? null;
+$decisao  = (new Auth(
+    $config['auth_token'],
+    dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . Auth::COUNTER_FILE,
+))->check(is_string($senha) ? $senha : null);
+
+if ($decisao->outcome !== AuthOutcome::Allowed) {
+    Respond::authRefused($decisao);
+}
 
 // O router já resolveu e validou o caminho; o fallback existe para quem
 // executar o index.php diretamente (outro servidor, ou teste).

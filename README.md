@@ -8,13 +8,14 @@ da distro, devolve a saída e guarda o registro no banco.
 ## ⚠️ Leia antes de subir
 
 **Esta ferramenta executa comando de shell arbitrário na máquina de quem a sobe,
-com os privilégios do usuário do WSL. Não há autenticação, e isso é de propósito:
-é ferramenta local, de uma pessoa só.**
+com os privilégios do usuário do WSL — e, na `/win`, como Administrador do
+Windows. É ferramenta local, de uma pessoa só, protegida por um token.**
 
-Por isso ela **deve** escutar apenas em `127.0.0.1`. Em `0.0.0.0`, no IP da rede,
-ou atrás de um proxy que a exponha, qualquer um que alcance a porta ganha execução
-remota de comando na sua máquina — sem senha, sem saber quem foi, sem limite do que
-pode rodar. Não é "menos segura": é acesso remoto irrestrito.
+Por isso ela **deve** escutar apenas em `127.0.0.1`. O token **não** muda isso: ele
+viaja em HTTP Basic, que é base64 — codificação, não cifra. Em `0.0.0.0`, no IP da
+rede, ou atrás de um proxy que a exponha, quem enxergar o tráfego lê o token, e com
+ele ganha execução remota de comando na sua máquina. Acesso de outra máquina é por
+túnel SSH até o `127.0.0.1`, nunca abrindo a porta.
 
 **Nada de segredo por aqui.** Toda saída vira registro no banco, em texto puro,
 sem cifra e sem prazo. Um `cat` num `.env` de outro projeto grava a credencial no
@@ -36,8 +37,42 @@ composer install
 ```
 
 Copie `.env.example` para `.env` e preencha `PHPORTO_WSL_ROOT` com a pasta onde
-suas execuções devem começar, **vista de dentro do WSL**. É a única variável
-obrigatória: sem ela nada roda.
+suas execuções devem começar, **vista de dentro do WSL**. Sem ela nada roda.
+
+Depois gere o token de acesso:
+
+```bash
+php token.php
+```
+
+## O token de acesso
+
+O `php token.php` gera um token aleatório (32 bytes, em hexadecimal), imprime na
+tela e grava em `PHPORTO_AUTH_TOKEN` no `.env`. Se já houver um, ele avisa e pede
+confirmação antes de trocar: trocar derruba o acesso de quem estava usando o
+anterior.
+
+**Sem token configurado, a aplicação não serve nada** — nem as telas, nem a API.
+Responde 503 dizendo para rodar o comando. Um `.env` incompleto não vira uma
+ferramenta de shell aberta.
+
+No navegador não há tela de login: ele abre o próprio diálogo. **Cole o token no
+campo de senha; o usuário é ignorado.** Pela API, o mesmo, com o usuário vazio:
+
+```bash
+curl -u :SEU_TOKEN http://127.0.0.1:4001/api/executions
+```
+
+Cinco tokens errados seguidos bloqueiam por quinze minutos (429, com o tempo que
+falta). Só erro conta: abrir sem credencial não conta, e um acerto zera. Trocar
+o token pelo `php token.php` desfaz o bloqueio do anterior.
+
+Duas coisas do HTTP Basic que vêm junto: o token vai em base64 a cada
+requisição, por isso o bind continua sendo só `127.0.0.1`; e não existe logout —
+para sair, feche o navegador.
+
+O `token.php` é o **único** lugar do projeto que escreve no `.env`, e é rodado
+por você, na linha de comando. O processo web nunca escreve lá.
 
 ## Subir
 
@@ -90,8 +125,9 @@ src/             todo o código (PSR-4, App\)
     config/      dns.json, preset.json, tweaks.json (upstream) e debloat.json
     audit/       audit.ps1
   Wsl/           Runner, ScriptBuilder, Distro
-storage/         o banco — FORA do public
+storage/         o banco e o contador de tokens errados — FORA do public
 files/           cmd.sh descartável — FORA do public
+token.php        gera o token de acesso: php token.php
 tests/
   Pester/        testes PowerShell das ações
 ```
@@ -162,7 +198,7 @@ POST /api/executions             executa
 ```
 
 ```bash
-curl -X POST http://127.0.0.1:4001/api/executions \
+curl -X POST -u :SEU_TOKEN http://127.0.0.1:4001/api/executions \
   -H "Content-Type: application/json" \
   -d '{"command":"git status"}'
 ```
@@ -194,6 +230,11 @@ As travas de verdade:
   simples" e obriga o navegador a fazer *preflight*, que o CORS barra antes de
   qualquer efeito. Um formulário HTML não consegue mandar esse `Content-Type`. A
   checagem de `Origin` é a segunda camada.
+
+**O token de acesso não substitui nenhuma das duas.** Depois que você colou o
+token no diálogo, o navegador o reenvia sozinho em toda requisição para
+`127.0.0.1:4001` — inclusive no `POST` que o formulário do outro site dispara.
+Contra isso, quem trava continua sendo o token do formulário e o `Content-Type`.
 
 ## O `.env`
 

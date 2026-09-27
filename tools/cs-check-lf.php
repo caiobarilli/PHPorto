@@ -59,7 +59,7 @@ function limpar(string $dir): void
 }
 
 $raiz = dirname(__DIR__);
-$alvo = ['src', 'public', 'tests'];
+$alvo = ['src', 'public', 'tests', 'token.php'];
 
 $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto-cs-' . bin2hex(random_bytes(6));
 
@@ -74,13 +74,15 @@ $copiados = 0;
 foreach ($alvo as $dir) {
     $origem = $raiz . DIRECTORY_SEPARATOR . $dir;
 
-    if (!is_dir($origem)) {
+    if (is_file($origem)) {
+        $itens = [new SplFileInfo($origem)];
+    } elseif (is_dir($origem)) {
+        $itens = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($origem, FilesystemIterator::SKIP_DOTS)
+        );
+    } else {
         continue;
     }
-
-    $itens = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($origem, FilesystemIterator::SKIP_DOTS)
-    );
 
     foreach ($itens as $item) {
         if (!$item instanceof SplFileInfo || $item->getExtension() !== 'php') {

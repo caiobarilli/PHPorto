@@ -22,6 +22,10 @@
 # são de outros programas.
 /storage/win-elevation.json
 
+# O contador de tentativas erradas do token. Estado desta máquina, como o
+# marcador acima.
+/storage/auth-falhas.json
+
 # Pasta de trabalho do motor: o cmd.sh descartável guarda o último comando
 # executado, e os .tmp guardam a saída.
 /files/*

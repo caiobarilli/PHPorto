@@ -4,6 +4,7 @@ parameters:
     paths:
         - src
         - public
+        - token.php
     excludePaths:
         - tests
         - vendor

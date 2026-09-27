@@ -26,7 +26,8 @@ namespace App\Config;
  *     winutil: array{timeout: int},
  *     tz: string,
  *     dashboard_enabled: bool,
- *     api_enabled: bool
+ *     api_enabled: bool,
+ *     auth_token: string
  * }
  */
 final class Config
@@ -96,6 +97,8 @@ final class Config
                 'api_enabled',
                 self::bool('PHPORTO_API_ENABLED', false)
             ),
+            // Vazio faz a aplicação recusar servir: ver App\Http\Auth.
+            'auth_token'        => self::env('PHPORTO_AUTH_TOKEN', ''),
         ];
     }
 
