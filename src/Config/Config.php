@@ -154,12 +154,21 @@ final class Config
      */
     private static function sqlitePath(): string
     {
-        $projectRoot = dirname(__DIR__, 2);
-        $path        = self::env('SQLITE_PATH', 'storage/database.sqlite');
+        return self::resolvePath(self::env('SQLITE_PATH', 'storage/database.sqlite'), dirname(__DIR__, 2));
+    }
 
-        $isAbsolute = $path !== '' && ($path[0] === '/' || preg_match('#^[A-Za-z]:[\\/]#', $path) === 1);
+    /**
+     * Ancora um caminho relativo na raiz dada; absoluto volta como veio.
+     *
+     * Recebe o caminho e a raiz. É absoluto o que começa com / ou \, e o que
+     * começa com letra de drive seguida de / ou \ (C:/x e C:\x).
+     */
+    public static function resolvePath(string $path, string $root): string
+    {
+        $isAbsolute = $path !== ''
+            && ($path[0] === '/' || $path[0] === '\\' || preg_match('#^[A-Za-z]:[\\\\/]#', $path) === 1);
 
-        return $isAbsolute ? $path : $projectRoot . '/' . $path;
+        return $isAbsolute ? $path : $root . '/' . $path;
     }
 
     /**

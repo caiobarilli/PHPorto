@@ -407,15 +407,21 @@ final class SQLiteProvider implements DatabaseProviderInterface
     }
 
     /**
-     * Garante que a pasta-pai do arquivo .sqlite exista. O SQLite cria o
-     * arquivo sozinho, mas falha se o diretório não existir.
+     * Recusa abrir quando a pasta-pai do arquivo .sqlite não existe.
+     *
+     * Recebe o caminho do arquivo. Não cria pasta: o arquivo o SQLite cria
+     * sozinho, a pasta tem de existir.
+     *
+     * @throws StorageException dizendo qual pasta falta.
      */
     private function ensureDirectory(string $path): void
     {
         $dir = dirname($path);
 
-        if ($dir !== '' && !is_dir($dir) && !mkdir($dir, 0o775, true) && !is_dir($dir)) {
-            throw new StorageException("Não foi possível criar a pasta do SQLite: {$dir}");
+        if ($dir !== '' && !is_dir($dir)) {
+            throw new StorageException(
+                "A pasta do banco não existe: {$dir}. Confira o SQLITE_PATH no .env, ou crie a pasta."
+            );
         }
     }
 

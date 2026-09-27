@@ -410,3 +410,20 @@ it('a órfã recolhida entra na POSIÇÃO cronológica dela, não no topo', func
 
     expect($comandos)->toBe(['processes', 'tweaks -Preset advanced']);
 });
+
+it('arquivo que não existe, numa pasta que existe, nasce vazio', function () {
+    @unlink($this->dbPath);
+
+    $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
+
+    expect($p->recent())->toBe([])
+        ->and(file_exists($this->dbPath))->toBeTrue();
+});
+
+it('PASTA QUE NÃO EXISTE É RECUSADA, e nenhuma pasta é criada', function () {
+    $pasta = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto_sem_pasta_' . bin2hex(random_bytes(4));
+
+    expect(fn () => new SQLiteProvider(sqliteTestConfig($pasta . DIRECTORY_SEPARATOR . 'db.sqlite')))
+        ->toThrow(StorageException::class, 'A pasta do banco não existe: ' . $pasta)
+        ->and(is_dir($pasta))->toBeFalse();
+});
