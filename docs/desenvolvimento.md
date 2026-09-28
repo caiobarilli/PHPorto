@@ -82,6 +82,14 @@ Detalhes em `tools/cs-check-lf.php`.
   `MYSQL_TEST_*` no ambiente. Ver [configuracao.md](configuracao.md).
 - **MongoDB**: não há teste. O driver só foi verificado com `php -l`.
 
+**Variável de ambiente vazia não chega ao processo filho no Windows.** Passada
+ao `proc_open` como `CHAVE=''`, ela some: o filho vê `getenv()` como `false`,
+e "vazia" fica indistinguível de "ausente". Um teste que tente zerar uma chave
+assim acaba medindo o `.env` de quem roda. Para subir o servidor com uma
+configuração conhecida, use `Tests\Support\PhpServer`, que monta uma raiz
+temporária com `.env` próprio e tira do ambiente herdado as chaves que esse
+`.env` define.
+
 Nenhum teste eleva nada nem abre prompt de UAC. O caminho de ligar o PowerShell
 elevado de verdade é verificado à mão.
 
