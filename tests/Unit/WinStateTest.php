@@ -68,6 +68,18 @@ it('a chave junta escopo e ação com dois-pontos', function () {
         ->and((new WinState(WinStateScope::Selection, 'tweaks'))->key())->toBe('selecao:tweaks');
 });
 
+it('o enum tem os três escopos, com o valor que vai para o banco', function () {
+    expect(array_map(static fn (WinStateScope $s): string => $s->value, WinStateScope::cases()))
+        ->toBe(['aplicado', 'selecao', 'pendente-de-reinicio']);
+});
+
+it('a leitura distingue os três, e o pendente-de-reinicio não vira aplicado nem sumida', function () {
+    expect(WinStateScope::fromStorage('aplicado'))->toBe(WinStateScope::Applied)
+        ->and(WinStateScope::fromStorage('selecao'))->toBe(WinStateScope::Selection)
+        ->and(WinStateScope::fromStorage('pendente-de-reinicio'))->toBe(WinStateScope::PendingReboot)
+        ->and(WinStateScope::fromStorage('inventado'))->toBeNull();
+});
+
 it('escopo desconhecido vindo do banco é NULO, e não um caso padrão', function () {
     // Diferente do ExecutionKind::fromStorage(), que cai em 'comando': lá a
     // linha existe e precisa aparecer na tabela. Aqui, escopo desconhecido

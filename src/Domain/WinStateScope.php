@@ -7,15 +7,17 @@ namespace App\Domain;
 /**
  * O que uma linha de estado do Windows está guardando.
  *
- * DUAS COISAS NA MESMA TABELA, e não duas tabelas, porque são a mesma forma —
+ * TRÊS COISAS NA MESMA TABELA, e não três tabelas, porque são a mesma forma —
  * um par (ação, conteúdo) que se sobrescreve — e diferem só no que significam.
- * Duas tabelas duplicariam o upsert, o ensureTable e os testes nos três
+ * Três tabelas duplicariam o upsert, o ensureTable e os testes nos três
  * drivers para ganhar uma coluna a menos.
  *
  * A distinção importa porque as consequências de perder cada uma são opostas:
  * perder a seleção faz a pessoa remarcar caixas; perder o aplicado faz a tela
- * oferecer "Aplicar" no que já está aplicado. Por isso a tela lê as duas em
- * separado, e por isso existe enum em vez de string solta.
+ * oferecer "Aplicar" no que já está aplicado; perder o pendente-de-reinicio faz
+ * a tela deixar de avisar que há mudança esperando um reinício para valer. Por
+ * isso a tela lê os três em separado, e por isso existe enum em vez de string
+ * solta.
  */
 enum WinStateScope: string
 {
@@ -43,6 +45,21 @@ enum WinStateScope: string
      * sobre a máquina, então não tem lado perigoso.
      */
     case Selection = 'selecao';
+
+    /**
+     * O que a /win mandou fazer e que o Windows só honra depois de reiniciar.
+     *
+     * NÃO É LEITURA DA MÁQUINA, a mesma fronteira do Applied: é memória de que
+     * esta ferramenta gravou uma mudança cujo efeito fica pendente até o
+     * próximo boot — não uma sondagem do que o Windows já passou a fazer.
+     *
+     * EXCLUDENTE COM O APLICADO para o mesmo item: uma mudança ou já vale
+     * (Applied) ou espera reinício (PendingReboot), nunca as duas linhas ao
+     * mesmo tempo. Quem grava aqui não grava lá, e reverter antes de reiniciar
+     * é legítimo — desfaz o pendente e a linha some, como a reversão do
+     * aplicado.
+     */
+    case PendingReboot = 'pendente-de-reinicio';
 
     /**
      * Converte o que veio do banco, recusando o que não reconhece.

@@ -104,6 +104,36 @@ it('o filtro por escopo está na CONSULTA: não sobra linha do outro escopo', fu
         ->and($aplicado['gdid']->payload)->toBe([]);
 });
 
+it('os três escopos da mesma ação são três linhas, e a leitura de cada um traz só o seu', function () {
+    // O pendente-de-reinicio entra como terceiro escopo, e a chave composta o
+    // mantém independente do aplicado e da seleção da mesma ação.
+    $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
+
+    $p->putWinState(new WinState(WinStateScope::Applied, 'rdp', ['On' => 'true']));
+    $p->putWinState(new WinState(WinStateScope::Selection, 'rdp', ['Provider' => 'x']));
+    $p->putWinState(new WinState(WinStateScope::PendingReboot, 'rdp', ['H264' => 'true']));
+
+    expect(array_keys($p->winStates(WinStateScope::Applied)))->toBe(['rdp'])
+        ->and(array_keys($p->winStates(WinStateScope::Selection)))->toBe(['rdp'])
+        ->and(array_keys($p->winStates(WinStateScope::PendingReboot)))->toBe(['rdp'])
+        ->and($p->winStates(WinStateScope::Applied)['rdp']->payload)->toBe(['On' => 'true'])
+        ->and($p->winStates(WinStateScope::PendingReboot)['rdp']->payload)->toBe(['H264' => 'true']);
+});
+
+it('esquecer o pendente-de-reinicio não leva o aplicado da mesma ação, nem o contrário', function () {
+    // Reverter antes de reiniciar desfaz o pendente e deixa o resto: é o
+    // caminho que a tela oferece quando o item ainda espera boot.
+    $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
+
+    $p->putWinState(new WinState(WinStateScope::Applied, 'rdp', ['On' => 'true']));
+    $p->putWinState(new WinState(WinStateScope::PendingReboot, 'rdp', ['H264' => 'true']));
+
+    $p->forgetWinState(WinStateScope::PendingReboot, 'rdp');
+
+    expect($p->winStates(WinStateScope::PendingReboot))->toBe([])
+        ->and($p->winStates(WinStateScope::Applied))->toHaveCount(1);
+});
+
 it('o array volta indexado pela AÇÃO, para a tela perguntar por nome', function () {
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
 
