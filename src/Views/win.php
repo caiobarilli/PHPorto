@@ -5,25 +5,48 @@ declare(strict_types=1);
 /**
  * A tela /win: as treze ações do Windows, uma seção cada.
  *
- * Cada seção é um FORMULÁRIO PRÓPRIO, e não um formulário só com um seletor
- * de ação. O motivo é o token: ele vale por UMA execução, e um formulário
- * único com treze botões enviaria campos das outras seções em cada envio —
- * o servidor teria de adivinhar quais ignorar. Formulários separados mandam
- * só o que a ação usa.
+ * Quatro partes, nesta ordem: a última execução; as quatro ações de um clique
+ * (auditoria, memória, desempenho, processos) na mesma linha; o menu de abas
+ * com as outras nove; e o histórico. Só a aba aberta é desenhada, e o menu são
+ * links para /win?aba=<nome>. Cada formulário posta para a URL da página, que
+ * carrega a aba, e o 303 volta para ela.
  *
- * A ordem é a do menu, de [1] a [13]. As seções são escritas à mão, e não
- * geradas do enum: cada ação tem campos próprios, e um laço genérico
- * precisaria de uma tabela de campos por ação para produzir o mesmo HTML.
+ * Cada seção é um FORMULÁRIO PRÓPRIO, e não um formulário só com um seletor
+ * de ação: o token vale por UMA execução, e formulários separados mandam só o
+ * que a ação usa.
  *
  * @var \App\Http\WinView $view
  */
 
 use App\Http\Respond;
+use App\Http\WinTab;
 
-/** Abre uma seção com o número e o nome que ela tem no menu. */
-$secao = static function (int $n, string $titulo, string $descricao): string {
-    return '<h2>[' . $n . '] ' . Respond::e($titulo) . '</h2>'
+/** Abre uma seção com o título e a descrição dela. */
+$secao = static function (string $titulo, string $descricao): string {
+    return '<h2>' . Respond::e($titulo) . '</h2>'
         . '<p class="dica" style="margin-top:0">' . Respond::e($descricao) . '</p>';
+};
+
+/** Os nomes dos presets dos ajustes, e da seleção que não é nenhum deles. */
+$presetRotulos = ['standard' => 'padrão', 'minimal' => 'mínimo', 'advanced' => 'avançado', 'custom' => 'personalizada'];
+
+/** As subações, em português; o valor enviado continua sendo o da ação. */
+$subRotulos = [
+    'install'   => 'instalar',
+    'status'    => 'ver o estado',
+    'start'     => 'iniciar',
+    'stop'      => 'parar',
+    'metrics'   => 'ver as métricas',
+    'firewall'  => 'liberar no firewall',
+    'uninstall' => 'desinstalar',
+    'disable'   => 'desligar',
+    'enable'    => 'religar',
+];
+
+/** Uma opção de subação: o rótulo em português, com o valor da ação ao lado. */
+$opcao = static function (string $valor) use ($subRotulos): string {
+    return '<option value="' . Respond::e($valor) . '">'
+        . Respond::e(($subRotulos[$valor] ?? $valor) . ' (' . $valor . ')') . '</option>';
 };
 
 $travado = $view->blocked !== null;
@@ -94,7 +117,7 @@ foreach ($view->tweaks as $tw) {
           &middot; <?= number_format($view->result->durationSeconds(), 1, ',', '.') ?> s
           &middot;
           <?php if ($view->result->timedOut): ?>
-            <span class="bad">cancelada no timeout</span>
+            <span class="bad">cancelada por tempo esgotado</span>
           <?php elseif ($view->result->exitCode === 0): ?>
             <span class="ok">saída 0</span>
           <?php elseif ($view->result->exitCode === null): ?>
@@ -119,353 +142,350 @@ foreach ($view->tweaks as $tw) {
     </p>
   </section>
 
-  <!-- ------------------------------------------------------------ [1] audit -->
-  <section>
-    <?= $secao(1, 'Audit', 'Gera o log completo do sistema em C:\log\DD.MM.AAAA — oito blocos.') ?>
-    <div class="row">
+  <!-- ------------------------------------------------------ principais -->
+  <div class="principais">
+    <section id="acao-audit">
+      <?= $secao('Auditoria', 'Gera o log completo do sistema em C:\log\DD.MM.AAAA — oito blocos.') ?>
+      <div class="row">
+        <form method="post">
+          <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+          <input type="hidden" name="acao" value="audit">
+          <input type="hidden" name="SubAction" value="run">
+          <button type="submit" class="btn btn-sm"<?= $dis ?>>Gerar auditoria</button>
+        </form>
+        <form method="post">
+          <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+          <input type="hidden" name="acao" value="audit">
+          <input type="hidden" name="SubAction" value="open">
+          <button type="submit" class="btn btn-sm btn-ghost"<?= $dis ?>>Explorar</button>
+        </form>
+      </div>
+      <p class="dica">
+        <strong>Explorar</strong> abre a pasta do log de hoje no Explorer — da máquina onde o servidor
+        roda, não da que está com o navegador. Sem auditoria de hoje, abre <code>C:\log</code>.
+      </p>
+    </section>
+    <section id="acao-memory">
+      <?= $secao('Memória', 'Limpa a RAM com o WinMemoryCleaner, baixado na primeira execução.') ?>
       <form method="post">
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-        <input type="hidden" name="acao" value="audit">
-        <input type="hidden" name="SubAction" value="run">
-        <button type="submit" class="btn btn-sm"<?= $dis ?>>Gerar auditoria</button>
+        <input type="hidden" name="acao" value="memory">
+        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Limpar RAM</button></div>
       </form>
-      <form method="post">
-        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-        <input type="hidden" name="acao" value="audit">
-        <input type="hidden" name="SubAction" value="open">
-        <button type="submit" class="btn btn-sm btn-ghost"<?= $dis ?>>Explorar</button>
-      </form>
-    </div>
-    <p class="dica">
-      <strong>Explorar</strong> abre a pasta do log de hoje no Explorer — da máquina onde o servidor
-      roda, não da que está com o navegador. Sem auditoria de hoje, abre <code>C:\log</code>.
-    </p>
-  </section>
-
-  <!-- ----------------------------------------------------------- [2] tweaks -->
-  <section>
-    <?= $secao(2, 'Tweaks', 'Os tweaks do WinUtil, lidos do src/Win/config/tweaks.json. Registro e serviços do Windows. Nenhum vem marcado: marque um a um, ou comece por um preset.') ?>
-    <?php if ($view->tweaksProblem !== null): ?>
-      <p class="bad"><?= Respond::e($view->tweaksProblem) ?></p>
-    <?php else: ?>
-      <form method="post" id="form-tweaks">
-        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-        <input type="hidden" name="acao" value="tweaks">
-        <div class="row">
-          <span class="meta" style="margin:0">Preset</span>
-          <?php foreach ($view->tweakPresets as $nome => $chaves): ?>
-            <button type="button" class="btn btn-sm btn-ghost" data-preset="<?= Respond::e($nome) ?>"<?= $dis ?>><?= Respond::e($nome) ?></button>
-          <?php endforeach; ?>
-          <button type="button" class="btn btn-sm btn-ghost" data-preset=""<?= $dis ?>>desmarcar tudo</button>
-          <span class="meta" style="margin:0">Seleção: <strong id="tw-match"><?= Respond::e($view->tweaksMatch !== '' ? $view->tweaksMatch : 'nenhuma') ?></strong></span>
-        </div>
-        <?php foreach ($grupos as $categoria => $itens): ?>
-          <fieldset class="grupo<?= $itens[0]['caution'] ? ' cuidado' : '' ?>">
-            <legend><?= Respond::e((string) $categoria) ?></legend>
-            <div class="colunas-4">
-              <?php foreach ($itens as $tw): ?>
-                <label class="caixa">
-                  <input type="checkbox" name="Items[]" value="<?= Respond::e($tw['key']) ?>"<?= in_array($tw['key'], $view->tweaksChecked, true) ? ' checked' : '' ?><?= $dis ?>>
-                  <span>
-                    <?= Respond::e($tw['content']) ?>
-                    <?php if ($tw['description'] !== ''): ?><small><?= Respond::e($tw['description']) ?></small><?php endif; ?>
-                    <?php if ($tw['explorer']): ?><small class="nota">Pode só valer no próximo login ou depois de reiniciar o Explorer.</small><?php endif; ?>
-                    <?php if (in_array($tw['key'], $view->tweaksApplied, true)): ?><small class="aplicado">aplicado</small><?php endif; ?>
-                  </span>
-                </label>
-              <?php endforeach; ?>
-            </div>
-          </fieldset>
-        <?php endforeach; ?>
-        <div class="row">
-          <input type="hidden" name="Undo" value="1" id="tw-auto-undo"<?= $twReverte ? '' : ' disabled' ?>>
-          <label class="switch">
-            <input type="checkbox" name="Undo" value="1" id="tw-undo"<?= $dis ?>>
-            <span class="trilho"></span>
-            <span class="rotulo">Reverter (-Undo)</span>
-          </label>
-          <button type="submit" class="btn btn-sm" id="tw-botao"<?= $dis ?>><?= $twReverte ? 'Reverter' : 'Aplicar' ?></button>
-        </div>
-        <?php if ($view->tweaksApplied !== []): ?>
-          <p class="dica">Reverter exige marcar só o que já está aplicado; com seleção mista, o botão aplica.</p>
+    </section>
+    <section id="acao-performance">
+      <?= $secao('Desempenho', 'Troca o plano de energia do Windows.') ?>
+      <div class="row">
+        <?php if ($perfAplicado): ?>
+          <?= $botao('performance', 'State', 'off', 'Reverter', false) ?>
+          <?= $botao('performance', 'State', 'on', 'Ativar desempenho máximo', true) ?>
+        <?php else: ?>
+          <?= $botao('performance', 'State', 'on', 'Ativar desempenho máximo', false) ?>
+          <?= $botao('performance', 'State', 'off', 'Voltar ao Balanceado', true) ?>
         <?php endif; ?>
+      </div>
+      <p class="dica">
+        <strong>Desempenho máximo</strong> deixa o processador sempre pronto para trabalhar no limite: a
+        máquina responde mais rápido, mas gasta mais energia e esquenta mais. Se o Windows não tiver esse
+        plano, usa o de alto desempenho. Em notebook, a bateria dura menos.
+        <strong><?= $perfAplicado ? 'Reverter' : 'Voltar ao Balanceado' ?></strong> devolve o plano padrão
+        do Windows, o Balanceado, que economiza quando a máquina está parada.
+      </p>
+    </section>
+    <section id="acao-processes">
+      <?= $secao('Processos', 'Lista os 30 processos que mais consomem RAM.') ?>
+      <form method="post">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="processes">
+        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Listar processos</button></div>
+      </form>
+    </section>
+  </div>
+
+  <!-- ------------------------------------------------------------- abas -->
+  <nav class="abas" aria-label="Grupos de ações">
+    <?php foreach (WinTab::cases() as $aba): ?>
+      <a href="<?= Respond::e($aba->url()) ?>"<?= $aba === $view->tab ? ' class="ativa" aria-current="page"' : '' ?>><?= Respond::e($aba->label()) ?></a>
+    <?php endforeach; ?>
+  </nav>
+
+  <?php if ($view->tab === WinTab::Sistema): ?>
+    <section id="acao-tweaks">
+      <?= $secao('Ajustes', 'Os ajustes do WinUtil, lidos do src/Win/config/tweaks.json, com o texto em português do tweaks.pt-BR.json. Registro e serviços do Windows. Nenhum vem marcado: marque um a um, ou comece por um preset.') ?>
+      <?php if ($view->tweaksProblem !== null): ?>
+        <p class="bad"><?= Respond::e($view->tweaksProblem) ?></p>
+      <?php else: ?>
+        <form method="post" id="form-tweaks">
+          <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+          <input type="hidden" name="acao" value="tweaks">
+          <div class="row">
+            <span class="meta" style="margin:0">Preset</span>
+            <?php foreach ($view->tweakPresets as $nome => $chaves): ?>
+              <button type="button" class="btn btn-sm btn-ghost" data-preset="<?= Respond::e($nome) ?>"<?= $dis ?>><?= Respond::e($presetRotulos[$nome] ?? $nome) ?></button>
+            <?php endforeach; ?>
+            <button type="button" class="btn btn-sm btn-ghost" data-preset=""<?= $dis ?>>desmarcar tudo</button>
+            <span class="meta" style="margin:0">Seleção: <strong id="tw-match"><?= Respond::e($view->tweaksMatch !== '' ? ($presetRotulos[$view->tweaksMatch] ?? $view->tweaksMatch) : 'nenhuma') ?></strong></span>
+          </div>
+          <?php foreach ($grupos as $categoria => $itens): ?>
+            <fieldset class="grupo<?= $itens[0]['caution'] ? ' cuidado' : '' ?>">
+              <legend><?= Respond::e((string) $categoria) ?></legend>
+              <div class="colunas-4">
+                <?php foreach ($itens as $tw): ?>
+                  <label class="caixa">
+                    <input type="checkbox" name="Items[]" value="<?= Respond::e($tw['key']) ?>"<?= in_array($tw['key'], $view->tweaksChecked, true) ? ' checked' : '' ?><?= $dis ?>>
+                    <span>
+                      <?= Respond::e($tw['content']) ?>
+                      <?php if ($tw['description'] !== ''): ?><small><?= Respond::e($tw['description']) ?></small><?php endif; ?>
+                      <?php if ($tw['explorer']): ?><small class="nota">Pode só valer no próximo login ou depois de reiniciar o Explorer.</small><?php endif; ?>
+                      <?php if (in_array($tw['key'], $view->tweaksApplied, true)): ?><small class="aplicado">aplicado</small><?php endif; ?>
+                    </span>
+                  </label>
+                <?php endforeach; ?>
+              </div>
+            </fieldset>
+          <?php endforeach; ?>
+          <div class="row">
+            <input type="hidden" name="Undo" value="1" id="tw-auto-undo"<?= $twReverte ? '' : ' disabled' ?>>
+            <label class="switch">
+              <input type="checkbox" name="Undo" value="1" id="tw-undo"<?= $dis ?>>
+              <span class="trilho"></span>
+              <span class="rotulo">Reverter (-Undo)</span>
+            </label>
+            <button type="submit" class="btn btn-sm" id="tw-botao"<?= $dis ?>><?= $twReverte ? 'Reverter' : 'Aplicar' ?></button>
+          </div>
+          <?php if ($view->tweaksApplied !== []): ?>
+            <p class="dica">Reverter exige marcar só o que já está aplicado; com seleção mista, o botão aplica.</p>
+          <?php endif; ?>
+          <p class="dica">
+            O preset marca as caixas dele; a seleção que não corresponde a nenhum se chama
+            <strong>personalizada</strong>. O que vai para a ação são as caixas marcadas, e elas ficam guardadas
+            para a próxima visita.
+          </p>
+        </form>
+      <?php endif; ?>
+    </section>
+    <section id="acao-debloat">
+      <?= $secao('Remover apps', 'Remove os pacotes APPX marcados, lidos do src/Win/config/debloat.json — o mesmo arquivo que a ação lê.') ?>
+      <?php if ($view->debloatProblem !== null): ?>
+        <p class="bad"><?= Respond::e($view->debloatProblem) ?></p>
+      <?php else: ?>
+        <form method="post">
+          <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+          <input type="hidden" name="acao" value="debloat">
+          <input type="hidden" name="PackagesForm" value="1">
+          <div class="colunas-4">
+            <?php foreach ($view->debloatPackages as $pacote): ?>
+              <label class="caixa caixa-mono">
+                <input type="checkbox" name="Packages[]" value="<?= Respond::e($pacote) ?>"<?= in_array($pacote, $view->debloatChecked, true) ? ' checked' : '' ?><?= $dis ?>>
+                <span><?= Respond::e($pacote) ?></span>
+              </label>
+            <?php endforeach; ?>
+          </div>
+          <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Remover marcados</button></div>
+          <p class="dica">Sem seleção guardada, os <?= count($view->debloatPackages) ?> vêm marcados, que é a lista inteira do arquivo.</p>
+        </form>
+      <?php endif; ?>
+    </section>
+  <?php endif; ?>
+
+  <?php if ($view->tab === WinTab::Rede): ?>
+    <section id="acao-dns">
+      <?= $secao('DNS', 'Troca o DNS dos adaptadores de rede ativos. A lista vem do src/Win/config/dns.json.') ?>
+      <?php if ($view->dnsProblem !== null): ?>
+        <p class="bad"><?= Respond::e($view->dnsProblem) ?></p>
+      <?php else: ?>
+        <form method="post" id="form-dns">
+          <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+          <input type="hidden" name="acao" value="dns">
+          <div class="colunas-4">
+            <?php foreach ($view->dnsProviders as $dns): ?>
+              <label class="caixa">
+                <input type="radio" name="Provider" value="<?= Respond::e($dns['key']) ?>"<?= strcasecmp($view->dnsChosen['Provider'] ?? '', $dns['key']) === 0 ? ' checked' : '' ?><?= $dis ?>>
+                <span>
+                  <?= Respond::e($dns['label']) ?>
+                  <?php if ($dns['text'] !== ''): ?><small><?= Respond::e($dns['text']) ?></small><?php endif; ?>
+                </span>
+              </label>
+            <?php endforeach; ?>
+          </div>
+          <div id="dns-custom">
+            <div class="campo">
+              <label for="dns-p1">Primário</label>
+              <input type="text" id="dns-p1" name="PrimaryDNS" placeholder="192.168.1.10"
+                     value="<?= Respond::e($view->dnsChosen['PrimaryDNS'] ?? '') ?>"<?= $dis ?>>
+            </div>
+            <div class="campo">
+              <label for="dns-p2">Secundário</label>
+              <input type="text" id="dns-p2" name="SecondaryDNS" placeholder="opcional"
+                     value="<?= Respond::e($view->dnsChosen['SecondaryDNS'] ?? '') ?>"<?= $dis ?>>
+            </div>
+          </div>
+          <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Aplicar DNS</button></div>
+          <p class="dica">
+            O DNS próprio exige o primário, e só aceita endereço IP válido. A escolha e os endereços
+            ficam guardados para a próxima visita.
+          </p>
+        </form>
+      <?php endif; ?>
+    </section>
+    <section id="acao-network">
+      <?= $secao('Captura de rede', 'Captura pacotes com o TShark e gera relatório em C:\WinUtil\Reports.') ?>
+      <form method="post">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="network">
+        <div class="campo">
+          <label for="net-if">Interface</label>
+          <input type="text" id="net-if" name="Interface" placeholder="Ethernet"<?= $dis ?>>
+        </div>
+        <div class="campo">
+          <label for="net-dur">Duração</label>
+          <input type="text" id="net-dur" name="Duration" placeholder="30"<?= $dis ?>>
+        </div>
+        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Capturar</button></div>
         <p class="dica">
-          O preset marca as caixas dele; a seleção que não corresponde a nenhum se chama
-          <code>custom</code>. O que vai para a ação são as caixas marcadas, e elas ficam guardadas
-          para a próxima visita.
+          A interface é <strong>obrigatória</strong>: sem ela a ação recusa e pede por
+          <code>Read-Host</code>, e num processo não interativo isso falha com erro que não explica
+          nada. Duração em segundos, de <?= \App\Win\WinAction::NETWORK_DURATION_MIN ?> a
+          <?= \App\Win\WinAction::NETWORK_DURATION_MAX ?>. Lembre do timeout de
+          <?= (int) $view->timeout ?> s.
         </p>
       </form>
-    <?php endif; ?>
-  </section>
+    </section>
+  <?php endif; ?>
 
-  <!-- ---------------------------------------------------------- [3] debloat -->
-  <section>
-    <?= $secao(3, 'Debloat', 'Remove os pacotes APPX marcados, lidos do src/Win/config/debloat.json — o mesmo arquivo que a ação lê.') ?>
-    <?php if ($view->debloatProblem !== null): ?>
-      <p class="bad"><?= Respond::e($view->debloatProblem) ?></p>
-    <?php else: ?>
+  <?php if ($view->tab === WinTab::Aplicativos): ?>
+    <section id="acao-install">
+      <?= $secao('Instalar apps', 'Instala apps pelo winget, por ID, separados por vírgula. As caixas abaixo somam os principais ao campo.') ?>
       <form method="post">
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-        <input type="hidden" name="acao" value="debloat">
-        <input type="hidden" name="PackagesForm" value="1">
-        <div class="colunas-4">
-          <?php foreach ($view->debloatPackages as $pacote): ?>
-            <label class="caixa caixa-mono">
-              <input type="checkbox" name="Packages[]" value="<?= Respond::e($pacote) ?>"<?= in_array($pacote, $view->debloatChecked, true) ? ' checked' : '' ?><?= $dis ?>>
-              <span><?= Respond::e($pacote) ?></span>
-            </label>
-          <?php endforeach; ?>
+        <input type="hidden" name="acao" value="install">
+        <div class="campo">
+          <label for="ins-apps">Apps</label>
+          <input type="text" id="ins-apps" name="Apps"
+                 placeholder="Mozilla.Firefox,Notepad++.Notepad++"<?= $dis ?>>
+          <button type="submit" class="btn btn-campo"<?= $dis ?>>Instalar</button>
         </div>
-        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Remover marcados</button></div>
-        <p class="dica">Sem seleção guardada, os <?= count($view->debloatPackages) ?> vêm marcados, que é a lista inteira do arquivo.</p>
-      </form>
-    <?php endif; ?>
-  </section>
-
-  <!-- -------------------------------------------------------------- [4] dns -->
-  <section>
-    <?= $secao(4, 'DNS', 'Troca o DNS dos adaptadores de rede ativos. A lista vem do src/Win/config/dns.json.') ?>
-    <?php if ($view->dnsProblem !== null): ?>
-      <p class="bad"><?= Respond::e($view->dnsProblem) ?></p>
-    <?php else: ?>
-      <form method="post" id="form-dns">
-        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-        <input type="hidden" name="acao" value="dns">
         <div class="colunas-4">
-          <?php foreach ($view->dnsProviders as $dns): ?>
+          <?php foreach (\App\Win\WinAction::INSTALL_SUGGESTIONS as $id => $nome): ?>
             <label class="caixa">
-              <input type="radio" name="Provider" value="<?= Respond::e($dns['key']) ?>"<?= strcasecmp($view->dnsChosen['Provider'] ?? '', $dns['key']) === 0 ? ' checked' : '' ?><?= $dis ?>>
+              <input type="checkbox" name="AppsMarcados[]" value="<?= Respond::e($id) ?>"<?= $dis ?>>
               <span>
-                <?= Respond::e($dns['label']) ?>
-                <?php if ($dns['text'] !== ''): ?><small><?= Respond::e($dns['text']) ?></small><?php endif; ?>
+                <?= Respond::e($nome) ?>
+                <small><code><?= Respond::e($id) ?></code></small>
+                <?php if ($id === 'VB-Audio.Voicemeeter.Potato'): ?><small class="nota">Exige reiniciar o Windows para funcionar.</small><?php endif; ?>
               </span>
             </label>
           <?php endforeach; ?>
         </div>
-        <div id="dns-custom">
-          <div class="campo">
-            <label for="dns-p1">Primário</label>
-            <input type="text" id="dns-p1" name="PrimaryDNS" placeholder="192.168.1.10"
-                   value="<?= Respond::e($view->dnsChosen['PrimaryDNS'] ?? '') ?>"<?= $dis ?>>
-          </div>
-          <div class="campo">
-            <label for="dns-p2">Secundário</label>
-            <input type="text" id="dns-p2" name="SecondaryDNS" placeholder="opcional"
-                   value="<?= Respond::e($view->dnsChosen['SecondaryDNS'] ?? '') ?>"<?= $dis ?>>
-          </div>
-        </div>
-        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Aplicar DNS</button></div>
         <p class="dica">
-          O DNS próprio exige o primário, e só aceita endereço IP válido. A escolha e os endereços
-          ficam guardados para a próxima visita.
+          O campo é texto livre e manda: o catálogo do winget é aberto demais para uma lista curada.
+          Cada app é instalado pelo ID exato. O teto de <?= number_format($view->maxParamBytes, 0, ',', '.') ?>
+          bytes é recusado <strong>no servidor</strong>, não no navegador. O VoiceMeeter Potato só passa
+          a funcionar depois de reiniciar o Windows.
         </p>
       </form>
-    <?php endif; ?>
-  </section>
+    </section>
+  <?php endif; ?>
 
-  <!-- ------------------------------------------------------ [5] performance -->
-  <section>
-    <?= $secao(5, 'Performance', 'Troca o plano de energia do Windows.') ?>
-    <div class="row">
-      <?php if ($perfAplicado): ?>
-        <?= $botao('performance', 'State', 'off', 'Reverter', false) ?>
-        <?= $botao('performance', 'State', 'on', 'Ativar desempenho máximo', true) ?>
-      <?php else: ?>
-        <?= $botao('performance', 'State', 'on', 'Ativar desempenho máximo', false) ?>
-        <?= $botao('performance', 'State', 'off', 'Voltar ao Balanceado', true) ?>
+  <?php if ($view->tab === WinTab::Servicos): ?>
+    <section id="acao-exporter">
+      <?= $secao('Métricas do Windows', 'Instala e controla o windows_exporter, para o Prometheus, na porta 9182.') ?>
+      <form method="post">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="exporter">
+        <div class="campo">
+          <label for="exp-sub">Subação</label>
+          <select id="exp-sub" name="SubAction"<?= $dis ?>>
+            <?php foreach (\App\Win\WinAction::EXPORTER_SUBACTIONS as $s): ?>
+              <?= $opcao($s) ?>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Executar</button></div>
+      </form>
+    </section>
+    <section id="acao-gpu">
+      <?= $secao('Métricas da GPU', 'Instala e controla o nvidia_gpu_exporter, para o Prometheus.') ?>
+      <form method="post">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="gpu">
+        <div class="campo">
+          <label for="gpu-sub">Subação</label>
+          <select id="gpu-sub" name="SubAction"<?= $dis ?>>
+            <?php foreach (\App\Win\WinAction::GPU_SUBACTIONS as $s): ?>
+              <?= $opcao($s) ?>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Executar</button></div>
+        <p class="dica">Conjunto diferente das métricas do Windows: aqui existe <strong>desinstalar</strong> e não
+          existe <strong>liberar no firewall</strong>.</p>
+      </form>
+    </section>
+    <section id="acao-optimize">
+      <?= $secao('Otimizar', 'Para processos de interface e desabilita os serviços por trás deles.') ?>
+      <?php if ($optAplicado): ?>
+        <div class="row"><?= $botao('optimize', 'Undo', '1', 'Reverter', false) ?></div>
       <?php endif; ?>
-    </div>
-    <p class="dica">
-      <strong>Desempenho máximo</strong> deixa o processador sempre pronto para trabalhar no limite: a
-      máquina responde mais rápido, mas gasta mais energia e esquenta mais. Se o Windows não tiver esse
-      plano, usa o de alto desempenho. Em notebook, a bateria dura menos.
-      <strong><?= $perfAplicado ? 'Reverter' : 'Voltar ao Balanceado' ?></strong> devolve o plano padrão
-      do Windows, o Balanceado, que economiza quando a máquina está parada.
-    </p>
-  </section>
-
-  <!-- ---------------------------------------------------------- [6] install -->
-  <section>
-    <?= $secao(6, 'Install', 'Instala apps pelo winget, por ID, separados por vírgula. As caixas abaixo somam os principais ao campo.') ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="install">
-      <div class="campo">
-        <label for="ins-apps">Apps</label>
-        <input type="text" id="ins-apps" name="Apps"
-               placeholder="Mozilla.Firefox,Notepad++.Notepad++"<?= $dis ?>>
-        <button type="submit" class="btn btn-campo"<?= $dis ?>>Instalar</button>
-      </div>
-      <div class="colunas-4">
-        <?php foreach (\App\Win\WinAction::INSTALL_SUGGESTIONS as $id => $nome): ?>
-          <label class="caixa">
-            <input type="checkbox" name="AppsMarcados[]" value="<?= Respond::e($id) ?>"<?= $dis ?>>
-            <span>
-              <?= Respond::e($nome) ?>
-              <small><code><?= Respond::e($id) ?></code></small>
-              <?php if ($id === 'VB-Audio.Voicemeeter.Potato'): ?><small class="nota">Exige reiniciar o Windows para funcionar.</small><?php endif; ?>
-            </span>
+      <form method="post" id="form-optimize">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="optimize">
+        <div class="campo">
+          <label for="opt-preset">Preset</label>
+          <select id="opt-preset" name="Preset"<?= $dis ?>>
+            <option value="">(nenhum)</option>
+            <option value="ssh">ssh — modo servidor</option>
+            <option value="kill-rdp">kill-rdp — depois de desconectar o RDP</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="opt-kill">Matar</label>
+          <input type="text" id="opt-kill" name="Kill" placeholder="notepad,calc"<?= $dis ?>>
+        </div>
+        <div class="campo">
+          <label for="opt-keep">Preservar</label>
+          <input type="text" id="opt-keep" name="KeepUser" placeholder="usuário do RDP a não deslogar"<?= $dis ?>>
+        </div>
+        <div class="row">
+          <label class="switch">
+            <input type="checkbox" name="Undo" value="1" id="opt-undo"<?= $dis ?>>
+            <span class="trilho"></span>
+            <span class="rotulo">Restaurar (-Undo)</span>
           </label>
-        <?php endforeach; ?>
-      </div>
-      <p class="dica">
-        O campo é texto livre e manda: o catálogo do winget é aberto demais para uma lista curada.
-        Cada app é instalado pelo ID exato. O teto de <?= number_format($view->maxParamBytes, 0, ',', '.') ?>
-        bytes é recusado <strong>no servidor</strong>, não no navegador. O VoiceMeeter Potato só passa
-        a funcionar depois de reiniciar o Windows.
-      </p>
-    </form>
-  </section>
-
-  <!-- ----------------------------------------------------------- [7] memory -->
-  <section>
-    <?= $secao(7, 'Memory', 'Limpa a RAM com o WinMemoryCleaner, baixado na primeira execução.') ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="memory">
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Limpar RAM</button></div>
-    </form>
-  </section>
-
-  <!-- ---------------------------------------------------------- [8] network -->
-  <section>
-    <?= $secao(8, 'Network', 'Captura pacotes com o TShark e gera relatório em C:\WinUtil\Reports.') ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="network">
-      <div class="campo">
-        <label for="net-if">Interface</label>
-        <input type="text" id="net-if" name="Interface" placeholder="Ethernet"<?= $dis ?>>
-      </div>
-      <div class="campo">
-        <label for="net-dur">Duração</label>
-        <input type="text" id="net-dur" name="Duration" placeholder="30"<?= $dis ?>>
-      </div>
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Capturar</button></div>
-      <p class="dica">
-        A interface é <strong>obrigatória</strong>: sem ela a ação recusa e pede por
-        <code>Read-Host</code>, e num processo não interativo isso falha com erro que não explica
-        nada. Duração em segundos, de <?= \App\Win\WinAction::NETWORK_DURATION_MIN ?> a
-        <?= \App\Win\WinAction::NETWORK_DURATION_MAX ?>. Lembre do timeout de
-        <?= (int) $view->timeout ?> s.
-      </p>
-    </form>
-  </section>
-
-  <!-- --------------------------------------------------------- [9] exporter -->
-  <section>
-    <?= $secao(9, 'Exporter', 'Instala e controla o windows_exporter, para o Prometheus, na porta 9182.') ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="exporter">
-      <div class="campo">
-        <label for="exp-sub">Subação</label>
-        <select id="exp-sub" name="SubAction"<?= $dis ?>>
-          <?php foreach (\App\Win\WinAction::EXPORTER_SUBACTIONS as $s): ?>
-            <option value="<?= Respond::e($s) ?>"><?= Respond::e($s) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Executar</button></div>
-    </form>
-  </section>
-
-  <!-- ------------------------------------------------------- [10] processes -->
-  <section>
-    <?= $secao(10, 'Processes', 'Lista os 30 processos que mais consomem RAM.') ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="processes">
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Listar processos</button></div>
-    </form>
-  </section>
-
-  <!-- -------------------------------------------------------- [11] optimize -->
-  <section>
-    <?= $secao(11, 'Optimize', 'Para processos de interface e desabilita os serviços por trás deles.') ?>
-    <?php if ($optAplicado): ?>
-      <div class="row"><?= $botao('optimize', 'Undo', '1', 'Reverter', false) ?></div>
-    <?php endif; ?>
-    <form method="post" id="form-optimize">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="optimize">
-      <div class="campo">
-        <label for="opt-preset">Preset</label>
-        <select id="opt-preset" name="Preset"<?= $dis ?>>
-          <option value="">(nenhum)</option>
-          <option value="ssh">ssh — modo servidor</option>
-          <option value="kill-rdp">kill-rdp — depois de desconectar o RDP</option>
-        </select>
-      </div>
-      <div class="campo">
-        <label for="opt-kill">Matar</label>
-        <input type="text" id="opt-kill" name="Kill" placeholder="notepad,calc"<?= $dis ?>>
-      </div>
-      <div class="campo">
-        <label for="opt-keep">Preservar</label>
-        <input type="text" id="opt-keep" name="KeepUser" placeholder="usuário do RDP a não deslogar"<?= $dis ?>>
-      </div>
-      <div class="row">
-        <label class="switch">
-          <input type="checkbox" name="Undo" value="1" id="opt-undo"<?= $dis ?>>
-          <span class="trilho"></span>
-          <span class="rotulo">Restaurar (-Undo)</span>
-        </label>
-        <button type="submit" class="btn btn-sm<?= $optAplicado ? ' btn-ghost' : '' ?>"<?= $dis ?>>Executar</button>
-      </div>
-      <p class="dica">
-        Precisa de pelo menos um: preset, lista de processos, ou restaurar. Os dois presets
-        <strong>mexem nesta sessão</strong> — a tela avisa antes, dizendo exatamente o quê.
-      </p>
-    </form>
-  </section>
-
-  <!-- -------------------------------------------------------------- [12] gpu -->
-  <section>
-    <?= $secao(12, 'GPU', 'Instala e controla o nvidia_gpu_exporter, para o Prometheus.') ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="gpu">
-      <div class="campo">
-        <label for="gpu-sub">Subação</label>
-        <select id="gpu-sub" name="SubAction"<?= $dis ?>>
-          <?php foreach (\App\Win\WinAction::GPU_SUBACTIONS as $s): ?>
-            <option value="<?= Respond::e($s) ?>"><?= Respond::e($s) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Executar</button></div>
-      <p class="dica">Conjunto diferente do exporter: aqui existe <code>uninstall</code> e não
-        existe <code>firewall</code>.</p>
-    </form>
-  </section>
-
-  <!-- ------------------------------------------------------------- [13] gdid -->
-  <section>
-    <?= $secao(13, 'GDID', 'Liga e desliga o pipeline de Connected Devices: serviços, histórico de atividades, domínios no hosts e o cache.') ?>
-    <?php if ($gdidAplicado): ?>
-      <div class="row"><?= $botao('gdid', 'SubAction', 'enable', 'Reverter', false) ?></div>
-    <?php endif; ?>
-    <form method="post">
-      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <input type="hidden" name="acao" value="gdid">
-      <div class="campo">
-        <label for="gdid-sub">Subação</label>
-        <select id="gdid-sub" name="SubAction"<?= $dis ?>>
-          <?php foreach (\App\Win\WinAction::GDID_SUBACTIONS as $s): ?>
-            <option value="<?= Respond::e($s) ?>"><?= Respond::e($s) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="row"><button type="submit" class="btn btn-sm<?= $gdidAplicado ? ' btn-ghost' : '' ?>"<?= $dis ?>>Executar</button></div>
-      <p class="dica">
-        O <code>disable</code> <strong>corta as notificações do Windows</strong>: os domínios do
-        WNS entram no bloqueio junto com os do GDID, e apps da Store param de receber aviso.
-        É recuperável — <code>enable</code> devolve tudo, incluindo o startup original dos
-        serviços. Comece por <code>status</code>, que só lê.
-      </p>
-    </form>
-  </section>
+          <button type="submit" class="btn btn-sm<?= $optAplicado ? ' btn-ghost' : '' ?>"<?= $dis ?>>Executar</button>
+        </div>
+        <p class="dica">
+          Precisa de pelo menos um: preset, lista de processos, ou restaurar. Os dois presets
+          <strong>mexem nesta sessão</strong> — a tela avisa antes, dizendo exatamente o quê.
+        </p>
+      </form>
+    </section>
+    <section id="acao-gdid">
+      <?= $secao('Dispositivos conectados (GDID)', 'Liga e desliga o pipeline de Connected Devices: serviços, histórico de atividades, domínios no hosts e o cache.') ?>
+      <?php if ($gdidAplicado): ?>
+        <div class="row"><?= $botao('gdid', 'SubAction', 'enable', 'Reverter', false) ?></div>
+      <?php endif; ?>
+      <form method="post">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="gdid">
+        <div class="campo">
+          <label for="gdid-sub">Subação</label>
+          <select id="gdid-sub" name="SubAction"<?= $dis ?>>
+            <?php foreach (\App\Win\WinAction::GDID_SUBACTIONS as $s): ?>
+              <?= $opcao($s) ?>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="row"><button type="submit" class="btn btn-sm<?= $gdidAplicado ? ' btn-ghost' : '' ?>"<?= $dis ?>>Executar</button></div>
+        <p class="dica">
+          O <strong>desligar</strong> (<code>disable</code>) <strong>corta as notificações do Windows</strong>: os domínios do
+          WNS entram no bloqueio junto com os do GDID, e apps da Store param de receber aviso.
+          É recuperável — <strong>religar</strong> (<code>enable</code>) devolve tudo, incluindo o startup original dos
+          serviços. Comece por <strong>ver o estado</strong> (<code>status</code>), que só lê.
+        </p>
+      </form>
+    </section>
+  <?php endif; ?>
 
   <!-- ------------------------------------------------------------- histórico -->
   <section>
@@ -494,7 +514,7 @@ foreach ($view->tweaks as $tw) {
                 </span>
                 <br>
                 <?php if ($row->timedOut): ?>
-                  <span class="bad">timeout</span>
+                  <span class="bad">tempo esgotado</span>
                 <?php elseif ($row->exitCode === 0): ?>
                   <span class="ok">0</span>
                 <?php else: ?>
@@ -606,6 +626,7 @@ foreach ($view->tweaks as $tw) {
 
   // ---- Tweaks: o preset marca as caixas, e a seleção diz o nome ---------
   var PRESETS = <?= json_encode((object) $view->tweakPresets, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+  var ROTULOS = <?= json_encode($presetRotulos, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
   var formTw  = document.getElementById('form-tweaks');
 
   function nomeDaSelecao(marcadas) {
@@ -632,7 +653,8 @@ foreach ($view->tweaks as $tw) {
     var pintarTw = function () {
       var marcadas = [];
       caixasTw.forEach(function (c) { if (c.checked) { marcadas.push(c.value); } });
-      rotuloTw.textContent = nomeDaSelecao(marcadas);
+      var nome = nomeDaSelecao(marcadas);
+      rotuloTw.textContent = ROTULOS[nome] || nome;
 
       var reverte = marcadas.length > 0 && marcadas.every(function (k) { return APLICADOS.indexOf(k) !== -1; });
       autoUndo.disabled = !reverte;

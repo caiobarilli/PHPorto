@@ -140,6 +140,52 @@ final class WinConfig
         return $itens;
     }
 
+    /** O arquivo de tradução dos tweaks, do projeto, ao lado do tweaks.json. */
+    public const TWEAKS_TRANSLATION = 'tweaks.pt-BR';
+
+    /**
+     * Os tweaks com o rótulo, a descrição e a categoria em português.
+     *
+     * Recebe os tweaks de tweaks() e, opcionalmente, outra pasta de config.
+     * Cada texto sem tradução, ou o arquivo inteiro ausente ou ilegível, fica
+     * como veio do tweaks.json. Chave, caution e explorer não mudam.
+     *
+     * @param list<array{key: string, content: string, description: string, category: string, caution: bool, explorer: bool}> $tweaks
+     *
+     * @return list<array{key: string, content: string, description: string, category: string, caution: bool, explorer: bool}>
+     */
+    public static function translateTweaks(array $tweaks, ?string $dir = null): array
+    {
+        try {
+            $dados = self::json($dir, self::TWEAKS_TRANSLATION);
+        } catch (RuntimeException) {
+            return $tweaks;
+        }
+
+        $categorias = is_array($dados) && is_array($dados['categorias'] ?? null) ? $dados['categorias'] : [];
+        $textos     = is_array($dados) && is_array($dados['tweaks'] ?? null) ? $dados['tweaks'] : [];
+
+        foreach ($tweaks as $i => $tweak) {
+            $texto = $textos[$tweak['key']] ?? null;
+
+            if (is_array($texto) && is_string($texto['content'] ?? null) && $texto['content'] !== '') {
+                $tweaks[$i]['content'] = $texto['content'];
+            }
+
+            if (is_array($texto) && is_string($texto['description'] ?? null) && $texto['description'] !== '') {
+                $tweaks[$i]['description'] = $texto['description'];
+            }
+
+            $categoria = $categorias[$tweak['category']] ?? null;
+
+            if (is_string($categoria) && $categoria !== '') {
+                $tweaks[$i]['category'] = $categoria;
+            }
+        }
+
+        return $tweaks;
+    }
+
     /**
      * As chaves dos tweaks que a tela oferece.
      *

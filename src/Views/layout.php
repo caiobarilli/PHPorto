@@ -164,6 +164,14 @@ use App\Http\Respond;
   .caixa small { display: block; color: var(--mut); font-size: 11.5px; line-height: 1.4; margin-top: 2px; }
   .caixa .nota { color: #92400e; }
   .caixa .aplicado { color: #15803d; font-weight: 600; }
+
+  .principais { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+  .principais > section { margin: 0; }
+  @media (max-width: 900px) { .principais { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .abas { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0 0 16px; }
+  .abas a { padding: 9px 14px; color: var(--mut); text-decoration: none; font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .abas a:hover { color: var(--ink); }
+  .abas a.ativa { color: var(--ink); font-weight: 600; border-bottom-color: var(--btn); }
   .caixa-mono { font: 12px/1.5 var(--mono); }
   .btn-campo { align-self: stretch; min-width: 0; padding: 0 18px; border-radius: 8px; flex: none; }
   .grupo { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; margin: 12px 0 0; }

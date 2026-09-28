@@ -122,7 +122,7 @@ src/             todo o código (PSR-4, App\)
     bootstrap.ps1  monta o ambiente das ações e despacha por nome
     actions/     as treze ações, um Invoke-*.ps1 cada
     lib/         primitivas do WinUtil (MIT — ver THIRD-PARTY.md)
-    config/      dns.json, preset.json, tweaks.json (upstream) e debloat.json
+    config/      dns.json, preset.json, tweaks.json (upstream); debloat.json e tweaks.pt-BR.json (do projeto)
     audit/       audit.ps1
   Wsl/           Runner, ScriptBuilder, Distro
 storage/         o banco e o contador de tokens errados — FORA do public
@@ -145,7 +145,7 @@ separado; ele não existe mais.
 | `/` | Home. Três botões: configuração, WSL e WIN. O do WSL desabilita quando o WSL não está instalado ou a distro do `.env` não aparece em `wsl -l -q`; o do WIN, enquanto o PowerShell elevado estiver desligado. Cada um diz qual é o motivo. |
 | `/config` | Mostra o banco ativo, alterna a API, liga o PowerShell elevado e restaura de fábrica. O `.env` **nunca é reescrito** pela web: o que a tela alterna vai para `storage/flags.json`. |
 | `/wsl` | O executor do WSL: entrada, saída, card de anexos e a tabela de registros. |
-| `/win` | As treze ações do Windows, uma seção cada, executadas por um PowerShell elevado. Nada roda com o interruptor da `/config` desligado. |
+| `/win` | As treze ações do Windows, executadas por um PowerShell elevado. Auditoria, memória, desempenho e processos ficam numa linha no topo; as outras nove em quatro abas — Sistema, Rede, Aplicativos e Serviços —, com a aba na URL (`/win?aba=rede`). Nada roda com o interruptor da `/config` desligado. |
 
 O botão do WSL responde **"dá para usar"**, não "está rodando agora". A VM dormir
 é normal e ela sobe sozinha no primeiro comando — desabilitar por isso mentiria.

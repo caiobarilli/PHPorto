@@ -281,8 +281,11 @@ final class Pages
         // apagar.
         $this->collectOrphanRuns();
 
+        // A aba vem da URL até no POST: o formulário posta para a URL da página.
+        $aba = WinTab::fromQuery($_GET['aba'] ?? null);
+
         if ($method === 'POST') {
-            $this->handleWinPost();
+            $this->handleWinPost($aba);
         }
 
         $rows   = [];
@@ -367,7 +370,7 @@ final class Pages
             debloatPackages: $debloat,
             debloatProblem: $debloatProblem,
             debloatChecked: $debloatMarcados,
-            tweaks: $tweaks,
+            tweaks: WinConfig::translateTweaks($tweaks),
             tweakPresets: $presets,
             tweaksChecked: $tweaksMarcados,
             tweaksMatch: WinConfig::matchPreset($tweaksMarcados, $presets),
@@ -377,6 +380,7 @@ final class Pages
             dnsProviders: $dnsProviders,
             dnsChosen: $dnsEscolha,
             dnsProblem: $dnsProblem,
+            tab: $aba,
         );
 
         Respond::html('PHPorto — Windows', Respond::render('win.php', $view));
@@ -390,14 +394,14 @@ final class Pages
      * tranca, e é ela que cobre quem escrever no arquivo de trabalho sem
      * passar por esta tela.
      */
-    private function handleWinPost(): never
+    private function handleWinPost(WinTab $aba): never
     {
         if (!Csrf::consume()) {
             $this->flash(
                 'Requisição recusada: o token desta página já foi usado, ou está ausente. '
                 . 'Cada envio vale uma execução — recarregue a página para enviar de novo.'
             );
-            Respond::redirect('/win');
+            Respond::redirect($aba->url());
         }
 
         $acaoBruta = $_POST['acao'] ?? '';
@@ -410,21 +414,21 @@ final class Pages
             } catch (Throwable $e) {
                 $this->flash('Falha ao limpar: ' . $e->getMessage());
             }
-            Respond::redirect('/win');
+            Respond::redirect($aba->url());
         }
 
         $acao = WinAction::tryFrom($acaoBruta);
 
         if ($acao === null) {
             $this->flash('Ação desconhecida.');
-            Respond::redirect('/win');
+            Respond::redirect($aba->url());
         }
 
         $blocked = $this->winBlockingReason();
 
         if ($blocked !== null) {
             $this->flash($blocked);
-            Respond::redirect('/win');
+            Respond::redirect($aba->url());
         }
 
         // Só os campos que chegaram como texto, ou como lista de textos — a
@@ -448,7 +452,7 @@ final class Pages
             $params = $acao->validate($entrada);
         } catch (InvalidArgumentException $e) {
             $this->flash($e->getMessage());
-            Respond::redirect('/win');
+            Respond::redirect($aba->url());
         }
 
         $this->saveWinSelection($acao, $params);
@@ -459,7 +463,7 @@ final class Pages
             // Corrida real: o interruptor foi desligado entre o GET que
             // desenhou o formulário e este POST.
             $this->flash('O PowerShell elevado não está mais de pé. Ligue de novo na configuração.');
-            Respond::redirect('/win');
+            Respond::redirect($aba->url());
         }
 
         $canal = new JobChannel($this->filesDir);
@@ -468,7 +472,7 @@ final class Pages
             $run = $canal->dispatch($acao, $params, $nonce, $this->config['winutil']['timeout']);
         } catch (RuntimeException $e) {
             $this->flash($e->getMessage());
-            Respond::redirect('/win');
+            Respond::redirect($aba->url());
         }
 
         $execution = new Execution(
@@ -498,7 +502,7 @@ final class Pages
         // histórico falhou, a ação ainda aconteceu e o estado ainda mudou.
         $this->applyWinState($acao, $params, $run->exitCode, $run->timedOut);
 
-        Respond::redirect('/win');
+        Respond::redirect($aba->url());
     }
 
     /**

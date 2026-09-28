@@ -1,0 +1,257 @@
+{
+    "categorias": {
+        "Essential Tweaks": "Ajustes essenciais",
+        "Advanced Tweaks - CAUTION": "Ajustes avançados — CUIDADO",
+        "Customize Preferences": "Preferências"
+    },
+    "tweaks": {
+        "WPFTweaksActivity": {
+            "content": "Histórico de atividades — desativar",
+            "description": "Apaga os documentos recentes, a área de transferência e o histórico do Executar."
+        },
+        "WPFTweaksHiber": {
+            "content": "Hibernação — desativar",
+            "description": "A hibernação é pensada para notebooks: grava o conteúdo da memória antes de desligar o PC. Na prática, não deveria ser usada."
+        },
+        "WPFTweaksWidget": {
+            "content": "Widgets — remover",
+            "description": "Remove os widgets do canto inferior esquerdo da barra de tarefas."
+        },
+        "WPFTweaksRevertStartMenu": {
+            "content": "Menu Iniciar no layout anterior — ativar",
+            "description": "Traz de volta o layout do Menu Iniciar de antes da liberação gradual do novo, no 25H2."
+        },
+        "WPFTweaksDisableStoreSearch": {
+            "content": "Sugestões da Microsoft Store na busca — desativar",
+            "description": "A busca do Menu Iniciar deixa de sugerir apps da Microsoft Store."
+        },
+        "WPFTweaksLocation": {
+            "content": "Rastreamento de localização — desativar",
+            "description": "Desativa o rastreamento de localização."
+        },
+        "WPFTweaksServices": {
+            "content": "Serviços — passar para manual",
+            "description": "Passa alguns serviços para inicialização manual e ajusta o valor SvcHostSplitThresholdInKB do registro à memória do sistema, o que pode reduzir bastante o número de processos svchost.exe."
+        },
+        "WPFTweaksBraveDebloat": {
+            "content": "Navegador Brave — limpar",
+            "description": "Desativa incômodos como Brave Rewards, Leo AI, carteira de cripto e VPN."
+        },
+        "WPFTweaksDisableWarningForUnsignedRdp": {
+            "content": "Aviso de arquivo RDP sem assinatura — desativar",
+            "description": "Desativa o aviso exibido ao abrir arquivos RDP sem assinatura, introduzido nas atualizações recentes do Windows 10 e 11."
+        },
+        "WPFTweaksEdgeDebloat": {
+            "content": "Microsoft Edge — limpar",
+            "description": "Desativa várias opções de telemetria, pop-ups e outros incômodos do Edge."
+        },
+        "WPFTweaksConsumerFeatures": {
+            "content": "Recursos de consumidor — desativar",
+            "description": "O Windows deixa de instalar sozinho jogos, apps de terceiros e atalhos da Windows Store para o usuário conectado. Alguns apps padrão ficam inacessíveis (por exemplo, o Vincular ao Celular)."
+        },
+        "WPFTweaksTelemetry": {
+            "content": "Telemetria — desativar",
+            "description": "Desativa a telemetria da Microsoft."
+        },
+        "WPFTweaksRemoveEdge": {
+            "content": "Microsoft Edge — remover",
+            "description": "Libera as restrições do desinstalador do Microsoft Edge e usa esse desinstalador para removê-lo."
+        },
+        "WPFTweaksDisableBitLocker": {
+            "content": "BitLocker — desativar",
+            "description": "Desativa o BitLocker."
+        },
+        "WPFTweaksUTC": {
+            "content": "Data e hora — relógio em UTC",
+            "description": "Essencial em computador com dual boot: acerta a sincronia do relógio com sistemas Linux."
+        },
+        "WPFTweaksRemoveOneDrive": {
+            "content": "Microsoft OneDrive — remover",
+            "description": "Nega a permissão de apagar os arquivos do usuário no OneDrive, remove o OneDrive com o desinstalador dele e depois restaura a permissão original."
+        },
+        "WPFTweaksRemoveHome": {
+            "content": "Início e Galeria do Explorador — desativar",
+            "description": "Remove o Início e a Galeria do Explorador de Arquivos e deixa Este Computador como padrão."
+        },
+        "WPFTweaksDisplay": {
+            "content": "Efeitos visuais — melhor desempenho",
+            "description": "Ajusta as preferências do sistema para desempenho. Também dá para fazer à mão pelo sysdm.cpl."
+        },
+        "WPFTweaksXboxRemoval": {
+            "content": "Xbox e componentes de jogos — remover",
+            "description": "Remove os serviços do Xbox, o app Xbox, a Game Bar e os componentes de autenticação ligados a eles."
+        },
+        "WPFTweaksDeBloat": {
+            "content": "Apps pré-instalados indesejados — remover",
+            "description": "Remove uma série de aplicativos que vêm instalados com o Windows e que a maioria das pessoas não quer no sistema."
+        },
+        "WPFTweaksRestorePoint": {
+            "content": "Ponto de restauração — criar",
+            "description": "Cria um ponto de restauração na hora, para o caso de precisar desfazer as mudanças do WinUtil."
+        },
+        "WPFTweaksEndTaskOnTaskbar": {
+            "content": "Finalizar tarefa com o botão direito — ativar",
+            "description": "Ativa a opção de finalizar a tarefa ao clicar com o botão direito num programa da barra de tarefas."
+        },
+        "WPFTweaksPowershell7Tele": {
+            "content": "Telemetria do PowerShell 7 — desativar",
+            "description": "Cria a variável de ambiente POWERSHELL_TELEMETRY_OPTOUT com valor 1, que diz ao PowerShell 7 para não enviar dados de telemetria."
+        },
+        "WPFTweaksStorage": {
+            "content": "Sensor de Armazenamento — desativar",
+            "description": "O Sensor de Armazenamento apaga arquivos temporários automaticamente."
+        },
+        "WPFTweaksWindowsAI": {
+            "content": "IA do Windows — desativar",
+            "description": "Remove ou desativa todos os recursos e pacotes de IA."
+        },
+        "WPFTweaksWPBT": {
+            "content": "Windows Platform Binary Table (WPBT) — desativar",
+            "description": "Com a WPBT ativa, o fabricante do computador pode executar programas na inicialização — software antirroubo, drivers — e até instalar software sem o consentimento do usuário. É um risco de segurança em potencial."
+        },
+        "WPFTweaksRazerBlock": {
+            "content": "Instalação automática de software da Razer — desativar",
+            "description": "Bloqueia TODAS as instalações de software da Razer. O hardware funciona sem software nenhum."
+        },
+        "WPFTweaksDisableNotifications": {
+            "content": "Notificações e calendário da bandeja do sistema — desativar",
+            "description": "Desativa todas as notificações, INCLUSIVE a do calendário."
+        },
+        "WPFTweaksBlockAdobeNet": {
+            "content": "Lista de bloqueio de URLs da Adobe — ativar",
+            "description": "Reduz interrupções bloqueando seletivamente as conexões com os servidores de ativação e telemetria da Adobe. Crédito: Ruddernation-Designs."
+        },
+        "WPFTweaksRightClickMenu": {
+            "content": "Menu do botão direito no layout anterior — ativar",
+            "description": "Restaura o menu de contexto clássico ao clicar com o botão direito no Explorador de Arquivos, no lugar da versão simplificada do Windows 11."
+        },
+        "WPFTweaksDiskCleanup": {
+            "content": "Limpeza de Disco — executar",
+            "description": "Roda a Limpeza de Disco na unidade C: e remove atualizações antigas do Windows."
+        },
+        "WPFTweaksDeleteTempFiles": {
+            "content": "Arquivos temporários — remover",
+            "description": "Apaga as pastas TEMP."
+        },
+        "WPFTweaksIPv46": {
+            "content": "IPv6 — preferir IPv4",
+            "description": "Preferir o IPv4 pode trazer ganho de latência e de segurança em redes privadas onde o IPv6 não está configurado."
+        },
+        "WPFTweaksTeredo": {
+            "content": "Teredo — desativar",
+            "description": "O túnel Teredo é um recurso do IPv6 que pode acrescentar latência, mas desativá-lo pode causar problemas em alguns jogos."
+        },
+        "WPFTweaksDisableIPv6": {
+            "content": "IPv6 — desativar",
+            "description": "Desativa o IPv6."
+        },
+        "WPFTweaksDisableBGapps": {
+            "content": "Apps em segundo plano — desativar",
+            "description": "Impede todos os apps da Microsoft Store de rodar em segundo plano, o que desde o Windows 11 teria de ser feito um a um."
+        },
+        "WPFTweaksDisableFSO": {
+            "content": "Otimizações de tela cheia — desativar",
+            "description": "Desativa as otimizações de tela cheia (FSO) em todos os aplicativos. ATENÇÃO: isso desativa o gerenciamento de cores na tela cheia exclusiva."
+        },
+        "WPFToggleDisableCrossDeviceResume": {
+            "content": "Retomar entre dispositivos",
+            "description": "Controla a função Retomar do Windows 11 24H2 em diante, que permite continuar no PC uma atividade começada no celular, e vice-versa."
+        },
+        "WPFToggleDetailedBSoD": {
+            "content": "Tela azul detalhada",
+            "description": "Ativado, a tela azul (BSOD) mostra mais informações."
+        },
+        "WPFToggleBatteryPercentage": {
+            "content": "Porcentagem da bateria na bandeja",
+            "description": "Ativado, mostra a porcentagem da bateria em número ao lado do ícone na bandeja do sistema."
+        },
+        "WPFToggleDarkMode": {
+            "content": "Tema escuro do Windows",
+            "description": "Liga ou desliga o modo escuro."
+        },
+        "WPFToggleShowExt": {
+            "content": "Extensões de arquivo no Explorador",
+            "description": "Ativado, as extensões de arquivo (como .txt e .jpg) ficam visíveis."
+        },
+        "WPFToggleHiddenFiles": {
+            "content": "Arquivos ocultos no Explorador",
+            "description": "Ativado, os arquivos ocultos aparecem."
+        },
+        "WPFToggleVerboseLogon": {
+            "content": "Logon detalhado",
+            "description": "Mostra mensagens detalhadas durante o login, para diagnóstico e solução de problemas."
+        },
+        "WPFToggleNewOutlook": {
+            "content": "Nova versão do Microsoft Outlook",
+            "description": "Desativado, remove a opção do novo Outlook, desliga a migração para ele e garante que o Outlook clássico seja o usado."
+        },
+        "WPFToggleScrollbars": {
+            "content": "Barras de rolagem sempre visíveis",
+            "description": "Ativado, as barras de rolagem ficam sempre à vista. Desativado, o Windows as esconde quando não estão em uso."
+        },
+        "WPFToggleMultiplaneOverlay": {
+            "content": "Multiplane Overlay",
+            "description": "Liga ou desliga o Multiplane Overlay, que às vezes causa problemas com placas de vídeo."
+        },
+        "WPFToggleMouseAcceleration": {
+            "content": "Aceleração do mouse",
+            "description": "Ativado, o movimento do cursor depende da velocidade com que o mouse é movido."
+        },
+        "WPFToggleNumLock": {
+            "content": "Num Lock ao ligar",
+            "description": "Define o estado da tecla Num Lock quando o computador liga."
+        },
+        "WPFToggleStandbyFix": {
+            "content": "Rede durante o sono S0",
+            "description": "Liga ou desliga a conexão de rede durante o sono S0."
+        },
+        "WPFToggleS3Sleep": {
+            "content": "Sono S3",
+            "description": "Alterna entre o Modern Standby e o sono S3."
+        },
+        "WPFToggleHideSettingsHome": {
+            "content": "Página inicial das Configurações",
+            "description": "Liga ou desliga a página inicial do app Configurações do Windows."
+        },
+        "WPFToggleBingSearch": {
+            "content": "Busca do Bing no Menu Iniciar",
+            "description": "Ativado, a busca do Menu Iniciar inclui resultados da web pelo Bing."
+        },
+        "WPFToggleLoginBlur": {
+            "content": "Desfoque acrílico na tela de logon",
+            "description": "Desativado, remove o efeito de desfoque acrílico do fundo da tela de login do Windows 10/11."
+        },
+        "WPFToggleStartMenuRecommendations": {
+            "content": "Recomendações do Menu Iniciar",
+            "description": "Desativado, o Menu Iniciar deixa de mostrar recomendações. ATENÇÃO: como efeito colateral, desativa também o Windows Spotlight na tela de bloqueio."
+        },
+        "WPFToggleStickyKeys": {
+            "content": "Teclas de Aderência",
+            "description": "Ativado, liga as Teclas de Aderência, recurso de acessibilidade que ajuda pessoas com deficiência física ou que querem reduzir lesão por esforço repetitivo."
+        },
+        "WPFToggleTaskbarAlignment": {
+            "content": "Ícones centralizados na barra de tarefas",
+            "description": "[Windows 11] Ativado, os itens da barra de tarefas ficam no centro; desativado, à esquerda."
+        },
+        "WPFToggleTaskbarSearch": {
+            "content": "Ícone de busca na barra de tarefas",
+            "description": "Ativado, o botão de busca fica na barra de tarefas."
+        },
+        "WPFToggleTaskView": {
+            "content": "Ícone da Visão de Tarefas na barra de tarefas",
+            "description": "Ativado, o botão da Visão de Tarefas aparece na barra de tarefas."
+        },
+        "WPFToggleGameMode": {
+            "content": "Modo de Jogo",
+            "description": "Ativado, o Windows prioriza o desempenho em jogos na distribuição dos recursos do sistema. Desative para produção de áudio e vídeo, para evitar interferência."
+        },
+        "WPFToggleLongPaths": {
+            "content": "Caminhos longos",
+            "description": "Ativa o suporte a caminhos de arquivo com mais de 260 caracteres."
+        },
+        "WPFTweaksDisableExplorerAutoDiscovery": {
+            "content": "Descoberta automática de pastas do Explorador — desativar",
+            "description": "O Explorador tenta adivinhar o tipo de cada pasta pelo conteúdo dela, o que deixa a navegação mais lenta. ATENÇÃO: desativa o agrupamento do Explorador de Arquivos."
+        }
+    }
+}

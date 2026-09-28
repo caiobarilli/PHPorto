@@ -52,6 +52,7 @@ final readonly class WinView
      * @param list<array{key: string, label: string, text: string}> $dnsProviders as opções de DNS
      * @param array<string, string> $dnsChosen   a última escolha de DNS guardada
      * @param string|null     $dnsProblem      por que a lista de DNS não pôde ser lida
+     * @param WinTab          $tab             a aba aberta
      */
     public function __construct(
         public array $rows,
@@ -78,6 +79,7 @@ final readonly class WinView
         public array $dnsProviders,
         public array $dnsChosen,
         public ?string $dnsProblem,
+        public WinTab $tab = WinTab::Sistema,
     ) {
     }
 }

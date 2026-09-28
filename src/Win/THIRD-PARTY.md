@@ -157,6 +157,15 @@ pior que a nossa. Quem torna o parâmetro obrigatório são as duas allowlists: 
 `config/debloat.json` é, portanto, do projeto e não do upstream: fica fora da
 tabela de hashes da seção 1, e pode ser editado.
 
+### A tradução dos tweaks
+
+`config/tweaks.pt-BR.json` também é do projeto, e também fica fora da tabela de
+hashes. Traz o rótulo e a descrição em português de cada um dos 62 tweaks que a
+tela oferece, e o nome das três categorias, pela chave do `tweaks.json`. O
+`tweaks.json` do upstream continua intocado — traduzir lá mudaria o hash que a
+tabela prova. Tweak sem tradução, ou arquivo ausente, aparece na tela com o
+texto original; só a exibição usa este arquivo, e nenhuma ação o lê.
+
 ### Uma divergência conhecida da regra de encoding
 
 `Invoke-Gdid.ps1` e `Invoke-Optimize.ps1` carregam bytes acima de `0x7F` e
