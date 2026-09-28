@@ -21,7 +21,7 @@ enum WinTab: string
     /** Install. */
     case Aplicativos = 'aplicativos';
 
-    /** Exporter, GPU, Optimize e GDID: o que roda em segundo plano. */
+    /** Exporter, GPU, Optimize, GDID e Performance: o que liga, desliga e tem volta. */
     case Servicos = 'servicos';
 
     /** O rótulo no menu. */

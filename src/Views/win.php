@@ -5,11 +5,11 @@ declare(strict_types=1);
 /**
  * A tela /win: as treze ações do Windows, uma seção cada.
  *
- * Quatro partes, nesta ordem: a última execução; as quatro ações de um clique
- * (auditoria, memória, desempenho, processos) na mesma linha; o menu de abas
- * com as outras nove; e o histórico. Só a aba aberta é desenhada, e o menu são
- * links para /win?aba=<nome>. Cada formulário posta para a URL da página, que
- * carrega a aba, e o 303 volta para ela.
+ * Quatro partes, nesta ordem: a última execução; as três ações de um clique
+ * (auditoria, memória, processos) na mesma linha; o menu de abas com as outras
+ * dez; e o histórico. Os quatro painéis são desenhados, só o da aba aberta
+ * visível, e o menu são links para /win?aba=<nome>#abas. Cada formulário posta
+ * para a URL da página, que carrega a aba, e o 303 volta para ela.
  *
  * Cada seção é um FORMULÁRIO PRÓPRIO, e não um formulário só com um seletor
  * de ação: o token vale por UMA execução, e formulários separados mandam só o
@@ -65,6 +65,12 @@ $botao = static function (string $acao, string $campo, string $valor, string $ro
         . '<input type="hidden" name="' . Respond::e($campo) . '" value="' . Respond::e($valor) . '">'
         . '<button type="submit" class="btn btn-sm' . ($secundario ? ' btn-ghost' : '') . '"' . $dis . '>'
         . Respond::e($rotulo) . '</button></form>';
+};
+
+/** Abre o painel de uma aba; o da aba que não está aberta nasce escondido. */
+$painel = static function (WinTab $aba) use ($view): string {
+    return '<div class="painel" id="painel-' . $aba->value . '" role="tabpanel"'
+        . ($aba === $view->tab ? '' : ' hidden') . '>';
 };
 
 $aplicado      = static fn (\App\Win\WinAction $a): bool => in_array($a->value, $view->appliedActions, true);
@@ -173,25 +179,6 @@ foreach ($view->tweaks as $tw) {
         <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Limpar RAM</button></div>
       </form>
     </section>
-    <section id="acao-performance">
-      <?= $secao('Desempenho', 'Troca o plano de energia do Windows.') ?>
-      <div class="row">
-        <?php if ($perfAplicado): ?>
-          <?= $botao('performance', 'State', 'off', 'Reverter', false) ?>
-          <?= $botao('performance', 'State', 'on', 'Ativar desempenho máximo', true) ?>
-        <?php else: ?>
-          <?= $botao('performance', 'State', 'on', 'Ativar desempenho máximo', false) ?>
-          <?= $botao('performance', 'State', 'off', 'Voltar ao Balanceado', true) ?>
-        <?php endif; ?>
-      </div>
-      <p class="dica">
-        <strong>Desempenho máximo</strong> deixa o processador sempre pronto para trabalhar no limite: a
-        máquina responde mais rápido, mas gasta mais energia e esquenta mais. Se o Windows não tiver esse
-        plano, usa o de alto desempenho. Em notebook, a bateria dura menos.
-        <strong><?= $perfAplicado ? 'Reverter' : 'Voltar ao Balanceado' ?></strong> devolve o plano padrão
-        do Windows, o Balanceado, que economiza quando a máquina está parada.
-      </p>
-    </section>
     <section id="acao-processes">
       <?= $secao('Processos', 'Lista os 30 processos que mais consomem RAM.') ?>
       <form method="post">
@@ -203,13 +190,13 @@ foreach ($view->tweaks as $tw) {
   </div>
 
   <!-- ------------------------------------------------------------- abas -->
-  <nav class="abas" aria-label="Grupos de ações">
+  <nav class="abas" id="abas" aria-label="Grupos de ações">
     <?php foreach (WinTab::cases() as $aba): ?>
-      <a href="<?= Respond::e($aba->url()) ?>"<?= $aba === $view->tab ? ' class="ativa" aria-current="page"' : '' ?>><?= Respond::e($aba->label()) ?></a>
+      <a href="<?= Respond::e($aba->url()) ?>#abas" data-aba="<?= Respond::e($aba->value) ?>"<?= $aba === $view->tab ? ' class="ativa" aria-current="page"' : '' ?>><?= Respond::e($aba->label()) ?></a>
     <?php endforeach; ?>
   </nav>
 
-  <?php if ($view->tab === WinTab::Sistema): ?>
+  <?= $painel(WinTab::Sistema) ?>
     <section id="acao-tweaks">
       <?= $secao('Ajustes', 'Os ajustes do WinUtil, lidos do src/Win/config/tweaks.json, com o texto em português do tweaks.pt-BR.json. Registro e serviços do Windows. Nenhum vem marcado: marque um a um, ou comece por um preset.') ?>
       <?php if ($view->tweaksProblem !== null): ?>
@@ -286,9 +273,9 @@ foreach ($view->tweaks as $tw) {
         </form>
       <?php endif; ?>
     </section>
-  <?php endif; ?>
+  </div>
 
-  <?php if ($view->tab === WinTab::Rede): ?>
+  <?= $painel(WinTab::Rede) ?>
     <section id="acao-dns">
       <?= $secao('DNS', 'Troca o DNS dos adaptadores de rede ativos. A lista vem do src/Win/config/dns.json.') ?>
       <?php if ($view->dnsProblem !== null): ?>
@@ -351,9 +338,9 @@ foreach ($view->tweaks as $tw) {
         </p>
       </form>
     </section>
-  <?php endif; ?>
+  </div>
 
-  <?php if ($view->tab === WinTab::Aplicativos): ?>
+  <?= $painel(WinTab::Aplicativos) ?>
     <section id="acao-install">
       <?= $secao('Instalar apps', 'Instala apps pelo winget, por ID, separados por vírgula. As caixas abaixo somam os principais ao campo.') ?>
       <form method="post">
@@ -385,9 +372,9 @@ foreach ($view->tweaks as $tw) {
         </p>
       </form>
     </section>
-  <?php endif; ?>
+  </div>
 
-  <?php if ($view->tab === WinTab::Servicos): ?>
+  <?= $painel(WinTab::Servicos) ?>
     <section id="acao-exporter">
       <?= $secao('Métricas do Windows', 'Instala e controla o windows_exporter, para o Prometheus, na porta 9182.') ?>
       <form method="post">
@@ -485,7 +472,26 @@ foreach ($view->tweaks as $tw) {
         </p>
       </form>
     </section>
-  <?php endif; ?>
+    <section id="acao-performance">
+      <?= $secao('Desempenho', 'Troca o plano de energia do Windows.') ?>
+      <div class="row">
+        <?php if ($perfAplicado): ?>
+          <?= $botao('performance', 'State', 'off', 'Reverter', false) ?>
+          <?= $botao('performance', 'State', 'on', 'Ativar desempenho máximo', true) ?>
+        <?php else: ?>
+          <?= $botao('performance', 'State', 'on', 'Ativar desempenho máximo', false) ?>
+          <?= $botao('performance', 'State', 'off', 'Voltar ao Balanceado', true) ?>
+        <?php endif; ?>
+      </div>
+      <p class="dica">
+        <strong>Desempenho máximo</strong> deixa o processador sempre pronto para trabalhar no limite: a
+        máquina responde mais rápido, mas gasta mais energia e esquenta mais. Se o Windows não tiver esse
+        plano, usa o de alto desempenho. Em notebook, a bateria dura menos.
+        <strong><?= $perfAplicado ? 'Reverter' : 'Voltar ao Balanceado' ?></strong> devolve o plano padrão
+        do Windows, o Balanceado, que economiza quando a máquina está parada.
+      </p>
+    </section>
+  </div>
 
   <!-- ------------------------------------------------------------- histórico -->
   <section>
@@ -699,6 +705,32 @@ foreach ($view->tweaks as $tw) {
         forcar = true;
         formOpt.submit();
       });
+    });
+  }
+
+  // ---- Abas: troca o painel sem recarregar -------------------------------
+  // SEGUNDA CAMADA, PARA CONFORTO: sem JavaScript, o link /win?aba=<nome>#abas
+  // recarrega a página já posicionada no menu. Aqui o clique só mostra o painel
+  // e troca a URL com replaceState, porque os formulários postam para a URL da
+  // página e o 303 volta para a aba que ela carrega.
+  var abas = document.getElementById('abas');
+
+  if (abas && window.history && history.replaceState) {
+    abas.addEventListener('click', function (ev) {
+      var link = ev.target.closest('a[data-aba]');
+      if (!link || ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) { return; }
+
+      var painel = document.getElementById('painel-' + link.getAttribute('data-aba'));
+      if (!painel) { return; }
+
+      ev.preventDefault();
+      document.querySelectorAll('.painel').forEach(function (p) { p.hidden = p !== painel; });
+      abas.querySelectorAll('a[data-aba]').forEach(function (a) {
+        var atual = a === link;
+        a.classList.toggle('ativa', atual);
+        if (atual) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
+      });
+      history.replaceState(null, '', link.getAttribute('href'));
     });
   }
 

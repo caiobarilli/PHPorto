@@ -154,32 +154,44 @@ it('a página tem quatro partes, nesta ordem: saída, principais, abas, históri
         ->and($ordem[0] < $ordem[1] && $ordem[1] < $ordem[2] && $ordem[2] < $ordem[3])->toBeTrue();
 });
 
-it('as quatro principais ficam na mesma linha: auditoria, memória, desempenho, processos', function () {
+/** O HTML do painel de uma aba, da abertura até o próximo painel ou o histórico. */
+function winPainel(string $html, WinTab $aba): string
+{
+    $ini = (int) strpos($html, '<div class="painel" id="painel-' . $aba->value . '"');
+    $fim = strpos($html, '<div class="painel"', $ini + 1);
+
+    return substr($html, $ini, ($fim === false ? (int) strpos($html, 'Histórico do Windows') : $fim) - $ini);
+}
+
+it('as três principais ficam na mesma linha: auditoria, memória, processos', function () {
     $html  = winHtml();
     $linha = substr($html, (int) strpos($html, '<div class="principais">'), (int) strpos($html, '<nav class="abas"') - (int) strpos($html, '<div class="principais">'));
 
-    expect(winAcoes($linha))->toBe(['audit', 'memory', 'performance', 'processes'])
+    expect(winAcoes($linha))->toBe(['audit', 'memory', 'processes'])
         ->and(winSecao($html, 'audit'))->toContain('>Explorar</button>');
 });
 
-it('cada aba desenha só as ações dela, e o histórico fica em todas', function (WinTab $aba, array $esperado) {
-    $html = winHtml(aba: $aba);
-
-    expect(array_slice(winAcoes($html), 4))->toBe($esperado)
-        ->and($html)->toContain('Histórico do Windows');
+it('cada painel tem só as ações da aba dele, e o desempenho mora em Serviços', function (WinTab $aba, array $esperado) {
+    expect(winAcoes(winPainel(winHtml(), $aba)))->toBe($esperado);
 })->with([
     'sistema'     => [WinTab::Sistema, ['tweaks', 'debloat']],
     'rede'        => [WinTab::Rede, ['dns', 'network']],
     'aplicativos' => [WinTab::Aplicativos, ['install']],
-    'serviços'    => [WinTab::Servicos, ['exporter', 'gpu', 'optimize', 'gdid']],
+    'serviços'    => [WinTab::Servicos, ['exporter', 'gpu', 'optimize', 'gdid', 'performance']],
 ]);
 
-it('as treze ações aparecem, cada uma numa aba só ou na linha das principais', function () {
-    $todas = [];
+it('os quatro painéis vêm na página, e só o da aba aberta está visível', function (WinTab $aberta) {
+    $html = winHtml(aba: $aberta);
+
     foreach (WinTab::cases() as $aba) {
-        $todas = [...$todas, ...array_slice(winAcoes(winHtml(aba: $aba)), 4)];
+        $abertura = '<div class="painel" id="painel-' . $aba->value . '" role="tabpanel"';
+        expect($html)->toContain($abertura . ($aba === $aberta ? '>' : ' hidden>'));
     }
-    $todas = [...$todas, 'audit', 'memory', 'performance', 'processes'];
+    expect($html)->toContain('Histórico do Windows');
+})->with(WinTab::cases());
+
+it('as treze ações aparecem uma vez só na página', function () {
+    $todas = winAcoes(winHtml());
     sort($todas);
 
     $enum = array_map(static fn (App\Win\WinAction $a): string => $a->value, App\Win\WinAction::cases());
@@ -193,8 +205,24 @@ it('o menu tem as quatro abas como links, e só a aberta é a atual', function (
 
     expect(substr_count($html, 'href="/win?aba='))->toBe(4)
         ->and(substr_count($html, 'aria-current="page"'))->toBe(1)
-        ->and($html)->toContain('<a href="/win?aba=rede" class="ativa" aria-current="page">Rede</a>')
-        ->and($html)->toContain('<a href="/win?aba=sistema">Sistema</a>');
+        ->and($html)->toContain('<a href="/win?aba=rede#abas" data-aba="rede" class="ativa" aria-current="page">Rede</a>')
+        ->and($html)->toContain('<a href="/win?aba=sistema#abas" data-aba="sistema">Sistema</a>');
+});
+
+it('sem JavaScript, o link da aba recarrega posicionado no menu, que tem o id da âncora', function () {
+    $html = winHtml();
+
+    expect($html)->toContain('<nav class="abas" id="abas"')
+        ->and(preg_match_all('~href="/win\?aba=[a-z]+#abas"~', $html))->toBe(4);
+});
+
+it('o JavaScript das abas é segunda camada e mantém a aba na URL com replaceState', function () {
+    $html = winHtml();
+    $js   = substr($html, (int) strpos($html, '// ---- Abas:'), 1500);
+
+    expect($js)->toContain('SEGUNDA CAMADA, PARA CONFORTO')
+        ->and($js)->toContain("history.replaceState(null, '', link.getAttribute('href'))")
+        ->and($js)->toContain('ev.preventDefault()');
 });
 
 it('A NUMERAÇÃO [1] A [13] SUMIU da tela', function () {

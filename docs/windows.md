@@ -47,21 +47,25 @@ terminar e grava a execução no histórico.
 A tela tem quatro partes, nesta ordem:
 
 1. a última execução do Windows;
-2. as quatro ações de um clique: **Auditoria**, **Memória**, **Desempenho** e
-   **Processos**;
-3. as outras nove ações, em quatro abas;
+2. as três ações de um clique, sem parâmetro e sem estado: **Auditoria**,
+   **Memória** e **Processos**;
+3. as outras dez ações, em quatro abas;
 4. o histórico do Windows.
 
 A aba aberta fica na URL, em `/win?aba=sistema`, `rede`, `aplicativos` ou
 `servicos`. Depois de executar, a tela volta para a mesma aba. Aba desconhecida
 abre Sistema.
 
+Trocar de aba não volta ao topo da página. Com JavaScript, o painel troca sem
+recarregar e a URL acompanha a aba. Sem JavaScript, o link recarrega a página
+já posicionada no menu de abas.
+
 | aba | ações |
 | --- | --- |
 | Sistema | Ajustes, Remover apps |
 | Rede | DNS, Captura de rede |
 | Aplicativos | Instalar apps |
-| Serviços | Métricas do Windows, Métricas da GPU, Otimizar, Dispositivos conectados (GDID) |
+| Serviços | Métricas do Windows, Métricas da GPU, Otimizar, Dispositivos conectados (GDID), Desempenho |
 
 ## As ações
 
@@ -80,12 +84,6 @@ retorna antes de abri-la.
 
 Limpa a RAM com o WinMemoryCleaner, baixado para `src/Win/tools/` na primeira
 execução.
-
-### Desempenho (`performance`)
-
-**Ativar desempenho máximo** troca o plano de energia para o Desempenho Máximo,
-ou para o Alto Desempenho quando o Windows não tem o primeiro. **Voltar ao
-Balanceado** devolve o plano padrão do Windows.
 
 ### Processos (`processes`)
 
@@ -182,6 +180,12 @@ só lê. **Desligar** (`disable`) guarda o tipo de início original dos serviço
 em `runtime/gdid-state.json` e **corta as notificações do Windows** — os
 domínios do WNS entram no bloqueio, e apps da Store param de receber aviso.
 **Religar** (`enable`) devolve tudo.
+
+### Desempenho (`performance`)
+
+**Ativar desempenho máximo** troca o plano de energia para o Desempenho Máximo,
+ou para o Alto Desempenho quando o Windows não tem o primeiro. **Voltar ao
+Balanceado** devolve o plano padrão do Windows.
 
 ## Reversíveis e não reversíveis
 

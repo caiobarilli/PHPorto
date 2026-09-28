@@ -165,7 +165,7 @@ use App\Http\Respond;
   .caixa .nota { color: #92400e; }
   .caixa .aplicado { color: #15803d; font-weight: 600; }
 
-  .principais { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+  .principais { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
   .principais > section { margin: 0; }
   @media (max-width: 900px) { .principais { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .abas { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 0 0 16px; }
