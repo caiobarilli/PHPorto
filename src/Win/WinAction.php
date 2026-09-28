@@ -161,12 +161,12 @@ enum WinAction: string
      *             -Preset. O payload guarda as chaves aplicadas; ver
      *             mergeState().
      *   optimize  -Undo, e ele NÃO precisa de parâmetro: o Invoke-Optimize lê
-     *             o próprio C:\WinUtil\optimize-state.json e recusa sem ele. O
+     *             o próprio runtime/optimize-state.json e recusa sem ele. O
      *             payload guarda o preset só para a tela poder dizer o que
      *             será revertido.
      *   gdid      'disable' aplica e 'enable' reverte — não há -Undo, são duas
      *             subações. O estado real também vive em
-     *             C:\WinUtil\gdid-state.json, escrito pela própria ação.
+     *             runtime/gdid-state.json, escrito pela própria ação.
      *   performance  -State on aplica, -State off reverte ao Balanceado.
      *
      * POR QUE O ESTADO NÃO É LIDO DA MÁQUINA, apesar de optimize e gdid

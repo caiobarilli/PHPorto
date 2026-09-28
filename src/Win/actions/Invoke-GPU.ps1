@@ -1,7 +1,7 @@
 function Invoke-GPU {
     param([string]$SubAction)
 
-    $installDir = 'C:\WinUtil\nvidia_gpu_exporter'
+    $installDir = Join-Path $runtime 'nvidia_gpu_exporter'
     $exePath    = Join-Path $installDir 'nvidia_gpu_exporter.exe'
     $taskName   = 'nvidia_gpu_exporter'
     $port       = 9835

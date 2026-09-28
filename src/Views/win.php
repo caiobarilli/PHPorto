@@ -329,7 +329,7 @@ foreach ($view->tweaks as $tw) {
       <?php endif; ?>
     </section>
     <section id="acao-network">
-      <?= $secao('Captura de rede', 'Captura pacotes com o TShark e gera relatório em C:\WinUtil\Reports.') ?>
+      <?= $secao('Captura de rede', 'Captura pacotes com o TShark e gera relatório em runtime/Reports, na pasta do projeto.') ?>
       <form method="post">
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="network">

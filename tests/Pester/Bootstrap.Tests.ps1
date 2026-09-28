@@ -196,6 +196,17 @@ Describe 'bootstrap - as acoes migradas' {
 
         $culpados | Should -BeNullOrEmpty -Because 'no worker -NonInteractive nao ha quem digite'
     }
+
+    It 'nenhuma acao grava em C:\WinUtil: o destino e'' $runtime' {
+        $culpados = @()
+
+        Get-ChildItem -Path (Join-Path $Script:PastaWin 'actions') -Filter 'Invoke-*.ps1' -File |
+            ForEach-Object {
+                if ((Get-Content -Path $_.FullName -Raw) -match 'C:\\WinUtil') { $culpados += $_.Name }
+            }
+
+        $culpados | Should -BeNullOrEmpty
+    }
 }
 
 # ==============================================================
@@ -236,6 +247,11 @@ Describe 'bootstrap - o ambiente que as acoes assumem' {
 
     It '$root tem a pasta tools — e o Invoke-Memory depende disso' {
         Test-Path (Join-Path $global:root 'tools') | Should -BeTrue
+    }
+
+    It '$runtime aponta para runtime/ na raiz do projeto, e a pasta existe no clone' {
+        $global:runtime | Should -Be (Join-Path $Script:RaizProjeto 'runtime')
+        Test-Path (Join-Path $global:runtime '.gitkeep') | Should -BeTrue
     }
 
     It '$sync.configs tem as quatro chaves: as tres do upstream e o debloat' {

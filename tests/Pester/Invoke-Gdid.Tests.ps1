@@ -21,7 +21,7 @@ BeforeAll {
     # Set-WinUtilRegistry) and every action.
     . (Join-Path $Script:PastaWin 'bootstrap.ps1')
 
-    $Script:StateFile = 'C:\WinUtil\gdid-state.json'
+    $Script:StateFile = Join-Path $global:runtime 'gdid-state.json'
     $Script:MarkStart = '#GDID-BLOCKER START'
     $Script:MarkEnd   = '#GDID-BLOCKER END'
     $Script:AnsiEnc   = [System.Text.Encoding]::GetEncoding(
@@ -262,7 +262,7 @@ Describe "Invoke-Gdid - SubAction disable" {
         $output | Should -Match '\[ WARNING \].*push notifications'
     }
 
-    It "saves the original startup types to C:\WinUtil\gdid-state.json" {
+    It "saves the original startup types to runtime\gdid-state.json" {
         Mock Get-Service {
             [PSCustomObject]@{ Name = 'CDPSvc'; Status = 'Running'; StartType = 'Automatic' }
         } -ParameterFilter { $Name -eq 'CDPSvc' }

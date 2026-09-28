@@ -47,10 +47,9 @@ function Invoke-Exporter {
             return
         }
 
-        $winUtilDir = 'C:\WinUtil'
-        $msiPath    = Join-Path $winUtilDir 'windows_exporter.msi'
-        if (-not (Test-Path $winUtilDir)) {
-            New-Item -ItemType Directory -Path $winUtilDir -Force | Out-Null
+        $msiPath = Join-Path $runtime 'windows_exporter.msi'
+        if (-not (Test-Path $runtime)) {
+            New-Item -ItemType Directory -Path $runtime -Force | Out-Null
         }
 
         Write-Status INFO "Fetching latest release of windows_exporter..."

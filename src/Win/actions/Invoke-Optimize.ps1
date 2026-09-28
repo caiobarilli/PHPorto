@@ -6,8 +6,8 @@ function Invoke-Optimize {
         [string]$KeepUser
     )
 
-    $stateFile = 'C:\WinUtil\optimize-state.json'
-    $stateDir  = 'C:\WinUtil'
+    $stateFile = Join-Path $runtime 'optimize-state.json'
+    $stateDir  = $runtime
 
     $sshProcesses = @(
         'LogonUI', 'SearchHost', 'StartMenuExperienceHost',

@@ -31,7 +31,7 @@ it('tweaks com -Undo esquece a linha em vez de gravar "não aplicado"', function
 
 it('optimize segue a mesma regra do tweaks', function () {
     // O -Undo do Invoke-Optimize NÃO precisa de parâmetro: ele lê o próprio
-    // C:\WinUtil\optimize-state.json e recusa sem ele. O preset fica no
+    // runtime/optimize-state.json e recusa sem ele. O preset fica no
     // payload só para a tela poder dizer o que será revertido.
     expect(WinAction::Optimize->stateChange(['Preset' => 'ssh'])->applied)->toBeTrue()
         ->and(WinAction::Optimize->stateChange(['Preset' => 'ssh'])->payload)->toBe(['Preset' => 'ssh'])
@@ -46,7 +46,7 @@ it('optimize sem preset guarda payload vazio, sem inventar valor', function () {
 
 it('gdid aplica com disable e reverte com enable, sem -Undo', function () {
     // Não há -Undo: são duas subações. O estado real também vive em
-    // C:\WinUtil\gdid-state.json, escrito pela própria ação.
+    // runtime/gdid-state.json, escrito pela própria ação.
     expect(WinAction::Gdid->stateChange(['SubAction' => 'disable'])->applied)->toBeTrue()
         ->and(WinAction::Gdid->stateChange(['SubAction' => 'enable'])->applied)->toBeFalse();
 });

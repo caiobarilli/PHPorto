@@ -127,6 +127,7 @@ src/             todo o código (PSR-4, App\)
   Wsl/           Runner, ScriptBuilder, Distro
 storage/         o banco e o contador de tokens errados — FORA do public
 files/           cmd.sh descartável — FORA do public
+runtime/         o que as ações do Windows criam enquanto rodam — FORA do public
 token.php        gera o token de acesso: php token.php
 tests/
   Pester/        testes PowerShell das ações

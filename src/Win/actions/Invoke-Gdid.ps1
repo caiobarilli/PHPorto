@@ -1,7 +1,7 @@
 function Invoke-Gdid {
     param([string]$SubAction)
 
-    $stateDir  = 'C:\WinUtil'
+    $stateDir  = $runtime
     $stateFile = Join-Path $stateDir 'gdid-state.json'
     $hostsBak  = Join-Path $stateDir 'gdid-hosts.backup'
     $hostsFile = Join-Path $env:WINDIR 'System32\drivers\etc\hosts'

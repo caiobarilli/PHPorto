@@ -45,8 +45,8 @@ function Invoke-Network {
         return
     }
 
-    $capturesDir = 'C:\WinUtil\Captures'
-    $reportsDir  = 'C:\WinUtil\Reports'
+    $capturesDir = Join-Path $runtime 'Captures'
+    $reportsDir  = Join-Path $runtime 'Reports'
     foreach ($d in @($capturesDir, $reportsDir)) {
         if (-not (Test-Path $d)) {
             New-Item -ItemType Directory -Path $d -Force | Out-Null

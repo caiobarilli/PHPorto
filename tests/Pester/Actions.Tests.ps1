@@ -449,7 +449,7 @@ Describe "Execution with Mock" {
         }
 
         It "-Undo restores services from state file and deletes it" {
-            Mock Test-Path { $true } -ParameterFilter { $Path -eq 'C:\WinUtil\optimize-state.json' }
+            Mock Test-Path { $true } -ParameterFilter { $Path -eq (Join-Path $global:runtime 'optimize-state.json') }
             Mock Get-Content { '{"services":{"WSearch":"Automatic","ClickToRunSvc":"Automatic"}}' }
             Mock Set-Service   { }
             Mock Start-Service { }
@@ -461,7 +461,7 @@ Describe "Execution with Mock" {
         }
 
         It "-Undo with missing state file emits [ ERROR ]" {
-            Mock Test-Path { $false } -ParameterFilter { $Path -eq 'C:\WinUtil\optimize-state.json' }
+            Mock Test-Path { $false } -ParameterFilter { $Path -eq (Join-Path $global:runtime 'optimize-state.json') }
             $output = (Invoke-Optimize -Undo) 6>&1 | Out-String
             $output | Should -Match '\[ ERROR \]'
         }

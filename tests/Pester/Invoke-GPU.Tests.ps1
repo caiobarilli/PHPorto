@@ -233,7 +233,7 @@ Describe "Invoke-GPU - SubAction install" {
         Mock Invoke-WebRequest  { }
         Mock Expand-Archive     { }
         Mock Get-ChildItem      {
-            [PSCustomObject]@{ FullName = 'C:\WinUtil\nvidia_gpu_exporter\nvidia_gpu_exporter.exe' }
+            [PSCustomObject]@{ FullName = (Join-Path $global:runtime 'nvidia_gpu_exporter\nvidia_gpu_exporter.exe') }
         } -ParameterFilter { $Filter -eq '*.exe' }
         Mock Remove-Item        { }
         Mock Get-Process        { $null } -ParameterFilter { $Name -eq 'nvidia_gpu_exporter' }

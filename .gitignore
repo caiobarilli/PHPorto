@@ -31,6 +31,11 @@
 /files/*
 !/files/.gitkeep
 
+# O que as ações do Windows criam enquanto rodam: estado do optimize e do gdid,
+# capturas, o exportador da GPU. Nasce sozinha e some sem perda de código.
+/runtime/*
+!/runtime/.gitkeep
+
 # Caches das ferramentas.
 /.phpstan-cache/
 /.php-cs-fixer.cache

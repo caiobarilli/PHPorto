@@ -106,6 +106,16 @@ function Test-PhportoElevado {
 $global:root = $PSScriptRoot
 
 # ============================================================
+# RUNTIME — onde as acoes gravam o que criam enquanto rodam
+# ============================================================
+#
+# <raiz do projeto>\runtime: estado do optimize e do gdid, capturas e
+# relatorios do network, o MSI do windows_exporter e o exportador da GPU.
+# Cada acao cria a pasta que usa quando ela falta.
+
+$global:runtime = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'runtime'
+
+# ============================================================
 # CONFIGS — os JSON que as acoes leem
 # ============================================================
 #
