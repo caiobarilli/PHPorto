@@ -13,12 +13,12 @@ use App\Win\WinAction;
  * errado.
  */
 
-it('tem as quatorze ações do menu, na ordem do menu', function () {
+it('tem as quinze ações do menu, na ordem do menu', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
-            'gdid', 'rdp',
+            'gdid', 'rdp', 'sunshine',
         ]);
 });
 
@@ -403,6 +403,36 @@ it('rdp h264-on/h264-off movem o PendingReboot, não o Applied', function () {
         ->and(WinAction::Rdp->stateChange(['SubAction' => 'h264-off'])?->applied)->toBeFalse()
         ->and(WinAction::Rdp->stateChange(['SubAction' => 'h264-off'])?->scope)->toBe(\App\Domain\WinStateScope::PendingReboot);
 });
+
+// ---------------------------------------------------------------- sunshine
+
+it('sunshine exige subação', function () {
+    WinAction::Sunshine->validate([]);
+})->throws(InvalidArgumentException::class);
+
+it('sunshine aceita as seis subações, na grafia da lista', function (string $sub) {
+    expect(WinAction::Sunshine->validate(['SubAction' => $sub]))->toBe(['SubAction' => $sub]);
+})->with(['status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close']);
+
+it('sunshine recusa subação que não existe, o pareamento inclusive', function (string $sub) {
+    // O pareamento é passo humano, com PIN, e não é uma subação da ferramenta.
+    WinAction::Sunshine->validate(['SubAction' => $sub]);
+})->with(['pair', 'pin', 'uninstall'])->throws(InvalidArgumentException::class, 'Valor inválido para SubAction.');
+
+it('sunshine devolve a grafia da LISTA, não a que veio no POST', function () {
+    expect(WinAction::Sunshine->validate(['SubAction' => 'FIREWALL-OPEN']))->toBe(['SubAction' => 'firewall-open']);
+});
+
+it('sunshine: só start e stop movem o estado do serviço, no Applied', function () {
+    expect(WinAction::Sunshine->stateChange(['SubAction' => 'start'])?->applied)->toBeTrue()
+        ->and(WinAction::Sunshine->stateChange(['SubAction' => 'start'])?->scope)->toBe(\App\Domain\WinStateScope::Applied)
+        ->and(WinAction::Sunshine->stateChange(['SubAction' => 'stop'])?->applied)->toBeFalse()
+        ->and(WinAction::Sunshine->stateChange(['SubAction' => 'stop'])?->scope)->toBe(\App\Domain\WinStateScope::Applied);
+});
+
+it('sunshine: install, firewall e status não afirmam nada sobre estado', function (string $sub) {
+    expect(WinAction::Sunshine->stateChange(['SubAction' => $sub]))->toBeNull();
+})->with(['status', 'install', 'firewall-open', 'firewall-close']);
 
 // ---------------------------------------------------------------- optimize
 

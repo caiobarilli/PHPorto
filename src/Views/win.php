@@ -3,11 +3,11 @@
 declare(strict_types=1);
 
 /**
- * A tela /win: as quatorze ações do Windows, uma seção cada.
+ * A tela /win: as quinze ações do Windows, uma seção cada.
  *
  * Quatro partes, nesta ordem: a última execução; as três ações de um clique
  * (auditoria, memória, processos) na mesma linha; o menu de abas com as outras
- * onze; e o histórico. Os cinco painéis são desenhados, só o da aba aberta
+ * doze; e o histórico. Os cinco painéis são desenhados, só o da aba aberta
  * visível, e o menu são links para /win?aba=<nome>#abas. Cada formulário posta
  * para a URL da página, que carrega a aba, e o 303 volta para ela.
  *
@@ -80,6 +80,7 @@ $optAplicado   = $aplicado(\App\Win\WinAction::Optimize);
 $gdidAplicado  = $aplicado(\App\Win\WinAction::Gdid);
 $rdpAplicado   = $aplicado(\App\Win\WinAction::Rdp);
 $rdpPendente   = in_array(\App\Win\WinAction::Rdp->value, $view->pendingRebootActions, true);
+$sunAplicado   = $aplicado(\App\Win\WinAction::Sunshine);
 
 $grupos = [];
 foreach ($view->tweaks as $tw) {
@@ -536,9 +537,37 @@ foreach ($view->tweaks as $tw) {
         pendente de reinício até você reiniciar ou reverter.
       </p>
     </section>
-    <section id="acesso-sunshine">
-      <?= $secao('Sunshine', 'Transmitir esta máquina pelo Sunshine, com baixa latência.') ?>
-      <p class="empty">Em breve.</p>
+    <section id="acao-sunshine">
+      <?= $secao('Sunshine', 'Transmitir esta máquina para outro dispositivo, com o app Moonlight, com baixa latência.') ?>
+      <div class="row">
+        <?= $botao('sunshine', 'SubAction', 'status', 'Ver o estado', true) ?>
+        <?= $botao('sunshine', 'SubAction', 'install', 'Instalar', false) ?>
+      </div>
+      <div class="row">
+        <?php if ($sunAplicado): ?>
+          <?= $botao('sunshine', 'SubAction', 'stop', 'Parar serviço', false) ?>
+          <?= $botao('sunshine', 'SubAction', 'start', 'Iniciar serviço', true) ?>
+        <?php else: ?>
+          <?= $botao('sunshine', 'SubAction', 'start', 'Iniciar serviço', false) ?>
+          <?= $botao('sunshine', 'SubAction', 'stop', 'Parar serviço', true) ?>
+        <?php endif; ?>
+      </div>
+      <div class="row">
+        <?= $botao('sunshine', 'SubAction', 'firewall-open', 'Abrir a porta no firewall', true) ?>
+        <?= $botao('sunshine', 'SubAction', 'firewall-close', 'Fechar a porta', true) ?>
+      </div>
+      <div class="alert alert-note">
+        Depois de instalar e iniciar o serviço, o pareamento é feito em
+        <a href="https://localhost:47990" target="_blank" rel="noopener">https://localhost:47990</a>,
+        digitando um PIN que aparece lá. <strong>O PHPorto não faz esse passo</strong>: não pede o PIN e
+        não guarda o PIN em lugar nenhum.
+      </div>
+      <p class="dica">
+        <strong>Instalar</strong> baixa o Sunshine pelo winget. <strong>Iniciar</strong> e
+        <strong>Parar</strong> ligam e desligam o serviço, valendo na hora. <strong>Abrir a porta</strong>
+        libera a porta 47990 no firewall do Windows para outro dispositivo alcançar esta máquina;
+        <strong>Fechar</strong> desfaz. Comece por <strong>Ver o estado</strong>, que só lê.
+      </p>
     </section>
   </div>
 

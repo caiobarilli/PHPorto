@@ -238,11 +238,31 @@ Describe 'worker - o arquivo de conclusao' {
 # desta.
 Describe 'worker - a allowlist do lado elevado' {
 
-    It 'conhece as quatorze acoes' {
+    It 'conhece as quinze acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'install',
-            'memory', 'network', 'optimize', 'performance', 'processes', 'rdp', 'tweaks'
+            'memory', 'network', 'optimize', 'performance', 'processes', 'rdp', 'sunshine', 'tweaks'
         )
+    }
+
+    It 'aceita sunshine com <_>' -ForEach @('status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close') {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'sunshine'
+            params = [PSCustomObject]@{ SubAction = $_ }
+        }
+
+        (Test-Job $job).params['SubAction'] | Should -Be $_
+    }
+
+    It 'recusa uma subacao que o sunshine nao tem (pareamento inclusive)' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'sunshine'
+            params = [PSCustomObject]@{ SubAction = 'pair' }
+        }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage "valor fora do conjunto em 'SubAction'"
     }
 
     It 'aceita rdp com <_>' -ForEach @('status', 'on', 'off', 'h264-on', 'h264-off') {

@@ -8,13 +8,14 @@ use App\Domain\Execution;
 use App\Win\ElevationState;
 
 /**
- * A tela /win: as quatorze seções das ações do Windows.
+ * A tela /win: as quinze seções das ações do Windows.
  *
- * QUATORZE, e a contagem tem história: a tela nasceu com doze porque o README
- * do winutil-cli listava onze e o código tinha gpu — a tela seguiu o código. A
+ * QUINZE, e a contagem tem história: a tela nasceu com doze porque o README do
+ * winutil-cli listava onze e o código tinha gpu — a tela seguiu o código. A
  * décima terceira é o gdid, que existia em src/Win/actions desde a migração mas
  * só passou a ser alcançável quando entrou nas DUAS allowlists. A décima quarta
- * é o rdp, que nasceu aqui, na aba Acesso Remoto.
+ * e a décima quinta são o rdp e o sunshine, que nasceram aqui, na aba Acesso
+ * Remoto.
  *
  * $blocked é o que impede executar agora, e tem mais de uma causa: o checkout
  * pode estar sem os .ps1 de src/Win, ou o PowerShell elevado pode estar

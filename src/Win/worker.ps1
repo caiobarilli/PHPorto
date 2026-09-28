@@ -163,6 +163,10 @@ $ALLOWLIST = @{
     'rdp'         = @{
         'SubAction' = @{ tipo = 'set'; valores = @('status', 'on', 'off', 'h264-on', 'h264-off') }
     }
+
+    'sunshine'    = @{
+        'SubAction' = @{ tipo = 'set'; valores = @('status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close') }
+    }
 }
 
 # ============================================================

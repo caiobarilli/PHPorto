@@ -9,7 +9,7 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * As quatorze ações do Windows, e a allowlist do lado PHP.
+ * As quinze ações do Windows, e a allowlist do lado PHP.
  *
  * ESTA NÃO É A TRANCA. A tranca é a allowlist do worker.ps1, que roda em
  * integridade Alta e é a última a validar antes de executar. Esta classe é a
@@ -27,7 +27,7 @@ use RuntimeException;
  * paridade em tests/Unit/WinActionTest.php, que lê o worker.ps1 e compara as
  * duas listas.
  *
- * A ORDEM DOS CASOS É A DO MENU, de [1] a [14], e a tela repete essa ordem nas
+ * A ORDEM DOS CASOS É A DO MENU, de [1] a [15], e a tela repete essa ordem nas
  * seções dela.
  *
  * Os nomes dos parâmetros devolvidos por validate() são os nomes EXATOS dos
@@ -52,6 +52,7 @@ enum WinAction: string
     case Gpu = 'gpu';
     case Gdid = 'gdid';
     case Rdp = 'rdp';
+    case Sunshine = 'sunshine';
 
     /**
      * Teto de bytes de qualquer campo de texto livre.
@@ -112,6 +113,16 @@ enum WinAction: string
      */
     public const RDP_SUBACTIONS = ['status', 'on', 'off', 'h264-on', 'h264-off'];
 
+    /**
+     * O sunshine lê, instala pelo winget, sobe e para o serviço, e abre/fecha a
+     * porta no firewall.
+     *
+     * O pareamento NÃO está aqui: ele exige um PIN digitado na interface do
+     * próprio Sunshine, com validade curta, e isso é passo humano. Só start e
+     * stop mexem no estado do serviço; ver stateChange().
+     */
+    public const SUNSHINE_SUBACTIONS = ['status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close'];
+
     /** run gera a auditoria; open abre a pasta do log no Explorer. Sem subação, run. */
     public const AUDIT_SUBACTIONS = ['run', 'open'];
 
@@ -154,6 +165,7 @@ enum WinAction: string
             self::Gpu       => ['SubAction' => $this->pick($input, 'SubAction', self::GPU_SUBACTIONS, obrigatorio: true)],
             self::Gdid      => ['SubAction' => $this->pick($input, 'SubAction', self::GDID_SUBACTIONS, obrigatorio: true)],
             self::Rdp       => ['SubAction' => $this->pick($input, 'SubAction', self::RDP_SUBACTIONS, obrigatorio: true)],
+            self::Sunshine  => ['SubAction' => $this->pick($input, 'SubAction', self::SUNSHINE_SUBACTIONS, obrigatorio: true)],
             self::Optimize  => $this->optimize($input),
         };
     }
@@ -166,7 +178,7 @@ enum WinAction: string
      * Null NÃO é "não aplicado": quem recebe null não mexe no que está
      * guardado. Ver WinStateChange.
      *
-     * CINCO AÇÕES SÃO REVERSÍVEIS, e cada uma diz a reversão de um jeito:
+     * SEIS AÇÕES SÃO REVERSÍVEIS, e cada uma diz a reversão de um jeito:
      *
      *   tweaks    -Undo com a lista dos tweaks a reverter (-Items) ou um
      *             -Preset. O payload guarda as chaves aplicadas; ver
@@ -183,6 +195,9 @@ enum WinAction: string
      *             valendo na hora; 'h264-on'/'h264-off' ligam e revertem o vídeo
      *             H.264/UDP no PendingReboot, valendo só depois de reiniciar.
      *             Duas dimensões, dois escopos, cada subação movendo o seu.
+     *   sunshine  'start' sobe o serviço e 'stop' o para, no Applied. install,
+     *             firewall e status não afirmam estado; o pareamento é passo
+     *             humano e nem chega aqui.
      *
      * POR QUE O ESTADO NÃO É LIDO DA MÁQUINA, apesar de optimize e gdid
      * guardarem arquivo próprio e o plano de energia ser consultável por
@@ -233,6 +248,15 @@ enum WinAction: string
                 'h264-on'  => new WinStateChange(applied: true, scope: WinStateScope::PendingReboot),
                 'h264-off' => new WinStateChange(applied: false, scope: WinStateScope::PendingReboot),
                 default    => null,
+            },
+
+            // Só o estado do serviço vira 'aplicado': start liga, stop esquece.
+            // install, firewall e status não afirmam nada. O pareamento é passo
+            // humano e nem chega aqui.
+            self::Sunshine => match ($params['SubAction'] ?? '') {
+                'start' => new WinStateChange(applied: true),
+                'stop'  => new WinStateChange(applied: false),
+                default => null,
             },
 
             default => null,

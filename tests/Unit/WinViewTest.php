@@ -180,7 +180,7 @@ it('cada painel tem só as ações da aba dele, e o desempenho mora em Serviços
     'rede'          => [WinTab::Rede, ['dns', 'network']],
     'aplicativos'   => [WinTab::Aplicativos, ['install']],
     'serviços'      => [WinTab::Servicos, ['exporter', 'gpu', 'optimize', 'gdid', 'performance']],
-    'acesso remoto' => [WinTab::AcessoRemoto, ['rdp']],
+    'acesso remoto' => [WinTab::AcessoRemoto, ['rdp', 'sunshine']],
 ]);
 
 it('os cinco painéis vêm na página, e só o da aba aberta está visível', function (WinTab $aberta) {
@@ -193,7 +193,7 @@ it('os cinco painéis vêm na página, e só o da aba aberta está visível', fu
     expect($html)->toContain('Histórico do Windows');
 })->with(WinTab::cases());
 
-it('as quatorze ações aparecem uma vez só na página', function () {
+it('as quinze ações aparecem uma vez só na página', function () {
     $todas = winAcoes(winHtml());
     sort($todas);
 
@@ -253,6 +253,24 @@ it('o que o botão de reverter H.264/UDP manda passa pela validação e reverte 
 
     expect($mud?->applied)->toBeFalse()
         ->and($mud?->scope)->toBe(App\Domain\WinStateScope::PendingReboot);
+});
+
+it('sunshine oferece instalar, iniciar/parar, firewall e o link de pareamento com PIN', function () {
+    $s = winSecao(winHtml(aba: WinTab::AcessoRemoto), 'sunshine');
+
+    expect($s)->toContain('value="install"')
+        ->and($s)->toContain('value="firewall-open"')
+        ->and($s)->toContain('value="firewall-close"')
+        ->and($s)->toMatch('~name="SubAction" value="start"><button type="submit" class="btn btn-sm">Iniciar serviço~')
+        ->and($s)->toContain('https://localhost:47990')
+        ->and($s)->toContain('não guarda o PIN');
+});
+
+it('sunshine com o serviço no ar: o principal vira Parar', function () {
+    $s = winSecao(winHtml(acoes: ['sunshine'], aba: WinTab::AcessoRemoto), 'sunshine');
+
+    expect($s)->toMatch('~name="SubAction" value="stop"><button type="submit" class="btn btn-sm">Parar serviço~')
+        ->and($s)->toMatch('~name="SubAction" value="start"><button type="submit" class="btn btn-sm btn-ghost">Iniciar serviço~');
 });
 
 it('sem JavaScript, o link da aba recarrega posicionado no menu, que tem o id da âncora', function () {

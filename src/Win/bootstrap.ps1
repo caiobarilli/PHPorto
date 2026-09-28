@@ -195,6 +195,7 @@ $global:PhportoWinActions = [ordered]@{
     'gpu'         = 'Invoke-GPU'
     'gdid'        = 'Invoke-Gdid'
     'rdp'         = 'Invoke-Rdp'
+    'sunshine'    = 'Invoke-Sunshine'
 }
 
 <#
