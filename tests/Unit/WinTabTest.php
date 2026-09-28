@@ -7,18 +7,20 @@ use App\Http\WinTab;
 it('a aba da URL é lida, e a desconhecida cai em Sistema sem erro', function (mixed $valor, WinTab $esperado) {
     expect(WinTab::fromQuery($valor))->toBe($esperado);
 })->with([
-    'rede'        => ['rede', WinTab::Rede],
-    'serviços'    => ['servicos', WinTab::Servicos],
-    'ausente'     => [null, WinTab::Sistema],
-    'desconhecida' => ['nada', WinTab::Sistema],
-    'maiúscula'   => ['REDE', WinTab::Sistema],
-    'lista'       => [['rede'], WinTab::Sistema],
+    'rede'          => ['rede', WinTab::Rede],
+    'serviços'      => ['servicos', WinTab::Servicos],
+    'acesso remoto' => ['acesso-remoto', WinTab::AcessoRemoto],
+    'ausente'       => [null, WinTab::Sistema],
+    'desconhecida'  => ['nada', WinTab::Sistema],
+    'maiúscula'     => ['REDE', WinTab::Sistema],
+    'lista'         => [['rede'], WinTab::Sistema],
 ]);
 
-it('a ordem do menu é Sistema, Rede, Aplicativos, Serviços, com a URL de cada uma', function () {
+it('a ordem do menu é Sistema, Rede, Aplicativos, Serviços, Acesso Remoto, com a URL de cada uma', function () {
     expect(array_map(static fn (WinTab $t): string => $t->label(), WinTab::cases()))
-        ->toBe(['Sistema', 'Rede', 'Aplicativos', 'Serviços'])
-        ->and(WinTab::Aplicativos->url())->toBe('/win?aba=aplicativos');
+        ->toBe(['Sistema', 'Rede', 'Aplicativos', 'Serviços', 'Acesso Remoto'])
+        ->and(WinTab::Aplicativos->url())->toBe('/win?aba=aplicativos')
+        ->and(WinTab::AcessoRemoto->url())->toBe('/win?aba=acesso-remoto');
 });
 
 it('todo 303 do POST da /win volta para a aba de onde veio', function () {

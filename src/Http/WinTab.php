@@ -24,14 +24,18 @@ enum WinTab: string
     /** Exporter, GPU, Optimize, GDID e Performance: o que liga, desliga e tem volta. */
     case Servicos = 'servicos';
 
+    /** RDP e Sunshine: chegar à máquina de longe. */
+    case AcessoRemoto = 'acesso-remoto';
+
     /** O rótulo no menu. */
     public function label(): string
     {
         return match ($this) {
-            self::Sistema     => 'Sistema',
-            self::Rede        => 'Rede',
-            self::Aplicativos => 'Aplicativos',
-            self::Servicos    => 'Serviços',
+            self::Sistema      => 'Sistema',
+            self::Rede         => 'Rede',
+            self::Aplicativos  => 'Aplicativos',
+            self::Servicos     => 'Serviços',
+            self::AcessoRemoto => 'Acesso Remoto',
         };
     }
 

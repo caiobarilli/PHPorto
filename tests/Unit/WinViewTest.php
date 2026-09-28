@@ -174,13 +174,14 @@ it('as três principais ficam na mesma linha: auditoria, memória, processos', f
 it('cada painel tem só as ações da aba dele, e o desempenho mora em Serviços', function (WinTab $aba, array $esperado) {
     expect(winAcoes(winPainel(winHtml(), $aba)))->toBe($esperado);
 })->with([
-    'sistema'     => [WinTab::Sistema, ['tweaks', 'debloat']],
-    'rede'        => [WinTab::Rede, ['dns', 'network']],
-    'aplicativos' => [WinTab::Aplicativos, ['install']],
-    'serviços'    => [WinTab::Servicos, ['exporter', 'gpu', 'optimize', 'gdid', 'performance']],
+    'sistema'       => [WinTab::Sistema, ['tweaks', 'debloat']],
+    'rede'          => [WinTab::Rede, ['dns', 'network']],
+    'aplicativos'   => [WinTab::Aplicativos, ['install']],
+    'serviços'      => [WinTab::Servicos, ['exporter', 'gpu', 'optimize', 'gdid', 'performance']],
+    'acesso remoto' => [WinTab::AcessoRemoto, []],
 ]);
 
-it('os quatro painéis vêm na página, e só o da aba aberta está visível', function (WinTab $aberta) {
+it('os cinco painéis vêm na página, e só o da aba aberta está visível', function (WinTab $aberta) {
     $html = winHtml(aba: $aberta);
 
     foreach (WinTab::cases() as $aba) {
@@ -200,20 +201,30 @@ it('as treze ações aparecem uma vez só na página', function () {
     expect($todas)->toBe($enum);
 });
 
-it('o menu tem as quatro abas como links, e só a aberta é a atual', function () {
+it('o menu tem as cinco abas como links, e só a aberta é a atual', function () {
     $html = winHtml(aba: WinTab::Rede);
 
-    expect(substr_count($html, 'href="/win?aba='))->toBe(4)
+    expect(substr_count($html, 'href="/win?aba='))->toBe(5)
         ->and(substr_count($html, 'aria-current="page"'))->toBe(1)
         ->and($html)->toContain('<a href="/win?aba=rede#abas" data-aba="rede" class="ativa" aria-current="page">Rede</a>')
-        ->and($html)->toContain('<a href="/win?aba=sistema#abas" data-aba="sistema">Sistema</a>');
+        ->and($html)->toContain('<a href="/win?aba=sistema#abas" data-aba="sistema">Sistema</a>')
+        ->and($html)->toContain('<a href="/win?aba=acesso-remoto#abas" data-aba="acesso-remoto">Acesso Remoto</a>');
+});
+
+it('a aba Acesso Remoto navega e traz as duas seções, ainda vazias', function () {
+    $html = winHtml(aba: WinTab::AcessoRemoto);
+
+    expect($html)->toContain('<a href="/win?aba=acesso-remoto#abas" data-aba="acesso-remoto" class="ativa" aria-current="page">Acesso Remoto</a>')
+        ->and($html)->toContain('<div class="painel" id="painel-acesso-remoto" role="tabpanel">')
+        ->and($html)->toContain('Área de Trabalho Remota (RDP)')
+        ->and($html)->toContain('<h2>Sunshine</h2>');
 });
 
 it('sem JavaScript, o link da aba recarrega posicionado no menu, que tem o id da âncora', function () {
     $html = winHtml();
 
     expect($html)->toContain('<nav class="abas" id="abas"')
-        ->and(preg_match_all('~href="/win\?aba=[a-z]+#abas"~', $html))->toBe(4);
+        ->and(preg_match_all('~href="/win\?aba=[a-z-]+#abas"~', $html))->toBe(5);
 });
 
 it('o JavaScript das abas é segunda camada e mantém a aba na URL com replaceState', function () {

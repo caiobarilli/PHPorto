@@ -7,7 +7,7 @@ declare(strict_types=1);
  *
  * Quatro partes, nesta ordem: a última execução; as três ações de um clique
  * (auditoria, memória, processos) na mesma linha; o menu de abas com as outras
- * dez; e o histórico. Os quatro painéis são desenhados, só o da aba aberta
+ * dez; e o histórico. Os cinco painéis são desenhados, só o da aba aberta
  * visível, e o menu são links para /win?aba=<nome>#abas. Cada formulário posta
  * para a URL da página, que carrega a aba, e o 303 volta para ela.
  *
@@ -490,6 +490,17 @@ foreach ($view->tweaks as $tw) {
         <strong><?= $perfAplicado ? 'Reverter' : 'Voltar ao Balanceado' ?></strong> devolve o plano padrão
         do Windows, o Balanceado, que economiza quando a máquina está parada.
       </p>
+    </section>
+  </div>
+
+  <?= $painel(WinTab::AcessoRemoto) ?>
+    <section id="acesso-rdp">
+      <?= $secao('Área de Trabalho Remota (RDP)', 'Chegar a esta máquina pela Área de Trabalho Remota do Windows.') ?>
+      <p class="empty">Em breve.</p>
+    </section>
+    <section id="acesso-sunshine">
+      <?= $secao('Sunshine', 'Transmitir esta máquina pelo Sunshine, com baixa latência.') ?>
+      <p class="empty">Em breve.</p>
     </section>
   </div>
 
