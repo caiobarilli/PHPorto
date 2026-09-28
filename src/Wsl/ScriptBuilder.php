@@ -20,8 +20,8 @@ final class ScriptBuilder
     /**
      * Quantas linhas o cabeçalho ocupa. É UMA, e isso é contrato:
      * o bash cita o número de linha do arquivo, então um erro na primeira
-     * linha do que a pessoa digitou aparece como "cmd.sh: line 2". O README
-     * documenta esse deslocamento de +1; passar o cabeçalho para duas linhas
+     * linha do que a pessoa digitou aparece como "cmd.sh: line 2". O
+     * docs/wsl.md documenta esse deslocamento de +1; passar o cabeçalho para duas linhas
      * faria a documentação mentir sem ninguém perceber.
      */
     public const HEADER_LINES = 1;

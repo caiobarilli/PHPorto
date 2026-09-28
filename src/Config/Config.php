@@ -32,7 +32,7 @@ namespace App\Config;
  */
 final class Config
 {
-    /** Piso do timeout. Ver a nota sobre PHPORTO_TIMEOUT no README: acordar a VM custa ~4,5 s. */
+    /** Piso do timeout. Ver PHPORTO_TIMEOUT em docs/configuracao.md: acordar a VM custa ~4,5 s. */
     public const MIN_TIMEOUT = 30;
 
     /**

@@ -1,361 +1,102 @@
 # PHPorto
 
-A doca entre o Windows e o WSL. Recebe um comando pelo navegador, executa dentro
-da distro, devolve a saída e guarda o registro no banco.
+O PHPorto faz a ponte entre o Windows e o WSL numa máquina local. Recebe um
+comando pelo navegador ou por HTTP, executa dentro da distro do WSL ou como ação
+do Windows, devolve a saída e grava cada execução num banco — SQLite por padrão,
+MySQL ou MongoDB por configuração. PHP 8.5 sem framework, servido pelo servidor
+embutido do PHP.
 
----
-
-## ⚠️ Leia antes de subir
-
-**Esta ferramenta executa comando de shell arbitrário na máquina de quem a sobe,
-com os privilégios do usuário do WSL — e, na `/win`, como Administrador do
-Windows. É ferramenta local, de uma pessoa só, protegida por um token.**
-
-Por isso ela **deve** escutar apenas em `127.0.0.1`. O token **não** muda isso: ele
-viaja em HTTP Basic, que é base64 — codificação, não cifra. Em `0.0.0.0`, no IP da
-rede, ou atrás de um proxy que a exponha, quem enxergar o tráfego lê o token, e com
-ele ganha execução remota de comando na sua máquina. Acesso de outra máquina é por
-túnel SSH até o `127.0.0.1`, nunca abrindo a porta.
-
-**Nada de segredo por aqui.** Toda saída vira registro no banco, em texto puro,
-sem cifra e sem prazo. Um `cat` num `.env` de outro projeto grava a credencial no
-log. Se um segredo passar por engano, apague os registros e considere-o vazado.
+> **Aviso de segurança**
+>
+> - O PHPorto **executa comando de shell arbitrário** na máquina onde roda, com
+>   os privilégios do usuário do WSL.
+> - Na tela `/win`, as ações rodam **como Administrador do Windows**.
+> - Ele deve escutar **só em `127.0.0.1`**. Acesso de outra máquina é por túnel
+>   SSH, nunca abrindo a porta.
+> - Sem token configurado no `.env`, a aplicação não serve nada.
+>
+> Detalhes em [docs/seguranca.md](docs/seguranca.md).
 
 ## Requisitos
 
-- **PHP 8.5** na linha de comando, com `json`, `pdo`, `pdo_sqlite` e `pdo_mysql`
-- **WSL2** com uma distro instalada — precisa aparecer em `wsl -l -q`
-- **Composer**
-
-Desenvolvido e testado em **Windows 11**. O WSL2 também roda em Windows 10, mas
-não foi testado lá.
+- Windows 11 (desenvolvido e testado nele)
+- PHP 8.5 na linha de comando, com as extensões `json`, `pdo`, `pdo_sqlite` e
+  `pdo_mysql`
+- Composer
+- WSL2 com uma distro instalada, visível em `wsl -l -q`
+- Windows PowerShell 5.1, para a tela `/win`
 
 ## Instalação
 
-```bash
-composer install
-```
+1. Clone o repositório:
 
-Copie `.env.example` para `.env` e preencha `PHPORTO_WSL_ROOT` com a pasta onde
-suas execuções devem começar, **vista de dentro do WSL**. Sem ela nada roda.
+   ```bash
+   git clone https://github.com/caiobarilli/PHPorto.git
+   cd PHPorto
+   ```
 
-Depois gere o token de acesso:
+2. Instale as dependências:
 
-```bash
-php token.php
-```
+   ```bash
+   composer install
+   ```
 
-## O token de acesso
+3. Copie o `.env.example` para `.env` e ajuste. O mínimo é `PHPORTO_WSL_ROOT`,
+   a pasta onde os comandos começam, vista de dentro do WSL. As chaves estão em
+   [docs/configuracao.md](docs/configuracao.md).
 
-O `php token.php` gera um token aleatório (32 bytes, em hexadecimal), imprime na
-tela e grava em `PHPORTO_AUTH_TOKEN` no `.env`. Se já houver um, ele avisa e pede
-confirmação antes de trocar: trocar derruba o acesso de quem estava usando o
-anterior.
+4. Gere o token de acesso:
 
-**Sem token configurado, a aplicação não serve nada** — nem as telas, nem a API.
-Responde 503 dizendo para rodar o comando. Um `.env` incompleto não vira uma
-ferramenta de shell aberta.
+   ```bash
+   php token.php
+   ```
 
-No navegador não há tela de login: ele abre o próprio diálogo. **Cole o token no
-campo de senha; o usuário é ignorado.** Pela API, o mesmo, com o usuário vazio:
+   O token é impresso e gravado no `.env`. No navegador, cole-o no campo de
+   senha do diálogo de login; o usuário é ignorado.
 
-```bash
-curl -u :SEU_TOKEN http://127.0.0.1:4001/api/executions
-```
+5. Suba o servidor:
 
-Cinco tokens errados seguidos bloqueiam por quinze minutos (429, com o tempo que
-falta). Só erro conta: abrir sem credencial não conta, e um acerto zera. Trocar
-o token pelo `php token.php` desfaz o bloqueio do anterior.
+   ```bash
+   php -S 127.0.0.1:4001 -t public public/router.php
+   ```
 
-Duas coisas do HTTP Basic que vêm junto: o token vai em base64 a cada
-requisição, por isso o bind continua sendo só `127.0.0.1`; e não existe logout —
-para sair, feche o navegador.
+   E abra <http://127.0.0.1:4001>.
 
-O `token.php` é o **único** lugar do projeto que escreve no `.env`, e é rodado
-por você, na linha de comando. O processo web nunca escreve lá.
-
-## Subir
-
-```bash
-php -S 127.0.0.1:4001 -t public public/router.php
-```
-
-E abra <http://127.0.0.1:4001>.
-
-### O `-t public` é a trava principal
-
-`public/` é o **único** diretório servido pela web. `src/`, `storage/`, `files/` e
-o `.env` ficam fora dele — não existe URL que os alcance. Medido: com a raiz do
-projeto como document root, `GET /.env` devolvia o arquivo e
-`GET /storage/database.sqlite` devolvia os 16 KB do banco com tudo que havia sido
-executado; com `-t public`, os dois são 404 por **não existirem** ali.
-
-Defende-se com geografia o que não se deve defender com expressão regular:
-`/src/Config/Config.php` não é dotfile, e passaria por qualquer regra escrita
-para dotfiles.
-
-### O `router.php` é a segunda camada
-
-Ele continua obrigatório, por dois motivos menores mas reais: barra dotfiles que
-apareçam dentro de `public/` (decodificando o caminho **antes** de comparar, senão
-`/%2Eenv` passa), e despacha as rotas explicitamente em vez de depender do
-fallback do servidor embutido. Como a ferramenta não tem nenhum arquivo estático
-— CSS e JS são embutidos na página —, ele é **lista de permissão**: tudo que não é
-rota da aplicação é 404.
-
-## Estrutura
-
-```
-public/          único diretório servido pela web
-  index.php      front controller
-  router.php     porteiro do php -S
-src/             todo o código (PSR-4, App\)
-  Config/        único leitor de env
-  Domain/        Execution, ExecutionKind
-  Exceptions/    StorageException
-  Http/          rotas, views-model, CSRF, API
-  Providers/     SQLite (padrão), MySQL, Mongo
-  Services/      ExecutionLogService
-  Views/         templates
-  Win/           o motor do Windows: PHP + PowerShell, lado a lado
-    worker.ps1   o processo elevado, com a allowlist que tranca
-    bootstrap.ps1  monta o ambiente das ações e despacha por nome
-    actions/     as treze ações, um Invoke-*.ps1 cada
-    lib/         primitivas do WinUtil (MIT — ver THIRD-PARTY.md)
-    config/      dns.json, preset.json, tweaks.json (upstream); debloat.json e tweaks.pt-BR.json (do projeto)
-    audit/       audit.ps1
-  Wsl/           Runner, ScriptBuilder, Distro
-storage/         o banco e o contador de tokens errados — FORA do public
-files/           cmd.sh descartável — FORA do public
-runtime/         o que as ações do Windows criam enquanto rodam — FORA do public
-token.php        gera o token de acesso: php token.php
-tests/
-  Pester/        testes PowerShell das ações
-```
-
-`src/Win/` é o único lugar do projeto onde PHP e PowerShell convivem, e é de
-propósito: o que sobe o processo elevado e o que ele executa mudam juntos.
-**Não há nada a configurar ali** — as ações vêm no repositório. Até a migração
-existia um `PHPORTO_WINUTIL_PATH` obrigatório apontando para um projeto
-separado; ele não existe mais.
-
-## As quatro telas
+## Telas
 
 | rota | o que faz |
 | --- | --- |
-| `/` | Home. Três botões: configuração, WSL e WIN. O do WSL desabilita quando o WSL não está instalado ou a distro do `.env` não aparece em `wsl -l -q`; o do WIN, enquanto o PowerShell elevado estiver desligado. Cada um diz qual é o motivo. |
-| `/config` | Mostra o banco ativo, alterna a API, liga o PowerShell elevado e restaura de fábrica. O `.env` **nunca é reescrito** pela web: o que a tela alterna vai para `storage/flags.json`. |
-| `/wsl` | O executor do WSL: entrada, saída, card de anexos e a tabela de registros. |
-| `/win` | As treze ações do Windows, executadas por um PowerShell elevado. Auditoria, memória, desempenho e processos ficam numa linha no topo; as outras nove em quatro abas — Sistema, Rede, Aplicativos e Serviços —, com a aba na URL (`/win?aba=rede`). Nada roda com o interruptor da `/config` desligado. |
+| `/` | Início, com os botões de configuração, WSL e Windows e o motivo de cada um estar desabilitado. |
+| `/config` | Banco ativo, interruptor da API, PowerShell elevado e restauração de fábrica. |
+| `/wsl` | Executa comandos e copia arquivos na distro, com o histórico do WSL. |
+| `/win` | As treze ações do Windows, executadas por um PowerShell elevado, com o histórico do Windows. |
 
-O botão do WSL responde **"dá para usar"**, não "está rodando agora". A VM dormir
-é normal e ela sobe sozinha no primeiro comando — desabilitar por isso mentiria.
-
-## As duas flags
-
-| variável | padrão | desligada |
-| --- | --- | --- |
-| `PHPORTO_DASHBOARD_ENABLED` | `true` | `/`, `/config` e `/wsl` respondem 404 |
-| `PHPORTO_API_ENABLED` | `false` | `/api/*` responde 404 |
-
-404 e não 403: 403 confirmaria que existe algo desligado ali.
-
-### Ligar pela tela, sem editar arquivo
-
-`PHPORTO_API_ENABLED` também se alterna em `/config`. O que a tela grava vai
-para `storage/flags.json`, e a precedência é:
-
-```
-storage/flags.json  vence  .env  vence  o padrão do código
-```
-
-O `.env` continua somente-leitura para o processo web — ele guarda credencial de
-banco, e uma escrita malsucedida ali custa caro demais para o que se ganha.
-Ligar abre um aviso explicando que a rota executa comando e que a proteção dela
-é só a checagem de origem; desligar não pergunta nada, porque desligar reduz
-superfície.
-
-Se o `flags.json` sumir ou corromper, tudo volta ao `.env` — e o `.env` do
-projeto traz a API desligada. A falha cai para o lado seguro por construção.
-
-### Restaurar configurações de fábrica
-
-Ainda em `/config`. Apaga o `flags.json`, e a configuração volta a ser
-exatamente o que o `.env` diz. No mesmo aviso há uma opção para **apagar também
-o arquivo do banco** — o `storage/database.sqlite` inteiro, com todo o
-histórico, sem desfazer. O app recria o banco vazio no acesso seguinte.
-
-A opção só aparece no sqlite: nos outros bancos "apagar" seria dropar um schema
-que a ferramenta não criou e que pode não ser só dela.
-
-## A API
-
-Só existe com `PHPORTO_API_ENABLED=true`, e ela **nasce desligada** — quem clona
-não ganha uma superfície de execução por HTTP sem ter pedido.
-
-```
-GET  /api/executions?limit=100   lista os registros
-POST /api/executions             executa
-```
+## Portão
 
 ```bash
-curl -X POST -u :SEU_TOKEN http://127.0.0.1:4001/api/executions \
-  -H "Content-Type: application/json" \
-  -d '{"command":"git status"}'
+composer gate
 ```
 
-Para anexo, `{"src":"...","dst":"..."}`.
+Roda a suíte Pest, o PHPStan, o PHP-CS-Fixer e os testes Pester. O projeto não
+tem CI; o portão é este comando. Detalhes em
+[docs/desenvolvimento.md](docs/desenvolvimento.md).
 
-Os tetos são os mesmos da tela `/wsl` e são recusados no servidor: comando de até
-64 KB e cada caminho de anexo de até 4 KB (acima disso, `413`). A saída de uma
-execução é cortada em 1 MiB, com o aviso na própria saída — o mesmo teto e o
-mesmo texto das ações do Windows. Quem precisa da saída inteira redireciona para
-arquivo no próprio comando.
+## Licença e créditos
 
-O `Content-Type: application/json` é **obrigatório**, e isso é trava, não
-formalidade — veja a seção seguinte.
-
-## Por que o CORS não bastaria
-
-**O CORS não impede a requisição de sair. Ele impede a resposta de ser lida.**
-
-Um formulário em qualquer site que você abrir pode fazer `POST` para
-`http://127.0.0.1:4001/wsl`, e o comando **roda**. O atacante não vê a saída — e
-não precisa ver: o efeito já aconteceu na sua máquina.
-
-As travas de verdade:
-
-- **Nas telas**, token por sessão no formulário. Um site de terceiro não tem como
-  lê-lo — aí sim a política de mesma origem trabalha a nosso favor.
-- **Na API**, exigir `Content-Type: application/json` torna a requisição "não
-  simples" e obriga o navegador a fazer *preflight*, que o CORS barra antes de
-  qualquer efeito. Um formulário HTML não consegue mandar esse `Content-Type`. A
-  checagem de `Origin` é a segunda camada.
-
-**O token de acesso não substitui nenhuma das duas.** Depois que você colou o
-token no diálogo, o navegador o reenvia sozinho em toda requisição para
-`127.0.0.1:4001` — inclusive no `POST` que o formulário do outro site dispara.
-Contra isso, quem trava continua sendo o token do formulário e o `Content-Type`.
-
-## O `.env`
-
-Uma variável por linha, `CHAVE=valor`, sem aspas; linha com `#` é comentário. O
-`.env` não vai para o repositório — quem documenta é o `.env.example`, que traz
-todas as chaves comentadas.
-
-Sobre `PHPORTO_TIMEOUT`: **não use valor baixo.** Acordar a VM do WSL custa cerca
-de 4,5 s (medido: 4543 ms com a VM fria, 88 ms depois), e ela dorme sozinha. Com 3
-ou 5 segundos, o primeiro comando de cada dia falha sempre — e o erro parece do
-comando. O piso aplicado pelo código é 30 s; o padrão é 120 s.
-
-## O banco
-
-Cada execução vira uma linha: comando, saída, código de saída, duração, tipo
-(comando ou anexo), se estourou o timeout, e quando. Três providers plugáveis via
-`DB_PROVIDER` — **SQLite** (padrão, arquivo local criado on-demand), **MySQL** e
-**MongoDB** — sem mudar nenhuma linha de código.
-
-Não há unicidade, e é decisão registrada: duas execuções idênticas são dois
-fatos distintos, e a ferramenta existe justamente para registrar que algo foi
-feito duas vezes.
-
-### A segunda tabela: o estado da `/win`
-
-Além do histórico há uma tabela de **estado**, com o nome da primeira mais o
-sufixo `_win_state` — derivada, não configurável, para não existir uma segunda
-variável de ambiente a manter em dia. Ela nasce no mesmo acesso que a outra, sem
-migration.
-
-O que ela guarda é uma linha por par *(escopo, ação)*, que se **substitui**:
-
-| escopo | o que é |
-| --- | --- |
-| `aplicado` | o que esta ferramenta aplicou e ainda não reverteu — é o que faz o botão dizer "reverter" em vez de "aplicar", e é onde fica o `-Preset` que o `-Undo` do `tweaks` exige de volta |
-| `selecao` | as caixas que ficaram marcadas na última visita, para não remarcar tudo a cada vez |
-
-**Não é leitura da máquina, e não substitui o histórico.** É memória do que a
-tela mandou fazer. Mexer no sistema por fora — `regedit`, o WinUtil original, um
-PowerShell elevado à mão — deixa a linha desatualizada, e isso é custo aceito: o
-contrário seria sondar a máquina a cada carregamento de página, que é justamente
-o que o heartbeat da elevação existe para não pagar.
-
-Duas consequências que valem saber:
-
-- **"Limpar histórico" não mexe nela.** Apagar registros e mudar o que a tela
-  afirma sobre a máquina são coisas diferentes, e há teste travando isso.
-- **Sem estado salvo, a tela se comporta como antes** e nunca afirma que algo
-  está aplicado. Linha ilegível é descartada em vez de derrubar a página — mesma
-  regra do `flags.json`.
-
-O "restaurar de fábrica" apaga o arquivo do banco, então leva as duas tabelas.
-
-## Uma pegadinha, para você não perder tempo
-
-A primeira linha do `files/cmd.sh` é um cabeçalho da ferramenta: `exec 2>&1` mais
-o `cd` guardado em `PHPORTO_WSL_ROOT`. O `exec 2>&1` é o que faz stdout e stderr
-saírem juntos e na ordem real — dois pipes separados no Windows entregariam as
-linhas embaralhadas pelo buffer. O efeito colateral é que as mensagens de erro do
-bash citam a linha **+1** em relação ao que você digitou: um erro na sua primeira
-linha aparece como `cmd.sh: line 2`.
-
-## Comandos
-
-```bash
-composer gate         # o portão inteiro: os quatro abaixo, em ordem
-
-composer test         # suíte Pest
-composer stan         # PHPStan (level max, phpVersion 8.5)
-composer cs-check-lf  # PHP-CS-Fixer sobre cópia em LF, sem escrever nada
-composer pester       # testes PowerShell das ações do Windows
-composer cs-fix       # PHP-CS-Fixer, escrevendo
-```
-
-**Não há CI.** O portão é o `composer gate` que você roda. A maior parte das
-ações do Windows exige Administrador e mexe na máquina de verdade; num runner
-hospedado elas seriam puladas, e o verde seria sobre o que menos importa.
-
-Use `cs-check-lf`, não `cs-check`. A árvore de trabalho tem `.php` em CRLF
-(`core.autocrlf=true`) e o PSR-12 quer LF, então o `cs-check` direto acusa 37
-dos 53 arquivos, cada um com o arquivo inteiro no diff. Medido: desligar a
-regra `line_ending` **não** resolve — as regras que mexem no bloco de abertura
-reescrevem aquele trecho em LF e deixam o arquivo misto. O `cs-check-lf` roda o
-fixer sobre uma cópia convertida, e o que sobra no relatório é estilo de
-verdade. Detalhes em `tools/cs-check-lf.php`.
-
-## O registro fica nas mensagens de commit
-
-`git log` é a documentação de decisão deste projeto: cada mensagem registra por
-que a coisa é como é, com a medição que sustentou a escolha. Vale ler antes de
-desfazer qualquer coisa que pareça estranha — provavelmente já foi pesada.
-
-Quatro mensagens perderam texto no caminho até o repositório, e uma foi empurrada
-sem corpo nenhum. Como aqui não se faz `amend` nem `rebase` em histórico
-publicado, o conserto é aditivo: [`ERRATA.md`](ERRATA.md) nomeia cada commit pelo
-hash, mostra onde a costura cedeu e restaura o sentido do que se perdeu.
-
-A causa era o transporte — copiar e colar a mensagem para dentro do terminal. Por
-isso **a mensagem vai por arquivo**, e esta é a regra daqui em diante:
-
-```bash
-git commit -F .git/COMMIT_MSG.txt   # e confira com: git log -1 --format=%B
-```
-
-## Licença
-
-MIT — texto em [`LICENSE`](LICENSE). A escolha é prática: `src/Win/lib/` e
-`src/Win/config/` já são MIT do CT Tech Group, e a mesma licença elimina
-conflito de cláusula na redistribuição. E a ausência de garantia, numa
-ferramenta que executa shell arbitrário como Administrador, não é formalidade:
-é o parágrafo que precisa estar escrito.
-
-## Créditos
+MIT — texto em [LICENSE](LICENSE).
 
 A tela `/win` executa ações que vieram do
-[WinUtil](https://github.com/ChrisTitusTech/winutil), de Chris Titus Tech, pelo
-fork sem interface gráfica `winutil-cli`. As partes copiadas estão em
-`src/Win/lib/` e `src/Win/config/`, sob **MIT © 2022 CT Tech Group LLC** — texto
-íntegro em [`src/Win/LICENSE.winutil`](src/Win/LICENSE.winutil), com o que veio
-de onde em [`src/Win/THIRD-PARTY.md`](src/Win/THIRD-PARTY.md).
+[WinUtil](https://github.com/ChrisTitusTech/winutil), de Chris Titus Tech, sob
+MIT © 2022 CT Tech Group LLC. O que veio de onde está em
+[docs/terceiros.md](docs/terceiros.md).
 
-Binários usados pelas ações não são versionados: cada um é baixado na primeira
-execução. Os créditos deles estão no mesmo arquivo.
+## Documentação
+
+- [Configuração](docs/configuracao.md) — cada chave do `.env`
+- [WSL](docs/wsl.md) — a tela `/wsl`
+- [Windows](docs/windows.md) — a tela `/win` e as treze ações
+- [API](docs/api.md) — `/api/executions`
+- [Segurança](docs/seguranca.md) — o modelo de proteção e o acesso remoto
+- [Desenvolvimento](docs/desenvolvimento.md) — árvore, portão, testes e convenções
+- [Terceiros](docs/terceiros.md) — código do upstream e divergências
+- [Errata do log](docs/ERRATA.md) — mensagens de commit que perderam texto
