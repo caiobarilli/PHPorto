@@ -129,22 +129,22 @@ Describe 'bootstrap - o que veio do upstream' {
 }
 
 # ==============================================================
-# ACTIONS — as treze, e o tripwire de encoding
+# ACTIONS — as quatorze, e o tripwire de encoding
 # ==============================================================
 Describe 'bootstrap - as acoes migradas' {
 
-    It 'actions/ tem as treze, e so elas' {
+    It 'actions/ tem as quatorze, e so elas' {
         $nomes = @(Get-ChildItem -Path (Join-Path $Script:PastaWin 'actions') -Filter 'Invoke-*.ps1' -File |
             Select-Object -ExpandProperty BaseName | Sort-Object)
 
-        $nomes.Count | Should -Be 13
+        $nomes.Count | Should -Be 14
         # Ordem do Sort-Object, que ignora caixa: Debloat antes de DNS, Gdid
-        # antes de GPU.
+        # antes de GPU, Rdp entre Processes e Tweaks.
         $nomes | Should -Be @(
             'Invoke-Audit', 'Invoke-Debloat', 'Invoke-DNS', 'Invoke-Exporter',
             'Invoke-Gdid', 'Invoke-GPU', 'Invoke-Install', 'Invoke-Memory',
             'Invoke-Network', 'Invoke-Optimize', 'Invoke-Performance',
-            'Invoke-Processes', 'Invoke-Tweaks'
+            'Invoke-Processes', 'Invoke-Rdp', 'Invoke-Tweaks'
         )
     }
 
@@ -324,11 +324,11 @@ Describe 'bootstrap - despachante' {
             Should -Not -BeNullOrEmpty
     }
 
-    It 'o mapa conhece as treze acoes' {
+    It 'o mapa conhece as quatorze acoes' {
         $chaves = @($global:PhportoWinActions.Keys | Sort-Object)
         $chaves | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'install',
-            'memory', 'network', 'optimize', 'performance', 'processes', 'tweaks'
+            'memory', 'network', 'optimize', 'performance', 'processes', 'rdp', 'tweaks'
         )
     }
 

@@ -8,12 +8,13 @@ use App\Domain\Execution;
 use App\Win\ElevationState;
 
 /**
- * A tela /win: as treze seções das ações do Windows.
+ * A tela /win: as quatorze seções das ações do Windows.
  *
- * TREZE, e a contagem tem história: a tela nasceu com doze porque o README do
- * winutil-cli listava onze e o código tinha gpu — a tela seguiu o código. A
- * décima terceira é o gdid, que existia em src/Win/actions desde a migração
- * mas só passou a ser alcançável quando entrou nas DUAS allowlists.
+ * QUATORZE, e a contagem tem história: a tela nasceu com doze porque o README
+ * do winutil-cli listava onze e o código tinha gpu — a tela seguiu o código. A
+ * décima terceira é o gdid, que existia em src/Win/actions desde a migração mas
+ * só passou a ser alcançável quando entrou nas DUAS allowlists. A décima quarta
+ * é o rdp, que nasceu aqui, na aba Acesso Remoto.
  *
  * $blocked é o que impede executar agora, e tem mais de uma causa: o checkout
  * pode estar sem os .ps1 de src/Win, ou o PowerShell elevado pode estar
@@ -49,6 +50,7 @@ final readonly class WinView
      * @param string|null     $tweaksProblem   por que os tweaks não puderam ser lidos
      * @param list<string>    $tweaksApplied   os tweaks no estado aplicado
      * @param list<string>    $appliedActions  as ações com estado aplicado guardado
+     * @param list<string>    $pendingRebootActions as ações com mudança que só vale depois de reiniciar
      * @param list<array{key: string, label: string, text: string}> $dnsProviders as opções de DNS
      * @param array<string, string> $dnsChosen   a última escolha de DNS guardada
      * @param string|null     $dnsProblem      por que a lista de DNS não pôde ser lida
@@ -76,6 +78,7 @@ final readonly class WinView
         public ?string $tweaksProblem,
         public array $tweaksApplied,
         public array $appliedActions,
+        public array $pendingRebootActions,
         public array $dnsProviders,
         public array $dnsChosen,
         public ?string $dnsProblem,

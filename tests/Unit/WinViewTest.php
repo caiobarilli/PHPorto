@@ -13,8 +13,9 @@ use App\Win\ElevationState;
  * @param list<string> $marcados
  * @param list<string> $aplicados
  * @param list<string> $acoes
+ * @param list<string> $pendentes
  */
-function winHtml(array $marcados = [], array $aplicados = [], array $acoes = [], WinTab $aba = WinTab::Sistema): string
+function winHtml(array $marcados = [], array $aplicados = [], array $acoes = [], WinTab $aba = WinTab::Sistema, array $pendentes = []): string
 {
     $tweaks = [];
     foreach (['A', 'B', 'C'] as $k) {
@@ -43,6 +44,7 @@ function winHtml(array $marcados = [], array $aplicados = [], array $acoes = [],
         tweaksProblem: null,
         tweaksApplied: $aplicados,
         appliedActions: $acoes,
+        pendingRebootActions: $pendentes,
         dnsProviders: [],
         dnsChosen: [],
         dnsProblem: null,
@@ -178,7 +180,7 @@ it('cada painel tem só as ações da aba dele, e o desempenho mora em Serviços
     'rede'          => [WinTab::Rede, ['dns', 'network']],
     'aplicativos'   => [WinTab::Aplicativos, ['install']],
     'serviços'      => [WinTab::Servicos, ['exporter', 'gpu', 'optimize', 'gdid', 'performance']],
-    'acesso remoto' => [WinTab::AcessoRemoto, []],
+    'acesso remoto' => [WinTab::AcessoRemoto, ['rdp']],
 ]);
 
 it('os cinco painéis vêm na página, e só o da aba aberta está visível', function (WinTab $aberta) {
@@ -191,7 +193,7 @@ it('os cinco painéis vêm na página, e só o da aba aberta está visível', fu
     expect($html)->toContain('Histórico do Windows');
 })->with(WinTab::cases());
 
-it('as treze ações aparecem uma vez só na página', function () {
+it('as quatorze ações aparecem uma vez só na página', function () {
     $todas = winAcoes(winHtml());
     sort($todas);
 
@@ -211,13 +213,46 @@ it('o menu tem as cinco abas como links, e só a aberta é a atual', function ()
         ->and($html)->toContain('<a href="/win?aba=acesso-remoto#abas" data-aba="acesso-remoto">Acesso Remoto</a>');
 });
 
-it('a aba Acesso Remoto navega e traz as duas seções, ainda vazias', function () {
+it('a aba Acesso Remoto navega e traz as duas seções', function () {
     $html = winHtml(aba: WinTab::AcessoRemoto);
 
     expect($html)->toContain('<a href="/win?aba=acesso-remoto#abas" data-aba="acesso-remoto" class="ativa" aria-current="page">Acesso Remoto</a>')
         ->and($html)->toContain('<div class="painel" id="painel-acesso-remoto" role="tabpanel">')
         ->and($html)->toContain('Área de Trabalho Remota (RDP)')
         ->and($html)->toContain('<h2>Sunshine</h2>');
+});
+
+it('rdp sem estado: oferece Ligar, Ativar o vídeo H.264/UDP, e Ver o estado', function () {
+    $s = winSecao(winHtml(aba: WinTab::AcessoRemoto), 'rdp');
+
+    expect($s)->toContain('value="status"')
+        ->and($s)->toMatch('~name="SubAction" value="on"><button type="submit" class="btn btn-sm">Ligar acesso remoto~')
+        ->and($s)->toMatch('~name="SubAction" value="h264-on"><button type="submit" class="btn btn-sm btn-ghost">Ativar vídeo H.264/UDP~')
+        ->and($s)->not->toContain('alert alert-note');
+});
+
+it('rdp ligado: o principal do acesso vira Desligar', function () {
+    $s = winSecao(winHtml(acoes: ['rdp'], aba: WinTab::AcessoRemoto), 'rdp');
+
+    expect($s)->toMatch('~name="SubAction" value="off"><button type="submit" class="btn btn-sm">Desligar acesso remoto~')
+        ->and($s)->toMatch('~name="SubAction" value="on"><button type="submit" class="btn btn-sm btn-ghost">Ligar acesso remoto~');
+});
+
+it('rdp com H.264/UDP pendente: mostra o aviso de reinício e o botão de reverter', function () {
+    $s = winSecao(winHtml(aba: WinTab::AcessoRemoto, pendentes: ['rdp']), 'rdp');
+
+    expect($s)->toContain('alert alert-note')
+        ->and($s)->toContain('só passa a valer depois de reiniciar o')
+        ->and($s)->toMatch('~name="SubAction" value="h264-off"><button type="submit" class="btn btn-sm">Reverter vídeo H.264/UDP~')
+        ->and($s)->not->toContain('value="h264-on"');
+});
+
+it('o que o botão de reverter H.264/UDP manda passa pela validação e reverte o pendente', function () {
+    $acao   = App\Win\WinAction::Rdp;
+    $mud    = $acao->stateChange($acao->validate(['SubAction' => 'h264-off']));
+
+    expect($mud?->applied)->toBeFalse()
+        ->and($mud?->scope)->toBe(App\Domain\WinStateScope::PendingReboot);
 });
 
 it('sem JavaScript, o link da aba recarrega posicionado no menu, que tem o id da âncora', function () {

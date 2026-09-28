@@ -13,12 +13,12 @@ use App\Win\WinAction;
  * errado.
  */
 
-it('tem as treze ações do menu, na ordem do menu', function () {
+it('tem as quatorze ações do menu, na ordem do menu', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
-            'gdid',
+            'gdid', 'rdp',
         ]);
 });
 
@@ -364,6 +364,44 @@ it('gdid não entra em preset nenhum do optimize nem dos tweaks', function () {
     // dedo, nunca herdado de quem pediu outra coisa.
     expect(WinAction::TWEAK_PRESETS)->not->toContain('gdid')
         ->and(WinAction::OPTIMIZE_PRESETS)->not->toContain('gdid');
+});
+
+// ---------------------------------------------------------------- rdp
+
+it('rdp exige subação', function () {
+    WinAction::Rdp->validate([]);
+})->throws(InvalidArgumentException::class);
+
+it('rdp aceita as cinco subações, na grafia da lista', function (string $sub) {
+    expect(WinAction::Rdp->validate(['SubAction' => $sub]))->toBe(['SubAction' => $sub]);
+})->with(['status', 'on', 'off', 'h264-on', 'h264-off']);
+
+it('rdp devolve a grafia da LISTA, não a que veio no POST', function () {
+    expect(WinAction::Rdp->validate(['SubAction' => 'H264-ON']))->toBe(['SubAction' => 'h264-on']);
+});
+
+it('rdp recusa subação que não existe', function () {
+    WinAction::Rdp->validate(['SubAction' => 'reboot']);
+})->throws(InvalidArgumentException::class, 'Valor inválido para SubAction.');
+
+it('rdp status só relata: não afirma nada sobre estado', function () {
+    expect(WinAction::Rdp->stateChange(['SubAction' => 'status']))->toBeNull();
+});
+
+it('rdp on/off movem o Applied, valendo na hora', function () {
+    expect(WinAction::Rdp->stateChange(['SubAction' => 'on'])?->applied)->toBeTrue()
+        ->and(WinAction::Rdp->stateChange(['SubAction' => 'on'])?->scope)->toBe(\App\Domain\WinStateScope::Applied)
+        ->and(WinAction::Rdp->stateChange(['SubAction' => 'off'])?->applied)->toBeFalse()
+        ->and(WinAction::Rdp->stateChange(['SubAction' => 'off'])?->scope)->toBe(\App\Domain\WinStateScope::Applied);
+});
+
+it('rdp h264-on/h264-off movem o PendingReboot, não o Applied', function () {
+    // O vídeo H.264/UDP só vale depois de reiniciar: vai para outro escopo, e é
+    // assim que aplicado e pendente ficam excludentes para o mesmo item.
+    expect(WinAction::Rdp->stateChange(['SubAction' => 'h264-on'])?->applied)->toBeTrue()
+        ->and(WinAction::Rdp->stateChange(['SubAction' => 'h264-on'])?->scope)->toBe(\App\Domain\WinStateScope::PendingReboot)
+        ->and(WinAction::Rdp->stateChange(['SubAction' => 'h264-off'])?->applied)->toBeFalse()
+        ->and(WinAction::Rdp->stateChange(['SubAction' => 'h264-off'])?->scope)->toBe(\App\Domain\WinStateScope::PendingReboot);
 });
 
 // ---------------------------------------------------------------- optimize

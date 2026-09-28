@@ -238,11 +238,31 @@ Describe 'worker - o arquivo de conclusao' {
 # desta.
 Describe 'worker - a allowlist do lado elevado' {
 
-    It 'conhece as treze acoes' {
+    It 'conhece as quatorze acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'install',
-            'memory', 'network', 'optimize', 'performance', 'processes', 'tweaks'
+            'memory', 'network', 'optimize', 'performance', 'processes', 'rdp', 'tweaks'
         )
+    }
+
+    It 'aceita rdp com <_>' -ForEach @('status', 'on', 'off', 'h264-on', 'h264-off') {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'rdp'
+            params = [PSCustomObject]@{ SubAction = $_ }
+        }
+
+        (Test-Job $job).params['SubAction'] | Should -Be $_
+    }
+
+    It 'recusa subacao que o rdp nao tem' {
+        $job = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'rdp'
+            params = [PSCustomObject]@{ SubAction = 'reboot' }
+        }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage "valor fora do conjunto em 'SubAction'"
     }
 
     It 'aceita gdid com <_>' -ForEach @('status', 'disable', 'enable') {

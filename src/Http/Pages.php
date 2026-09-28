@@ -333,6 +333,14 @@ final class Pages
             // Sem estado a tela oferece "Aplicar", como antes da R1.
         }
 
+        $pendentes = [];
+
+        try {
+            $pendentes = ($this->makeService)()->winStates(WinStateScope::PendingReboot);
+        } catch (Throwable) {
+            // Sem pendência a tela não avisa de reinício; não há o que dizer.
+        }
+
         $dnsProviders = [];
         $dnsProblem   = null;
 
@@ -377,6 +385,7 @@ final class Pages
             tweaksProblem: $tweaksProblem,
             tweaksApplied: WinAction::tweakKeysOf($aplicados[WinAction::Tweaks->value]->payload ?? null, $presets),
             appliedActions: array_keys($aplicados),
+            pendingRebootActions: array_keys($pendentes),
             dnsProviders: $dnsProviders,
             dnsChosen: $dnsEscolha,
             dnsProblem: $dnsProblem,
@@ -555,13 +564,17 @@ final class Pages
 
         try {
             $servico = ($this->makeService)();
-            $antes   = $servico->winStates(WinStateScope::Applied)[$acao->value] ?? null;
+            // O escopo é o da mudança, não sempre o Applied: o rdp aponta o
+            // vídeo H.264/UDP para o PendingReboot. Cada execução move um escopo
+            // só, e é assim que aplicado e pendente ficam excludentes.
+            $escopo  = $mudanca->scope;
+            $antes   = $servico->winStates($escopo)[$acao->value] ?? null;
             $presets = $acao === WinAction::Tweaks ? WinConfig::presets() : [];
             $depois  = $acao->mergeState($antes?->payload, $mudanca, $presets);
 
             if ($depois !== null) {
                 $servico->putWinState(new WinState(
-                    scope: WinStateScope::Applied,
+                    scope: $escopo,
                     action: $acao->value,
                     payload: $depois,
                 ));
@@ -572,7 +585,7 @@ final class Pages
             // Nada ficou aplicado: APAGA em vez de gravar "não aplicado".
             // Ausência e "não aplicado" têm de significar a mesma coisa — ver
             // a nota na interface do provider.
-            $servico->forgetWinState(WinStateScope::Applied, $acao->value);
+            $servico->forgetWinState($escopo, $acao->value);
         } catch (Throwable $e) {
             $this->flash(
                 'A ação executou e está no histórico, mas não foi possível anotar o estado dela: '

@@ -3,11 +3,11 @@
 declare(strict_types=1);
 
 /**
- * A tela /win: as treze ações do Windows, uma seção cada.
+ * A tela /win: as quatorze ações do Windows, uma seção cada.
  *
  * Quatro partes, nesta ordem: a última execução; as três ações de um clique
  * (auditoria, memória, processos) na mesma linha; o menu de abas com as outras
- * dez; e o histórico. Os cinco painéis são desenhados, só o da aba aberta
+ * onze; e o histórico. Os cinco painéis são desenhados, só o da aba aberta
  * visível, e o menu são links para /win?aba=<nome>#abas. Cada formulário posta
  * para a URL da página, que carrega a aba, e o 303 volta para ela.
  *
@@ -78,6 +78,8 @@ $twReverte     = \App\Win\WinAction::tweaksRevert($view->tweaksChecked, $view->t
 $perfAplicado  = $aplicado(\App\Win\WinAction::Performance);
 $optAplicado   = $aplicado(\App\Win\WinAction::Optimize);
 $gdidAplicado  = $aplicado(\App\Win\WinAction::Gdid);
+$rdpAplicado   = $aplicado(\App\Win\WinAction::Rdp);
+$rdpPendente   = in_array(\App\Win\WinAction::Rdp->value, $view->pendingRebootActions, true);
 
 $grupos = [];
 foreach ($view->tweaks as $tw) {
@@ -494,9 +496,45 @@ foreach ($view->tweaks as $tw) {
   </div>
 
   <?= $painel(WinTab::AcessoRemoto) ?>
-    <section id="acesso-rdp">
-      <?= $secao('Área de Trabalho Remota (RDP)', 'Chegar a esta máquina pela Área de Trabalho Remota do Windows.') ?>
-      <p class="empty">Em breve.</p>
+    <section id="acao-rdp">
+      <?= $secao('Área de Trabalho Remota (RDP)', 'Chegar a esta máquina de outro computador, pela Área de Trabalho Remota do Windows.') ?>
+      <div class="row">
+        <?= $botao('rdp', 'SubAction', 'status', 'Ver o estado', true) ?>
+      </div>
+      <div class="row">
+        <?php if ($rdpAplicado): ?>
+          <?= $botao('rdp', 'SubAction', 'off', 'Desligar acesso remoto', false) ?>
+          <?= $botao('rdp', 'SubAction', 'on', 'Ligar acesso remoto', true) ?>
+        <?php else: ?>
+          <?= $botao('rdp', 'SubAction', 'on', 'Ligar acesso remoto', false) ?>
+          <?= $botao('rdp', 'SubAction', 'off', 'Desligar acesso remoto', true) ?>
+        <?php endif; ?>
+      </div>
+      <p class="dica">
+        <strong>Ligar</strong> deixa esta máquina aceitar conexão de Área de Trabalho Remota de outro
+        computador, e abre a porta dela no firewall do Windows. Vale na hora.
+        <strong><?= $rdpAplicado ? 'Desligar' : 'Ligar' ?></strong> é a volta: a máquina passa a recusar
+        de novo. Comece por <strong>Ver o estado</strong>, que só lê e não muda nada.
+      </p>
+      <?php if ($rdpPendente): ?>
+        <div class="alert alert-note">
+          O vídeo H.264/UDP foi ligado por esta tela e <strong>só passa a valer depois de reiniciar o
+          Windows</strong>. Reverter antes de reiniciar desfaz essa mudança.
+        </div>
+        <div class="row">
+          <?= $botao('rdp', 'SubAction', 'h264-off', 'Reverter vídeo H.264/UDP', false) ?>
+        </div>
+      <?php else: ?>
+        <div class="row">
+          <?= $botao('rdp', 'SubAction', 'h264-on', 'Ativar vídeo H.264/UDP', true) ?>
+        </div>
+      <?php endif; ?>
+      <p class="dica">
+        O <strong>vídeo H.264/UDP</strong> deixa a imagem da conexão mais fluida e com menos atraso,
+        gastando um pouco mais de processador. Ao contrário de ligar e desligar,
+        <strong>só passa a valer depois de reiniciar o Windows</strong> — por isso fica marcado como
+        pendente de reinício até você reiniciar ou reverter.
+      </p>
     </section>
     <section id="acesso-sunshine">
       <?= $secao('Sunshine', 'Transmitir esta máquina pelo Sunshine, com baixa latência.') ?>

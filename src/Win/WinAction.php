@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace App\Win;
 
+use App\Domain\WinStateScope;
 use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * As treze ações do Windows, e a allowlist do lado PHP.
+ * As quatorze ações do Windows, e a allowlist do lado PHP.
  *
  * ESTA NÃO É A TRANCA. A tranca é a allowlist do worker.ps1, que roda em
  * integridade Alta e é a última a validar antes de executar. Esta classe é a
@@ -26,7 +27,7 @@ use RuntimeException;
  * paridade em tests/Unit/WinActionTest.php, que lê o worker.ps1 e compara as
  * duas listas.
  *
- * A ORDEM DOS CASOS É A DO MENU, de [1] a [13], e a tela repete essa ordem nas
+ * A ORDEM DOS CASOS É A DO MENU, de [1] a [14], e a tela repete essa ordem nas
  * seções dela.
  *
  * Os nomes dos parâmetros devolvidos por validate() são os nomes EXATOS dos
@@ -50,6 +51,7 @@ enum WinAction: string
     case Optimize = 'optimize';
     case Gpu = 'gpu';
     case Gdid = 'gdid';
+    case Rdp = 'rdp';
 
     /**
      * Teto de bytes de qualquer campo de texto livre.
@@ -102,6 +104,14 @@ enum WinAction: string
      */
     public const GDID_SUBACTIONS = ['status', 'disable', 'enable'];
 
+    /**
+     * O rdp lê e liga/desliga o acesso remoto, e liga/reverte o vídeo H.264/UDP.
+     *
+     * status só lê; on/off valem na hora (Applied); h264-on/h264-off só valem
+     * depois de reiniciar (PendingReboot). Ver stateChange().
+     */
+    public const RDP_SUBACTIONS = ['status', 'on', 'off', 'h264-on', 'h264-off'];
+
     /** run gera a auditoria; open abre a pasta do log no Explorer. Sem subação, run. */
     public const AUDIT_SUBACTIONS = ['run', 'open'];
 
@@ -143,6 +153,7 @@ enum WinAction: string
             self::Exporter  => ['SubAction' => $this->pick($input, 'SubAction', self::EXPORTER_SUBACTIONS, obrigatorio: true)],
             self::Gpu       => ['SubAction' => $this->pick($input, 'SubAction', self::GPU_SUBACTIONS, obrigatorio: true)],
             self::Gdid      => ['SubAction' => $this->pick($input, 'SubAction', self::GDID_SUBACTIONS, obrigatorio: true)],
+            self::Rdp       => ['SubAction' => $this->pick($input, 'SubAction', self::RDP_SUBACTIONS, obrigatorio: true)],
             self::Optimize  => $this->optimize($input),
         };
     }
@@ -151,11 +162,11 @@ enum WinAction: string
      * O que uma execução BEM-SUCEDIDA desta ação significa para o estado.
      *
      * Devolve null para as ações que não afirmam nada sobre estado — as nove
-     * que não são reversíveis, e o `gdid -SubAction status`, que só relata.
+     * que não são reversíveis, e os `status` do gdid e do rdp, que só relatam.
      * Null NÃO é "não aplicado": quem recebe null não mexe no que está
      * guardado. Ver WinStateChange.
      *
-     * QUATRO AÇÕES SÃO REVERSÍVEIS, e cada uma diz a reversão de um jeito:
+     * CINCO AÇÕES SÃO REVERSÍVEIS, e cada uma diz a reversão de um jeito:
      *
      *   tweaks    -Undo com a lista dos tweaks a reverter (-Items) ou um
      *             -Preset. O payload guarda as chaves aplicadas; ver
@@ -168,6 +179,10 @@ enum WinAction: string
      *             subações. O estado real também vive em
      *             runtime/gdid-state.json, escrito pela própria ação.
      *   performance  -State on aplica, -State off reverte ao Balanceado.
+     *   rdp       'on'/'off' ligam e desligam o acesso remoto no Applied,
+     *             valendo na hora; 'h264-on'/'h264-off' ligam e revertem o vídeo
+     *             H.264/UDP no PendingReboot, valendo só depois de reiniciar.
+     *             Duas dimensões, dois escopos, cada subação movendo o seu.
      *
      * POR QUE O ESTADO NÃO É LIDO DA MÁQUINA, apesar de optimize e gdid
      * guardarem arquivo próprio e o plano de energia ser consultável por
@@ -208,6 +223,17 @@ enum WinAction: string
                 // Ausente é 'on': é o default declarado no Invoke-Performance.
                 applied: ($params['State'] ?? 'on') !== 'off',
             ),
+
+            // 'status' só relata: devolve null. As outras quatro movem UM escopo
+            // cada — ligar/desligar o acesso remoto vale na hora (Applied); o
+            // vídeo H.264/UDP só vale depois de reiniciar (PendingReboot).
+            self::Rdp => match ($params['SubAction'] ?? '') {
+                'on'       => new WinStateChange(applied: true),
+                'off'      => new WinStateChange(applied: false),
+                'h264-on'  => new WinStateChange(applied: true, scope: WinStateScope::PendingReboot),
+                'h264-off' => new WinStateChange(applied: false, scope: WinStateScope::PendingReboot),
+                default    => null,
+            },
 
             default => null,
         };

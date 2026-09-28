@@ -159,6 +159,10 @@ $ALLOWLIST = @{
     'gdid'        = @{
         'SubAction' = @{ tipo = 'set'; valores = @('status', 'disable', 'enable') }
     }
+
+    'rdp'         = @{
+        'SubAction' = @{ tipo = 'set'; valores = @('status', 'on', 'off', 'h264-on', 'h264-off') }
+    }
 }
 
 # ============================================================
