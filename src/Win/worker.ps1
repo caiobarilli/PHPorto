@@ -167,6 +167,10 @@ $ALLOWLIST = @{
     'sunshine'    = @{
         'SubAction' = @{ tipo = 'set'; valores = @('status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close') }
     }
+
+    # O hyperv so lista, e listar nao tem parametro: allowlist vazia, como
+    # memory e processes. A rota /hyperv atende so a leitura nesta fatia.
+    'hyperv'      = @{}
 }
 
 # ============================================================

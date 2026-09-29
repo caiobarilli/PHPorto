@@ -238,9 +238,9 @@ Describe 'worker - o arquivo de conclusao' {
 # desta.
 Describe 'worker - a allowlist do lado elevado' {
 
-    It 'conhece as quinze acoes' {
+    It 'conhece as dezesseis acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
-            'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'install',
+            'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'install',
             'memory', 'network', 'optimize', 'performance', 'processes', 'rdp', 'sunshine', 'tweaks'
         )
     }

@@ -9,7 +9,7 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * As quinze ações do Windows, e a allowlist do lado PHP.
+ * As dezesseis ações do Windows, e a allowlist do lado PHP.
  *
  * ESTA NÃO É A TRANCA. A tranca é a allowlist do worker.ps1, que roda em
  * integridade Alta e é a última a validar antes de executar. Esta classe é a
@@ -28,7 +28,8 @@ use RuntimeException;
  * duas listas.
  *
  * A ORDEM DOS CASOS É A DO MENU, de [1] a [15], e a tela repete essa ordem nas
- * seções dela.
+ * seções dela. O décimo sexto, hyperv, é fora do menu: atende a rota /hyperv, e
+ * por isso vem depois, sem seção na /win.
  *
  * Os nomes dos parâmetros devolvidos por validate() são os nomes EXATOS dos
  * parâmetros das ações (Preset, Provider, PrimaryDNS...), e não nomes próprios
@@ -53,6 +54,14 @@ enum WinAction: string
     case Gdid = 'gdid';
     case Rdp = 'rdp';
     case Sunshine = 'sunshine';
+
+    /**
+     * A décima sexta é FORA DO MENU da /win: ela atende a rota própria /hyperv,
+     * que lista as máquinas virtuais. Está no enum porque é ação do Windows como
+     * as outras — passa pela allowlist do worker e pelo despachante —, mas não
+     * tem seção na tela /win, e por isso vem depois da ordem de [1] a [15].
+     */
+    case Hyperv = 'hyperv';
 
     /**
      * Teto de bytes de qualquer campo de texto livre.
@@ -149,7 +158,11 @@ enum WinAction: string
     {
         return match ($this) {
             self::Memory,
-            self::Processes => [],
+            self::Processes,
+            // O hyperv só lista, e a lista não tem parâmetro: como memory e
+            // processes, devolve vazio. A tranca contra parâmetro inventado é
+            // o allowlist do worker, que declara 'hyperv' sem nenhum campo.
+            self::Hyperv => [],
 
             self::Audit       => $this->opcional($input, 'SubAction', self::AUDIT_SUBACTIONS),
             self::Performance => $this->opcional($input, 'State', self::PERFORMANCE_STATES),

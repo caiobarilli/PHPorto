@@ -13,12 +13,14 @@ use App\Win\WinAction;
  * errado.
  */
 
-it('tem as quinze ações do menu, na ordem do menu', function () {
+it('tem as dezesseis ações: as quinze do menu em ordem, e o hyperv fora dele', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
             'gdid', 'rdp', 'sunshine',
+            // Fora do menu da /win: atende a rota /hyperv, e por isso no fim.
+            'hyperv',
         ]);
 });
 
@@ -433,6 +435,16 @@ it('sunshine: só start e stop movem o estado do serviço, no Applied', function
 it('sunshine: install, firewall e status não afirmam nada sobre estado', function (string $sub) {
     expect(WinAction::Sunshine->stateChange(['SubAction' => $sub]))->toBeNull();
 })->with(['status', 'install', 'firewall-open', 'firewall-close']);
+
+// ---------------------------------------------------------------- hyperv
+
+it('hyperv não tem parâmetro: listar devolve vazio, como memory e processes', function () {
+    expect(WinAction::Hyperv->validate([]))->toBe([]);
+});
+
+it('hyperv é só leitura: não afirma nada sobre estado', function () {
+    expect(WinAction::Hyperv->stateChange([]))->toBeNull();
+});
 
 // ---------------------------------------------------------------- optimize
 
