@@ -43,6 +43,14 @@ final readonly class ConfigView
      * @param ElevationState $win             o que vale agora
      * @param bool           $winRetry        última tentativa falhou: oferece "tentar novamente"
      * @param int            $winProofTimeout segundos que o POST espera pela prova
+     *
+     * O painel do Hyper-V é diferente dos dois de cima: não é prova viva nem
+     * booleano da API, é decisão persistente do dono da máquina, gravada em
+     * storage/hyperv.json e sobrevivente a reinício. Por isso mostra desde
+     * quando está ligado, e não fala em "vida curta".
+     *
+     * @param bool    $hypervEnabled   se o painel do Hyper-V está habilitado
+     * @param ?string $hypervEnabledAt desde quando, em UTC, ou null
      */
     public function __construct(
         public string $provider,
@@ -59,6 +67,8 @@ final readonly class ConfigView
         public ElevationState $win,
         public bool $winRetry,
         public int $winProofTimeout,
+        public bool $hypervEnabled,
+        public ?string $hypervEnabledAt,
     ) {
     }
 }

@@ -43,6 +43,7 @@ use App\Http\Pages;
 use App\Http\Respond;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
+use App\Win\HypervGate;
 use App\Wsl\Distro;
 
 /**
@@ -143,6 +144,12 @@ $pages = new Pages(
         filesDir: $filesDir,
         storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
         winDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Win',
+    ),
+    // O painel do Hyper-V é decisão persistente, não prova de elevação: mora em
+    // storage/hyperv.json e sobrevive a reiniciar o servidor. Ver HypervGate.
+    hyperv: new HypervGate(
+        storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
+        filesDir: $filesDir,
     ),
 );
 

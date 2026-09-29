@@ -115,6 +115,42 @@ use App\Http\Respond;
   </section>
 
   <section>
+    <h2>Windows — Painel do Hyper-V</h2>
+
+    <form method="post" id="form-hyperv">
+      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+      <input type="hidden" name="acao" value="hyperv">
+
+      <div class="linha-acao">
+        <label class="switch">
+          <input type="checkbox" name="hyperv_enabled" value="1" id="hyperv-toggle"
+                 <?= $view->hypervEnabled ? 'checked' : '' ?>>
+          <span class="trilho"></span>
+          <span class="rotulo" id="hyperv-rotulo"><?= $view->hypervEnabled ? 'Ligado' : 'Desligado' ?></span>
+        </label>
+        <button type="submit" class="btn btn-sm" id="btn-salvar-hyperv">Salvar</button>
+      </div>
+
+      <p class="nota-estado">
+        Libera a tela <strong>/hyperv</strong>, que lista as máquinas virtuais. Ligar
+        <strong>confere antes</strong> se o Hyper-V está presente e ligado no Windows — se
+        não estiver, o painel não liga e a tela diz o que falta.
+        <br>
+        <?php if ($view->hypervEnabled): ?>
+          Ligado<?php if ($view->hypervEnabledAt !== null && $view->hypervEnabledAt !== ''): ?>
+            desde <strong><?= Respond::e($view->hypervEnabledAt) ?></strong> (UTC)<?php endif; ?>.
+        <?php else: ?>
+          Desligado.
+        <?php endif; ?>
+        <br>
+        Ao contrário do PowerShell elevado, este estado <strong>sobrevive a reiniciar</strong> o
+        servidor e o Windows: é decisão sua, não prova de privilégio, e por isso mora em
+        <code>storage/hyperv.json</code>, e não no marcador de elevação.
+      </p>
+    </form>
+  </section>
+
+  <section>
     <h2>Restaurar configurações de fábrica</h2>
 
     <form method="post" id="form-fabrica">
@@ -276,5 +312,16 @@ use App\Http\Respond;
   if (btnRetentar) {
     btnRetentar.addEventListener('click', function () { psForcar = true; });
   }
+
+  // ---- Interruptor do Hyper-V --------------------------------------------
+  // Só rótulo: ligar não pergunta em modal porque a própria ação já confere o
+  // recurso e recusa com um aviso quando não dá — a confirmação viria antes de
+  // saber se é possível, e seria cerimônia sem informação.
+  var hvToggle = document.getElementById('hyperv-toggle');
+  var hvRotulo = document.getElementById('hyperv-rotulo');
+
+  hvToggle.addEventListener('change', function () {
+    hvRotulo.textContent = hvToggle.checked ? 'Ligado' : 'Desligado';
+  });
 })();
 </script>

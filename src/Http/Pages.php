@@ -13,6 +13,7 @@ use App\Domain\WinState;
 use App\Domain\WinStateScope;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
+use App\Win\HypervGate;
 use App\Win\JobChannel;
 use App\Win\WinAction;
 use App\Win\WinConfig;
@@ -57,6 +58,7 @@ final class Pages
         private readonly Closure $makeService,
         private readonly string $filesDir,
         private readonly Elevation $elevation,
+        private readonly HypervGate $hyperv,
     ) {
     }
 
@@ -129,6 +131,8 @@ final class Pages
             win: $win,
             winRetry: $this->takeWinRetry(),
             winProofTimeout: Elevation::PROOF_TIMEOUT_S,
+            hypervEnabled: $this->hyperv->enabled(),
+            hypervEnabledAt: $this->hyperv->enabledAt(),
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view));
@@ -176,6 +180,10 @@ final class Pages
 
         if ($action === 'powershell') {
             $this->handlePowerShellToggle(($_POST['ps_enabled'] ?? '') === '1');
+        }
+
+        if ($action === 'hyperv') {
+            $this->handleHypervToggle(($_POST['hyperv_enabled'] ?? '') === '1');
         }
 
         if ($action === 'fabrica') {
@@ -239,6 +247,40 @@ final class Pages
         $_SESSION['phporto_win_retry'] = true;
 
         $this->flash($erro);
+        Respond::redirect('/config');
+    }
+
+    /**
+     * Liga ou desliga o painel do Hyper-V.
+     *
+     * LIGAR CONFERE O RECURSO ANTES, e por isso pode recusar: só habilita se o
+     * Hyper-V estiver presente e ligado no Windows (medido pelo CIM, sem
+     * elevação). Recurso desligado ou ausente vira aviso na tela — o PHPorto
+     * não liga o recurso do Windows, que é mudança grande com reinício.
+     *
+     * DESLIGAR NÃO PERGUNTA e não confere nada: apaga o arquivo de estado. Ao
+     * contrário do PowerShell elevado, nada precisa ser encerrado — não há
+     * processo por trás, só uma decisão gravada.
+     */
+    private function handleHypervToggle(bool $ligar): never
+    {
+        if (!$ligar) {
+            $this->flash(
+                $this->hyperv->disable()
+                    ? 'Painel do Hyper-V desligado.'
+                    : 'Não foi possível apagar ' . $this->hyperv->statePath()
+                        . '. Verifique a permissão de escrita da pasta storage/.'
+            );
+            Respond::redirect('/config');
+        }
+
+        $erro = $this->hyperv->enable();
+
+        $this->flash(
+            $erro
+            ?? 'Painel do Hyper-V ligado. Ele fica ligado mesmo depois de reiniciar o servidor '
+                . 'e o Windows — é decisão sua, não prova de privilégio.'
+        );
         Respond::redirect('/config');
     }
 
