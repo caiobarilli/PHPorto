@@ -14,6 +14,7 @@ use App\Domain\WinStateScope;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
 use App\Win\HypervGate;
+use App\Win\HypervListing;
 use App\Win\JobChannel;
 use App\Win\WinAction;
 use App\Win\WinConfig;
@@ -850,8 +851,11 @@ final class Pages
      * porque confirmar a existência é o que uma decisão desligada não deve
      * fazer.
      *
-     * Sem POST nesta fatia: a tela só mostra, sem botão de ação. A listagem das
-     * VMs, que exige o PowerShell elevado, entra nas fatias seguintes.
+     * SEM POST e SEM BOTÃO: a tela só mostra. A leitura roda no GET, porque não
+     * há o que clicar — e roda pelo worker elevado, porque o Get-VM exige
+     * Administrador (medido). Não grava no histórico: abrir a tela é consulta,
+     * não execução a registrar, e uma linha por carregamento de página poluiria
+     * o log das ações que a pessoa de fato pediu.
      */
     public function hyperv(): never
     {
@@ -859,8 +863,30 @@ final class Pages
             Respond::notFound();
         }
 
+        $blocked = $this->winBlockingReason();
+        $listing = null;
+
+        if ($blocked === null) {
+            $nonce = $this->elevation->nonce();
+
+            if ($nonce === null) {
+                $blocked = 'O PowerShell elevado não está mais de pé. Ligue de novo na configuração.';
+            } else {
+                try {
+                    $run     = (new JobChannel($this->filesDir))
+                        ->dispatch(WinAction::Hyperv, [], $nonce, $this->config['winutil']['timeout']);
+                    $listing = HypervListing::fromOutput($run->output);
+                } catch (RuntimeException $e) {
+                    $blocked = $e->getMessage();
+                }
+            }
+        }
+
         $view = new HypervView(
             tz: $this->config['tz'],
+            blocked: $blocked,
+            listing: $listing,
+            readAtUtc: gmdate(DATE_ATOM),
         );
 
         Respond::html('PHPorto — Hyper-V', Respond::render('hyperv.php', $view));
