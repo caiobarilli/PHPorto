@@ -7,7 +7,7 @@ namespace App\Http;
 use App\Wsl\DistroStatus;
 
 /**
- * A home: o nome e os três botões.
+ * A home: o nome e os quatro botões.
  *
  * $wslEnabled significa "dá para usar", não "está rodando agora". A VM do WSL
  * dormir é normal e ela sobe sozinha no primeiro comando — desabilitar o botão
@@ -20,6 +20,12 @@ use App\Wsl\DistroStatus;
  * construção — subir o servidor não eleva nada, e o que o habilita é o
  * interruptor da /config. Por isso $winReason costuma apontar para lá, em vez
  * de descrever um defeito.
+ *
+ * $hypervEnabled É UMA TERCEIRA NATUREZA. Não é "dá para usar" como o WSL nem
+ * prova viva como o WIN: é a decisão persistente do painel do Hyper-V, gravada
+ * em storage/hyperv.json. Uma vez ligada, o botão fica habilitado mesmo depois
+ * de reiniciar o servidor — por isso $hypervReason aponta para a /config, e não
+ * fala em vida curta.
  */
 final readonly class HomeView
 {
@@ -30,6 +36,8 @@ final readonly class HomeView
         public DistroStatus $status,
         public bool $winEnabled,
         public string $winReason,
+        public bool $hypervEnabled,
+        public string $hypervReason,
     ) {
     }
 }

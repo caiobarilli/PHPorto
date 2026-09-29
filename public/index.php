@@ -158,5 +158,6 @@ match ($path) {
     '/config' => $pages->config($method),
     '/wsl'    => $pages->wsl($method),
     '/win'    => $pages->win($method),
+    '/hyperv' => $pages->hyperv(),
     default   => Respond::notFound(),
 };

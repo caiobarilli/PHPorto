@@ -3,12 +3,12 @@
 declare(strict_types=1);
 
 /**
- * A home: o nome, e três botões.
+ * A home: o nome, e quatro botões.
  *
- * RÓTULO NO WSL E NO WIN, SÓ ÍCONE NA ENGRENAGEM. A engrenagem se lê sem
- * legenda; "WSL" e "WIN" não se leem a partir de um desenho, e o estado
- * desabilitado precisa de palavra para dizer O QUE está desligado — um ícone
- * apagado sozinho não diz.
+ * RÓTULO NO WSL, NO WIN E NO HYPER-V, SÓ ÍCONE NA ENGRENAGEM. A engrenagem se lê
+ * sem legenda; "WSL", "WIN" e "Hyper-V" não se leem a partir de um desenho, e o
+ * estado desabilitado precisa de palavra para dizer O QUE está desligado — um
+ * ícone apagado sozinho não diz.
  *
  * OS DOIS BOTÕES DESABILITAM POR MOTIVOS DIFERENTES, e isso é a razão de
  * haver uma nota por botão em vez de um parágrafo só:
@@ -65,6 +65,24 @@ use App\Http\Respond;
       </span>
     <?php endif; ?>
 
+    <?php if ($view->hypervEnabled): ?>
+      <a class="btn" href="/hyperv">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+             stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 1 0 0 6h13.5a3 3 0 1 0 0-6m-16.5-3a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3m-19.5 0a4.5 4.5 0 0 1 .9-2.7L5.737 5.1a3.375 3.375 0 0 1 2.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 0 1 .9 2.7m0 0a3 3 0 0 1-3 3m0 3h.008v.008h-.008v-.008Zm0-6h.008v.008h-.008v-.008Zm-3 6h.008v.008h-.008v-.008Zm0-6h.008v.008h-.008v-.008Z" />
+        </svg>
+        Hyper-V
+      </a>
+    <?php else: ?>
+      <span class="btn is-disabled" aria-disabled="true">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+             stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 0 1-3-3m3 3a3 3 0 1 0 0 6h13.5a3 3 0 1 0 0-6m-16.5-3a3 3 0 0 1 3-3h13.5a3 3 0 0 1 3 3m-19.5 0a4.5 4.5 0 0 1 .9-2.7L5.737 5.1a3.375 3.375 0 0 1 2.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 0 1 .9 2.7m0 0a3 3 0 0 1-3 3m0 3h.008v.008h-.008v-.008Zm0-6h.008v.008h-.008v-.008Zm-3 6h.008v.008h-.008v-.008Zm0-6h.008v.008h-.008v-.008Z" />
+        </svg>
+        Hyper-V
+      </span>
+    <?php endif; ?>
+
     <a class="btn btn-icone" href="/config" aria-label="Configuração" title="Configuração">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
            stroke="currentColor" aria-hidden="true">
@@ -74,13 +92,16 @@ use App\Http\Respond;
     </a>
   </div>
 
-  <?php if (!$view->wslEnabled || !$view->winEnabled): ?>
+  <?php if (!$view->wslEnabled || !$view->winEnabled || !$view->hypervEnabled): ?>
     <ul class="home-notas">
       <?php if (!$view->wslEnabled): ?>
         <li><strong>WSL:</strong> <?= Respond::e($view->wslReason) ?></li>
       <?php endif; ?>
       <?php if (!$view->winEnabled): ?>
         <li><strong>WIN:</strong> <?= Respond::e($view->winReason) ?></li>
+      <?php endif; ?>
+      <?php if (!$view->hypervEnabled): ?>
+        <li><strong>Hyper-V:</strong> <?= Respond::e($view->hypervReason) ?></li>
       <?php endif; ?>
     </ul>
   <?php endif; ?>

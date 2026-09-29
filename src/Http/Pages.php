@@ -80,6 +80,8 @@ final class Pages
             winReason: $win->blocked
                 ?? $win->detail
                 ?? 'O PowerShell elevado está desligado. Ligue na configuração — ele não sobrevive a reiniciar o servidor.',
+            hypervEnabled: $this->hyperv->enabled(),
+            hypervReason: 'O painel do Hyper-V está desligado. Ligue na configuração — uma vez ligado, ele sobrevive a reiniciar.',
         );
 
         Respond::html('PHPorto', Respond::render('home.php', $view));
@@ -837,6 +839,31 @@ final class Pages
         }
 
         return null;
+    }
+
+    /**
+     * A tela /hyperv.
+     *
+     * PROTEGIDA POR DUAS COISAS DIFERENTES: o token, como toda rota, já barrado
+     * lá no index.php; e a decisão persistente do painel. Desligado, responde
+     * 404 como as outras superfícies desligadas — a flag da API faz igual —,
+     * porque confirmar a existência é o que uma decisão desligada não deve
+     * fazer.
+     *
+     * Sem POST nesta fatia: a tela só mostra, sem botão de ação. A listagem das
+     * VMs, que exige o PowerShell elevado, entra nas fatias seguintes.
+     */
+    public function hyperv(): never
+    {
+        if (!$this->hyperv->enabled()) {
+            Respond::notFound();
+        }
+
+        $view = new HypervView(
+            tz: $this->config['tz'],
+        );
+
+        Respond::html('PHPorto — Hyper-V', Respond::render('hyperv.php', $view));
     }
 
     public function wsl(string $method): never
