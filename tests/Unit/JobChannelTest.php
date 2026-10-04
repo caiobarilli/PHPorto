@@ -18,15 +18,21 @@ use App\Win\WinAction;
 beforeEach(function () {
     $this->files = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto_job_' . bin2hex(random_bytes(6));
     mkdir($this->files, 0o775, true);
+    // O worker grava os resultados aqui; o job e as ordens ficam em files/.
+    $this->protegida = $this->files . DIRECTORY_SEPARATOR . Elevation::DIR_PROTEGIDA;
+    mkdir($this->protegida);
     $this->canal = new JobChannel($this->files);
 });
 
 afterEach(function () {
+    // Duas pastas agora: files/ e a protegida dentro dela.
     if (is_string($this->files) && is_dir($this->files)) {
-        foreach (glob($this->files . '/*') ?: [] as $f) {
-            @unlink($f);
+        foreach ([$this->protegida, $this->files] as $pasta) {
+            foreach (glob($pasta . '/*') ?: [] as $f) {
+                is_dir($f) ? @rmdir($f) : @unlink($f);
+            }
+            @rmdir($pasta);
         }
-        @rmdir($this->files);
     }
 });
 
@@ -39,7 +45,7 @@ function jobBruto(object $ctx): string
 /** Finge o worker: escreve a saída e a conclusão de um id. */
 function fingirWorker(object $ctx, string $id, string $saida, ?int $exit = 0, string $nota = ''): void
 {
-    $dir = (string) $ctx->files;
+    $dir = (string) $ctx->protegida;
     file_put_contents($dir . DIRECTORY_SEPARATOR . 'win-out-' . $id . '.txt', $saida);
     file_put_contents(
         $dir . DIRECTORY_SEPARATOR . 'win-done-' . $id . '.json',
@@ -79,8 +85,8 @@ it('send() apaga a conclusão de uma ação anterior antes de mandar', function 
 
     $this->canal->send(WinAction::Memory, [], 'n');
 
-    expect(glob($this->files . '/win-done-*.json'))->toBe([])
-        ->and(glob($this->files . '/win-out-*.txt'))->toBe([]);
+    expect(glob($this->protegida . '/win-done-*.json'))->toBe([])
+        ->and(glob($this->protegida . '/win-out-*.txt'))->toBe([]);
 });
 
 it('send() recusa quando a pasta de trabalho não existe', function () {
@@ -126,8 +132,8 @@ it('collect() limpa os arquivos depois de ler', function () {
 
     $this->canal->collect(10);
 
-    expect(glob($this->files . '/win-done-*.json'))->toBe([])
-        ->and(glob($this->files . '/win-out-*.txt'))->toBe([]);
+    expect(glob($this->protegida . '/win-done-*.json'))->toBe([])
+        ->and(glob($this->protegida . '/win-out-*.txt'))->toBe([]);
 });
 
 it('collect() explica na saída quando o worker recusou pela allowlist', function () {

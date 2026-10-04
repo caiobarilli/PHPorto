@@ -15,6 +15,19 @@ Enquanto está ligado, esse processo aceita as ações vindas da `/win`. Ele
 obedece a uma lista fechada de ações e parâmetros — o que a tela manda nunca é
 código. Ver [seguranca.md](seguranca.md).
 
+Ao ligar, o servidor anota o SHA-256 de cada arquivo que o processo elevado
+carrega (`bootstrap.ps1`, `actions/`, `lib/`, `config/` e `audit/audit.ps1`).
+Cada ação confere esses arquivos antes de carregá-los. Se algum mudou, sumiu ou
+apareceu depois de ligar, a ação é recusada com exit 1 e a saída diz qual
+arquivo foi. Depois de editar algo em `src/Win`, ou de um `git pull`,
+**desligue e ligue de novo** para a mudança valer.
+
+O processo elevado grava os scripts que gera e os resultados em
+`files/win-protected/`, uma pasta que só Administradores e SYSTEM alteram. Se
+essa pasta for um link, ou tiver outro dono, o processo elevado recusa subir e
+a tela mostra o motivo; apague a pasta e ligue de novo. Enquanto ele estiver
+ligado, a pasta do projeto não pode ser renomeada nem movida.
+
 O estado é de vida curta:
 
 - **recarregar a página mantém ligado**;
@@ -238,7 +251,8 @@ de tipo `windows`; o do WSL fica.
 | `runtime/` | estado do optimize e do gdid, capturas e relatórios de rede, MSI do windows_exporter, exportador da GPU |
 | `C:\log\` | os arquivos da auditoria |
 | `src/Win/tools/` | o WinMemoryCleaner |
-| `files/` | o canal com o processo elevado: trabalho, saída, ordens e log do worker |
+| `files/` | o canal com o processo elevado: trabalho, ordens, heartbeat, manifesto e log do worker |
+| `files/win-protected/` | os scripts gerados e os resultados do processo elevado: saída, código e conclusão |
 
 `runtime/` não é versionada. Apagá-la com o optimize ou o gdid aplicados leva
 junto o que o `-Undo` e o `enable` leem para desfazer, e com o exportador da GPU

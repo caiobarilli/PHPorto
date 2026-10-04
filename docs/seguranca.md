@@ -149,7 +149,72 @@ O processo elevado devolve cada execução num `win-done-<id>.json`, e o id vira
 parte do caminho dos arquivos de saída que o PHP lê e apaga. O PHP só aceita id
 de 12 dígitos hexadecimais, o formato que o processo elevado gera, e confere
 isso antes de montar qualquer caminho. Um arquivo de conclusão com id fora do
-formato é ignorado e nunca apaga nem lê nada fora de `src/Win/files/`.
+formato é ignorado e nunca apaga nem lê nada fora de `files/win-protected/`.
+
+### O que roda elevado é o que estava lá ao ligar
+
+`src/Win` é gravável por qualquer processo do usuário, e o processo elevado
+carrega dali o `bootstrap.ps1`, as ações, o `lib/`, os JSON de `config/` (o
+`tweaks.json` carrega PowerShell) e o `audit/audit.ps1`. Ao ligar, o PHP grava
+o SHA-256 de cada um em `files/win-manifesto.json` (`WinManifest`) e passa o
+SHA-256 desse arquivo na linha de comando do worker. O worker só aceita o
+manifesto cujo hash for esse e daí guarda o mapa na memória: o que muda em
+disco depois disso não muda o mapa. Vai o hash, e não o mapa inteiro, porque o
+`-Verb RunAs` passa pelo `ShellExecuteEx`, que pode cortar a linha em ~2048
+caracteres sem avisar, e o mapa em base64 passa de 4 KB.
+
+Cada script gerado leva o mapa e uma cópia de `Read-PhportoConferido`. Essa
+função lê os bytes do arquivo uma vez, confere o SHA-256 desses bytes e devolve
+o texto deles, que é o que entra; nenhum arquivo é carregado pelo caminho
+depois de conferido. Ela confere o bootstrap, o bootstrap confere `lib/`,
+`actions/` e `config/`, e o `Invoke-Audit` confere o `audit.ps1`. Arquivo que
+mudou, sumiu ou não estava no mapa é recusado, e a ação não roda.
+
+### A pasta protegida
+
+O script gerado roda como Administrador. Em `files/`, qualquer processo do
+usuário podia trocá-lo entre o worker escrever e o filho ler. Agora o worker
+grava os scripts e os resultados em `files/win-protected/`, com ACL própria,
+sem herança de `files/`:
+
+| quem | pode |
+| --- | --- |
+| Administradores, SYSTEM | tudo |
+| o usuário do `php -S` | ler, e apagar arquivo — é o que o PHP faz com a conclusão depois de gravar no banco |
+| OWNER RIGHTS | ler: o dono de um arquivo não ganha `WRITE_DAC` implícito |
+
+A pasta nasce com Administradores de dono e com a ACL já aplicada, e a ACL é
+refeita a cada subida. Pasta que já exista e seja link ou junção, ou tenha
+outro dono, é recusada, e o worker não sobe. Enquanto vive, o worker mantém
+aberto o arquivo `win-trava` lá dentro: o Windows não renomeia nem move pasta
+com arquivo aberto dentro, e sem isso quem escreve em `files/` poderia trocar a
+pasta inteira por outra. A conferência que vale é a feita com a trava já aberta.
+
+O usuário que recebe leitura é o dono do processo do `php -S`, e não o do
+worker: com elevação "por cima do ombro" (usuário padrão digitando a senha de
+um admin), o worker roda como o admin.
+
+### O que a conferência não cobre
+
+- **Arquivo trocado antes de ligar.** O manifesto confia no que está em
+  `src/Win` na hora de ligar. Quem trocou um arquivo antes disso entra no mapa
+  como se fosse o certo, do mesmo jeito que um `worker.ps1` reescrito antes de
+  ligar é dono da elevação.
+- **O `worker.ps1` e o lançador.** O worker não confere a si mesmo, e o
+  `files/win-launcher.ps1` roda em integridade Média. Trocar qualquer um dos dois
+  antes de ligar dá o mesmo que pedir uma elevação por conta própria.
+- **UAC desligado.** A ACL só separa o processo Médio do elevado porque, com
+  UAC, Administradores entra só para negar no token Médio. Com `EnableLUA` em 0
+  o usuário já é Administrador pleno, e a pasta não o barra.
+- **Pasta criada antes do worker.** O PHP não confere o dono da pasta
+  protegida. Se ela ainda não existir, um processo do usuário pode criá-la com
+  conclusões forjadas, que o PHP lê; o worker recusa subir sobre ela, mas o
+  recolhimento de órfãs da `/win` já as terá visto. Fecha com o registro de ids
+  pendentes, que é outra etapa.
+- **Os executáveis baixados.** O WinMemoryCleaner é conferido logo antes de
+  rodar, mas fica em `src/Win/tools/`, gravável, entre a conferência e a
+  execução. O MSI do windows_exporter e o exportador da GPU, em `runtime/`, não
+  têm hash fixado.
 
 ### O executável baixado
 

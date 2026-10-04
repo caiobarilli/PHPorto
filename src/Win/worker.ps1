@@ -43,7 +43,16 @@ param(
     # em storage/, que qualquer processo do mesmo usuario le. E' guarda de
     # OBSOLESCENCIA — job deixado por uma execucao anterior do servidor nao e'
     # confundido com job desta.
-    [Parameter(Mandatory)] [string]$Nonce
+    [Parameter(Mandatory)] [string]$Nonce,
+
+    # SHA-256 do win-manifesto.json que o PHP gravou ao ligar: o mapa
+    # {caminho relativo: sha256} de tudo o que o lado elevado carrega. O
+    # manifesto mora em files/, que qualquer processo do usuario escreve; o que
+    # o torna confiavel e' este hash, que vem na linha de comando e nao muda
+    # enquanto o worker roda. Vai o hash, e nao o mapa inteiro, porque o
+    # -Verb RunAs passa pelo ShellExecuteEx, que pode cortar a linha em ~2048
+    # caracteres sem avisar, e o mapa em base64 passa de 4 KB.
+    [Parameter(Mandatory)] [string]$ManifestoSha256
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,20 +82,33 @@ $F_DESLIGAR  = Join-Path $Dir 'win-ordem-desligar'
 $F_CANCELAR  = Join-Path $Dir 'win-ordem-cancelar'
 $F_PROVA     = Join-Path $Dir ('win-prova-' + $Nonce + '.txt')
 $F_LOG       = Join-Path $Dir 'win-worker.log'
+$F_MANIFESTO = Join-Path $Dir 'win-manifesto.json'
 
-# O bootstrap das acoes, irmao deste arquivo. Nao vem por parametro porque os
-# dois viajam juntos no repositorio: nao ha o que configurar, e uma chave a
-# menos e' uma chave a menos para ficar para tras.
+# A pasta dos scripts gerados e dos resultados. files/ e' gravavel por qualquer
+# processo do usuario, e um script gerado ali podia ser trocado entre o worker
+# escrever e o filho elevado ler. Esta tem ACL propria (ver
+# Get-RegrasProtegida): Administradores e SYSTEM fazem tudo, o usuario do
+# php -S so le e apaga. O job, as ordens, o heartbeat, a prova e o log ficam
+# em files/, porque quem os escreve e' o PHP ou ninguem os executa.
+$PROTEGIDA   = Join-Path $Dir 'win-protected'
+
+# Quem a ACL da pasta protegida nomeia. OWNER RIGHTS limita o que o DONO de um
+# arquivo pode: sem ele, o dono ganha WRITE_DAC implicito.
+$SID_ADMINS  = 'S-1-5-32-544'
+$SID_SYSTEM  = 'S-1-5-18'
+$SID_DONO    = 'S-1-3-4'
+
+# A pasta do motor, src/Win: o bootstrap, as acoes, lib/ e config/, todos
+# irmaos deste arquivo. Nao vem por parametro porque viajam juntos no
+# repositorio: nao ha o que configurar, e uma chave a menos e' uma chave a
+# menos para ficar para tras.
 #
-# Resolvido AQUI, e nao dentro de New-InvocationScript, por dois motivos. O
+# Resolvida AQUI, e nao dentro de New-InvocationScript, por dois motivos. O
 # primeiro e' a convencao deste bloco: caminho fica num lugar so. O segundo e'
 # medido — $PSScriptRoot dentro de uma funcao recriada por Invoke-Expression
 # vem VAZIO e ainda sombreia o global, entao a funcao nao teria como saber onde
 # esta, e o teste que a extrai por AST nao teria como dizer.
-$BOOTSTRAP   = Join-Path $PSScriptRoot 'bootstrap.ps1'
-
-# A pasta dos JSON que as regras 'lista' consultam, irma do bootstrap.
-$CONFIG_DIR  = Join-Path $PSScriptRoot 'config'
+$RAIZ_WIN    = $PSScriptRoot
 
 # ============================================================
 # ALLOWLIST — a tranca de verdade
@@ -232,16 +254,15 @@ function ConvertTo-PsLiteral([string]$value) {
 
     Recebe o nome da fonte. Devolve, para 'tweaks', as chaves do tweaks.json
     cujo Type nao e' Button nem Combobox; para 'debloat', os pacotes do
-    debloat.json; para 'dns', as chaves do dns.json. Fonte desconhecida ou arquivo ilegivel devolve lista vazia,
-    e lista vazia recusa todo item.
+    debloat.json; para 'dns', as chaves do dns.json. Fonte desconhecida devolve
+    lista vazia, e lista vazia recusa todo item. O arquivo passa pelo
+    manifesto: se mudou desde que o worker subiu, ou nao e' JSON, a excecao
+    chega a Test-Job e o job e' recusado com o motivo.
 #>
 function Get-PhportoListaPermitida([string]$fonte) {
-    try {
-        $dados = Get-Content -Path (Join-Path $CONFIG_DIR ($fonte + '.json')) -Raw -Encoding UTF8 | ConvertFrom-Json
-    } catch {
-        Write-Log "lista '$fonte' ilegivel: $($_.Exception.Message)"
-        return @()
-    }
+    if ($fonte -notin 'tweaks', 'debloat', 'dns') { return @() }
+
+    $dados = Read-PhportoConferido $RAIZ_WIN ('config/' + $fonte + '.json') $MANIFESTO | ConvertFrom-Json
 
     switch ($fonte) {
         'tweaks'  { return @($dados.PSObject.Properties | Where-Object { $_.Value.Type -notin 'Button', 'Combobox' } | ForEach-Object { $_.Name }) }
@@ -249,6 +270,179 @@ function Get-PhportoListaPermitida([string]$fonte) {
         'dns'     { return @($dados.PSObject.Properties | ForEach-Object { $_.Name }) }
         default   { return @() }
     }
+}
+
+function Read-PhportoConferido {
+    param([string]$Raiz, [string]$Relativo, [hashtable]$Manifesto)
+
+    # Os bytes sao lidos UMA vez: o hash e' destes bytes, e o texto devolvido
+    # tambem. Conferir o arquivo e depois carregar pelo caminho deixaria uma
+    # janela entre as duas leituras, e quem trocasse o arquivo em laco acabaria
+    # acertando nela. Esta funcao vai copiada para cada script gerado, entao
+    # nao pode depender de nada do worker.
+    $chave = $Relativo.Replace('\', '/')
+
+    if (-not $Manifesto.ContainsKey($chave)) {
+        throw "PHPorto: $chave nao estava em src/Win quando o PowerShell elevado foi ligado. Nada foi executado. Desligue e ligue de novo em /config."
+    }
+
+    $caminho = Join-Path $Raiz $chave
+    if (-not (Test-Path -LiteralPath $caminho -PathType Leaf)) {
+        throw "PHPorto: $chave sumiu de src/Win depois que o PowerShell elevado foi ligado. Nada foi executado."
+    }
+
+    $bytes = [System.IO.File]::ReadAllBytes($caminho)
+    $lido  = (Get-FileHash -InputStream ([System.IO.MemoryStream]::new($bytes)) -Algorithm SHA256).Hash
+
+    if ($lido -ne $Manifesto[$chave]) {
+        throw "PHPorto: $chave mudou depois que o PowerShell elevado foi ligado (SHA-256 $lido, esperado $($Manifesto[$chave])). Nada foi executado. Se a mudanca e' sua, desligue e ligue de novo em /config."
+    }
+
+    # O BOM sai aqui, como sairia se o PowerShell lesse o arquivo. Sem BOM le
+    # como UTF-8, e nao como ANSI: os arquivos sem BOM sao ASCII, ou tem
+    # acento so em comentario.
+    $inicio = if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) { 3 } else { 0 }
+    return [System.Text.Encoding]::UTF8.GetString($bytes, $inicio, $bytes.Length - $inicio)
+}
+
+function Read-PhportoManifesto([string]$caminho, [string]$sha256) {
+    # O hash da linha de comando e' o que vale: o arquivo so e' aceito se for
+    # byte a byte o que o PHP gravou, e depois disto o mapa vive em memoria.
+    $bytes = [System.IO.File]::ReadAllBytes($caminho)
+    $lido  = (Get-FileHash -InputStream ([System.IO.MemoryStream]::new($bytes)) -Algorithm SHA256).Hash
+
+    if ($lido -ne $sha256) {
+        throw "o manifesto em files/ nao e' o que o PHP gravou ao ligar (SHA-256 $lido, esperado $sha256)"
+    }
+
+    $manifesto = @{}
+    foreach ($par in ([System.Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json).PSObject.Properties) {
+        if ([string]$par.Value -notmatch '\A[0-9a-fA-F]{64}\z') {
+            throw "manifesto com SHA-256 invalido para '$($par.Name)'"
+        }
+        $manifesto[$par.Name] = [string]$par.Value
+    }
+
+    if (-not $manifesto.ContainsKey('bootstrap.ps1')) { throw 'manifesto sem o bootstrap.ps1' }
+
+    return $manifesto
+}
+
+function Get-UsuarioPhp([int]$processo) {
+    # O usuario do php -S, e nao o deste processo: com elevacao por cima do
+    # ombro (usuario padrao digitando a senha de um admin), o worker roda como
+    # o admin, e quem precisa ler os resultados e' o usuario padrao.
+    $p   = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId = $processo"
+    $sid = if ($null -ne $p) { (Invoke-CimMethod -InputObject $p -MethodName GetOwnerSid).Sid } else { $null }
+
+    if (-not $sid) { throw "nao foi possivel saber o usuario do php -S (pid $processo)" }
+
+    return [string]$sid
+}
+
+function Get-RegrasProtegida([string]$usuarioSid) {
+    # O usuario do php -S le e APAGA arquivo, e nada mais. Apagar e' o que o
+    # PHP faz com a conclusao depois de gravar no banco; sem isso o
+    # recolhimento de orfas gravaria a mesma execucao a cada abertura da /win.
+    # Criar e alterar ficam de fora, e sao o que trocaria um script gerado. O
+    # apagar vale so para arquivo (InheritOnly), nunca para a pasta.
+    #
+    # OWNER RIGHTS so le. Sem ele o dono de um arquivo ganha WRITE_DAC
+    # implicito, e numa maquina em que o dono do que se cria elevado e' o
+    # proprio usuario (politica "Object creator"), um processo Medio poderia
+    # reescrever a ACL de um script gerado, e depois o script.
+    $tudo = 'ContainerInherit, ObjectInherit'
+    return @(
+        [PSCustomObject]@{ Sid = $SID_ADMINS; Direitos = 'FullControl';    Heranca = $tudo;           SoArquivos = $false }
+        [PSCustomObject]@{ Sid = $SID_SYSTEM; Direitos = 'FullControl';    Heranca = $tudo;           SoArquivos = $false }
+        [PSCustomObject]@{ Sid = $SID_DONO;   Direitos = 'ReadAndExecute'; Heranca = $tudo;           SoArquivos = $false }
+        [PSCustomObject]@{ Sid = $usuarioSid; Direitos = 'ReadAndExecute'; Heranca = $tudo;           SoArquivos = $false }
+        [PSCustomObject]@{ Sid = $usuarioSid; Direitos = 'Delete';         Heranca = 'ObjectInherit'; SoArquivos = $true }
+    )
+}
+
+function New-AclProtegida([string]$usuarioSid, [switch]$ComDono) {
+    $acl = New-Object System.Security.AccessControl.DirectorySecurity
+    # Sem heranca de files/: a ACL desta pasta e' so a daqui.
+    $acl.SetAccessRuleProtection($true, $false)
+
+    if ($ComDono) {
+        $acl.SetOwner((New-Object System.Security.Principal.SecurityIdentifier($SID_ADMINS)))
+    }
+
+    foreach ($r in Get-RegrasProtegida $usuarioSid) {
+        $propagacao = if ($r.SoArquivos) { 'InheritOnly' } else { 'None' }
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            (New-Object System.Security.Principal.SecurityIdentifier($r.Sid)), $r.Direitos, $r.Heranca, $propagacao, 'Allow'
+        )))
+    }
+
+    return $acl
+}
+
+function New-PastaProtegida([string]$caminho, $acl) {
+    # Nasce ja com a ACL e com Administradores de dono: criar e proteger
+    # depois deixaria um instante em que a pasta e' de quem a criou.
+    [System.IO.Directory]::CreateDirectory($caminho, $acl) | Out-Null
+}
+
+function Set-PastaProtegidaAcl([string]$caminho, $acl) {
+    # SetAccessControl grava so a parte que mudou, a DACL; o dono, que
+    # acabou de ser conferido, fica como esta.
+    [System.IO.Directory]::SetAccessControl($caminho, $acl)
+}
+
+function Get-PastaInfo([string]$caminho) {
+    $item = Get-Item -LiteralPath $caminho -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) { return [PSCustomObject]@{ Existe = $false; Pasta = $false; Link = $false; Dono = $null } }
+
+    $link = [bool]($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)
+    # Link nao tem o dono conferido: e' recusado de qualquer jeito, e o
+    # Get-Acl seguiria o link ate o alvo.
+    $dono = if ($link) { $null } else { (Get-Acl -LiteralPath $caminho).GetOwner([System.Security.Principal.SecurityIdentifier]).Value }
+
+    return [PSCustomObject]@{ Existe = $true; Pasta = [bool]$item.PSIsContainer; Link = $link; Dono = $dono }
+}
+
+function Test-PastaProtegida($info) {
+    # Link ou juncao mandaria os scripts gerados para onde quem o criou
+    # quisesse. Dono de fora poderia reescrever a ACL, porque o dono sempre
+    # pode.
+    if (-not $info.Existe) { return 'nao existe' }
+    if ($info.Link)        { return "e' um link ou juncao" }
+    if (-not $info.Pasta)  { return "nao e' uma pasta" }
+    if ($info.Dono -notin $SID_ADMINS, $SID_SYSTEM) { return "tem como dono $($info.Dono), e nao Administradores nem SYSTEM" }
+    return $null
+}
+
+function Initialize-PastaProtegida([string]$caminho, [string]$usuarioSid) {
+    $info = Get-PastaInfo $caminho
+
+    if (-not $info.Existe) {
+        New-PastaProtegida $caminho (New-AclProtegida $usuarioSid -ComDono)
+    } else {
+        $motivo = Test-PastaProtegida $info
+        if ($motivo) { throw "files/win-protected $motivo. Apague a pasta e ligue de novo." }
+        # Repara a ACL a cada subida: uma mexida feita por fora nao sobrevive.
+        Set-PastaProtegidaAcl $caminho (New-AclProtegida $usuarioSid)
+    }
+
+    # A TRAVA fica aberta enquanto o worker vive. O Windows nao renomeia nem
+    # move pasta com arquivo aberto dentro, e isso vale para files/ e para
+    # todas as pastas acima. Sem ela, quem escreve em files/ trocaria a pasta
+    # inteira por outra, e ACL nenhuma impede: renomear filho e' direito de
+    # quem e' dono da pasta de cima.
+    $trava = [System.IO.File]::Open((Join-Path $caminho 'win-trava'), 'OpenOrCreate', 'ReadWrite', 'Read')
+
+    # Esta e' a conferencia que vale: com a trava aberta, a pasta nao muda
+    # mais de lugar.
+    $motivo = Test-PastaProtegida (Get-PastaInfo $caminho)
+    if ($motivo) {
+        $trava.Dispose()
+        throw "files/win-protected $motivo. Apague a pasta e ligue de novo."
+    }
+
+    return $trava
 }
 
 <#
@@ -364,10 +558,14 @@ function Test-Job($job) {
     escrevesse falharia em algum valor, e a falha apareceria como erro DO
     COMANDO, mandando quem depura para o lugar errado.
 
-    O ALVO E' O BOOTSTRAP DESTE REPOSITORIO. O caminho vem de $BOOTSTRAP,
-    resolvido no bloco de constantes: bootstrap.ps1 e worker.ps1 sao irmaos na
-    mesma pasta e viajam juntos, entao nao ha o que configurar, nao ha parametro
-    para manter em dia, e nao ha projeto externo a apontar.
+    O ALVO E' O BOOTSTRAP DESTE REPOSITORIO, em $RAIZ_WIN: bootstrap.ps1 e
+    worker.ps1 sao irmaos na mesma pasta e viajam juntos, entao nao ha o que
+    configurar, nao ha parametro para manter em dia, e nao ha projeto externo a
+    apontar.
+
+    O BOOTSTRAP ENTRA CONFERIDO. O script leva o manifesto e uma copia de
+    Read-PhportoConferido, e carrega o bootstrap pelo texto que essa funcao
+    devolve, nunca pelo caminho. Dali em diante quem confere e' o bootstrap.
 
     OS PARAMETROS VIAJAM COMO DADO, nunca como codigo. Nomes e valores viram
     JSON, o JSON vira base64, e o script gerado decodifica, monta o hashtable e
@@ -395,7 +593,7 @@ function Test-Job($job) {
     o winutil-cli devolvia quando recusava por falta de Administrador.
 #>
 function New-InvocationScript($validado, [string]$id) {
-    $arqExit = Join-Path $Dir ('win-exit-' + $id + '.txt')
+    $arqExit = Join-Path $PROTEGIDA ('win-exit-' + $id + '.txt')
 
     $dados = [ordered]@{}
 
@@ -417,17 +615,28 @@ function New-InvocationScript($validado, [string]$id) {
     $json  = ConvertTo-Json -InputObject $dados -Compress -Depth 5
     $carga = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json))
 
+    # O manifesto viaja como os parametros: JSON em base64, dado e nao codigo.
+    $mapa = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $MANIFESTO -Compress)))
+
     $linhas = New-Object System.Collections.Generic.List[string]
     $linhas.Add('$ErrorActionPreference = ' + (ConvertTo-PsLiteral 'Continue'))
     $linhas.Add('[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($true)')
     $linhas.Add('$phportoRecusado = $false')
     $linhas.Add('try {')
+    # Copiada do worker, que ja a tem em memoria: ler de um arquivo seria ler
+    # de onde alguem poderia troca-la.
+    $linhas.Add('    function global:Read-PhportoConferido {')
+    foreach ($l in (${function:Read-PhportoConferido}.ToString() -split "\r?\n")) { $linhas.Add($l) }
+    $linhas.Add('    }')
+    $linhas.Add('    $global:PhportoManifesto = @{}')
+    $linhas.Add('    foreach ($phportoPar in ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(' + (ConvertTo-PsLiteral $mapa) + ')) | ConvertFrom-Json).PSObject.Properties) { $global:PhportoManifesto[$phportoPar.Name] = [string]$phportoPar.Value }')
+    $linhas.Add('    $global:root = ' + (ConvertTo-PsLiteral $RAIZ_WIN))
     $linhas.Add('    $phportoJson   = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(' + (ConvertTo-PsLiteral $carga) + '))')
     $linhas.Add('    $phportoParams = @{}')
     $linhas.Add('    foreach ($phportoPar in ($phportoJson | ConvertFrom-Json).PSObject.Properties) {')
     $linhas.Add('        if ($phportoPar.Value -is [System.Array]) { $phportoParams[$phportoPar.Name] = [string[]]$phportoPar.Value } else { $phportoParams[$phportoPar.Name] = $phportoPar.Value }')
     $linhas.Add('    }')
-    $linhas.Add('    . ' + (ConvertTo-PsLiteral $BOOTSTRAP))
+    $linhas.Add('    . ([scriptblock]::Create((Read-PhportoConferido $global:root ''bootstrap.ps1'' $global:PhportoManifesto)))')
     $linhas.Add('    Invoke-PhportoWinAction -Action ' + (ConvertTo-PsLiteral $validado.acao) + ' -Params $phportoParams *>&1')
     $linhas.Add('} catch {')
     $linhas.Add('    Write-Host ("[phporto] " + $_.Exception.Message)')
@@ -448,7 +657,7 @@ function New-InvocationScript($validado, [string]$id) {
     $linhas.Add('[System.IO.File]::WriteAllText(' + (ConvertTo-PsLiteral $arqExit) + ', [string]$code, [System.Text.UTF8Encoding]::new($false))')
     $linhas.Add('exit $code')
 
-    $caminho = Join-Path $Dir ('win-exec-' + $id + '.ps1')
+    $caminho = Join-Path $PROTEGIDA ('win-exec-' + $id + '.ps1')
 
     # CRLF COM BOM: o 5.1 le script sem BOM como ANSI e a acentuacao vira
     # lixo. E' a regra INVERSA da do cmd.sh, e o porque esta no
@@ -490,7 +699,7 @@ function Write-Done {
         $params = $null
     )
 
-    $done = Join-Path $Dir ('win-done-' + $id + '.json')
+    $done = Join-Path $PROTEGIDA ('win-done-' + $id + '.json')
     $dados = [ordered]@{
         id     = $id
         exit   = $exit
@@ -529,10 +738,22 @@ if (-not $admin) {
     exit 1
 }
 
+# Manifesto e pasta protegida ANTES da prova: sem os dois o worker nao executa
+# nada com seguranca, e e' melhor nao subir. O motivo vai na propria prova, para
+# a tela dizer por que nao ligou em vez de esperar 30 s e culpar o UAC.
+try {
+    $MANIFESTO = Read-PhportoManifesto $F_MANIFESTO $ManifestoSha256
+    $TRAVA     = Initialize-PastaProtegida $PROTEGIDA (Get-UsuarioPhp $ParentPid)
+} catch {
+    Write-Log "recusado ao subir: $($_.Exception.Message)"
+    Set-Content -Path $F_PROVA -Value ('ERRO=' + $_.Exception.Message) -Encoding ASCII
+    exit 1
+}
+
 # Prova em ASCII e sem BOM, para o PHP casar o conteudo sem tirar bytes antes.
 Set-Content -Path $F_PROVA -Value "PID=$PID;ADMIN=True;NONCE=$Nonce" -Encoding ASCII
 Write-Heartbeat
-Write-Log "iniciado pid=$PID pai=$ParentPid bootstrap='$BOOTSTRAP'"
+Write-Log "iniciado pid=$PID pai=$ParentPid raiz='$RAIZ_WIN' manifesto=$($MANIFESTO.Count) arquivos"
 
 # ============================================================
 # LACO — 500 ms, cinco tarefas
@@ -569,7 +790,7 @@ function Stop-Filho([string]$motivo) {
 
 function Clear-Filho {
     # O script gerado e os arquivos auxiliares somem junto: eles carregam os
-    # valores do job, e deixar isso em files/ seria manter uma copia do que
+    # valores do job, e deixar isso no disco seria manter uma copia do que
     # foi executado fora do banco, que e' onde o registro deve viver.
     if ($null -ne $script:filhoScript -and (Test-Path $script:filhoScript)) {
         Remove-Item $script:filhoScript -Force -ErrorAction SilentlyContinue
@@ -577,7 +798,7 @@ function Clear-Filho {
 
     if ($null -ne $script:filhoId) {
         foreach ($sufixo in @('win-exit-', 'win-err-')) {
-            $alvo = Join-Path $Dir ($sufixo + $script:filhoId + '.txt')
+            $alvo = Join-Path $PROTEGIDA ($sufixo + $script:filhoId + '.txt')
             if (Test-Path $alvo) { Remove-Item $alvo -Force -ErrorAction SilentlyContinue }
         }
     }
@@ -681,7 +902,7 @@ while ($true) {
         # erro. Juntar os dois e' o que o Runner do WSL ja faz com o stderr
         # residual do shell de login, pelo mesmo motivo: o que sobrou num
         # canto tem de aparecer na tela.
-        $arqErr = Join-Path $Dir ('win-err-' + $filhoId + '.txt')
+        $arqErr = Join-Path $PROTEGIDA ('win-err-' + $filhoId + '.txt')
         if (Test-Path $arqErr) {
             try {
                 $residuo = [System.IO.File]::ReadAllText($arqErr)
@@ -694,7 +915,7 @@ while ($true) {
             Remove-Item $arqErr -Force -ErrorAction SilentlyContinue
         }
 
-        $arqExit = Join-Path $Dir ('win-exit-' + $filhoId + '.txt')
+        $arqExit = Join-Path $PROTEGIDA ('win-exit-' + $filhoId + '.txt')
         $code    = $null
         if (Test-Path $arqExit) {
             $bruto = ([System.IO.File]::ReadAllText($arqExit)).Trim()
@@ -733,8 +954,8 @@ while ($true) {
                 $job       = $bruto | ConvertFrom-Json
                 $validado  = Test-Job $job
                 $script:filhoScript = New-InvocationScript $validado $id
-                $script:filhoOut    = Join-Path $Dir ('win-out-' + $id + '.txt')
-                $erro               = Join-Path $Dir ('win-err-' + $id + '.txt')
+                $script:filhoOut    = Join-Path $PROTEGIDA ('win-out-' + $id + '.txt')
+                $erro               = Join-Path $PROTEGIDA ('win-err-' + $id + '.txt')
 
                 # O caminho do script gerado e' o UNICO conteudo variavel na
                 # linha de comando, e quem o escreveu foi este codigo. Aspas
@@ -758,7 +979,7 @@ while ($true) {
                 # conclusao, e sem ele ficaria sondando ate o timeout.
                 Write-Log "job RECUSADO id=$id : $($_.Exception.Message)"
                 [System.IO.File]::WriteAllText(
-                    (Join-Path $Dir ('win-out-' + $id + '.txt')),
+                    (Join-Path $PROTEGIDA ('win-out-' + $id + '.txt')),
                     "[phporto] job recusado pela allowlist do worker: $($_.Exception.Message)`r`n",
                     [System.Text.UTF8Encoding]::new($false)
                 )
@@ -788,4 +1009,5 @@ while ($true) {
 
 Remove-Item $F_HEARTBEAT -Force -ErrorAction SilentlyContinue
 Remove-Item $F_PROVA -Force -ErrorAction SilentlyContinue
+$TRAVA.Dispose()
 Write-Log "fim pid=$PID"

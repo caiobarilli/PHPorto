@@ -103,7 +103,29 @@ function Test-PhportoElevado {
 # tools/) de proposito: assim Invoke-Audit e Invoke-Memory migram sem uma
 # linha de edicao. O valor do diff desta migracao e' "mudou de endereco".
 
-$global:root = $PSScriptRoot
+#
+# ELEVADO, ESTE ARQUIVO CHEGA COMO TEXTO, ja conferido contra o manifesto pelo
+# script que o worker gerou, e texto nao tem $PSScriptRoot: quem o carregou
+# deixou a raiz em $global:root. Carregado do disco (teste, prompt), a raiz e'
+# a pasta dele.
+
+if ($PSScriptRoot) { $global:root = $PSScriptRoot }
+
+# ============================================================
+# FONTE — o que o lado elevado le passa pelo manifesto
+# ============================================================
+#
+# Com manifesto, so entra o que bate com o SHA-256 de quando o PowerShell
+# elevado foi ligado: arquivo trocado, sumido ou que nao existia naquela hora
+# e' recusado, e nada roda. O script gerado pelo worker SEMPRE poe o
+# manifesto. Sem ele e' carga a mao, de teste ou de prompt, e le do disco.
+
+function Read-PhportoFonte([string]$Relativo) {
+    if ($null -ne $global:PhportoManifesto) {
+        return Read-PhportoConferido $global:root $Relativo $global:PhportoManifesto
+    }
+    return [System.IO.File]::ReadAllText((Join-Path $global:root $Relativo))
+}
 
 # ============================================================
 # RUNTIME — onde as acoes gravam o que criam enquanto rodam
@@ -113,7 +135,7 @@ $global:root = $PSScriptRoot
 # relatorios do network, o MSI do windows_exporter e o exportador da GPU.
 # Cada acao cria a pasta que usa quando ela falta.
 
-$global:runtime = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'runtime'
+$global:runtime = Join-Path (Split-Path (Split-Path $global:root -Parent) -Parent) 'runtime'
 
 # ============================================================
 # CONFIGS — os JSON que as acoes leem
@@ -131,14 +153,17 @@ $global:sync          = [hashtable]::Synchronized(@{})
 $global:sync.configs  = @{}
 
 foreach ($nome in 'debloat', 'dns', 'preset', 'tweaks') {
-    $arquivo = Join-Path $PSScriptRoot ('config\' + $nome + '.json')
+    $arquivo = Join-Path $global:root ('config\' + $nome + '.json')
 
     if (-not (Test-Path $arquivo)) {
         throw "PHPorto: config ausente em src/Win/config: $nome.json"
     }
 
+    # Manifesto que nao bate lanca daqui, com a propria mensagem.
+    $texto = Read-PhportoFonte ('config/' + $nome + '.json')
+
     try {
-        $global:sync.configs.$nome = Get-Content -Path $arquivo -Raw -Encoding UTF8 | ConvertFrom-Json
+        $global:sync.configs.$nome = $texto | ConvertFrom-Json
     } catch {
         throw "PHPorto: $nome.json nao e' JSON valido: $($_.Exception.Message)"
     }
@@ -153,19 +178,23 @@ foreach ($nome in 'debloat', 'dns', 'preset', 'tweaks') {
 #
 # O filtro de actions/ e' 'Invoke-*.ps1' pelo mesmo motivo que era no
 # winutil-cli: garante que so entra o que tem forma de acao.
+#
+# Cada arquivo entra pelo texto que Read-PhportoFonte devolve, e nao pelo
+# caminho: com manifesto, e' o texto que foi conferido. Arquivo novo na pasta,
+# que nao estava no manifesto, e' recusado em vez de carregado.
 
 foreach ($par in @(
     @{ Pasta = 'lib';     Filtro = '*.ps1' },
     @{ Pasta = 'actions'; Filtro = 'Invoke-*.ps1' }
 )) {
-    $pasta = Join-Path $PSScriptRoot $par.Pasta
+    $pasta = Join-Path $global:root $par.Pasta
 
     if (-not (Test-Path $pasta)) {
         throw "PHPorto: pasta ausente em src/Win: $($par.Pasta)"
     }
 
     Get-ChildItem -Path $pasta -Filter $par.Filtro -File | ForEach-Object {
-        . $_.FullName
+        . ([scriptblock]::Create((Read-PhportoFonte ($par.Pasta + '/' + $_.Name))))
     }
 }
 

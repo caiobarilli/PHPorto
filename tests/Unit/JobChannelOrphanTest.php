@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domain\OutputCap;
+use App\Win\Elevation;
 use App\Win\JobChannel;
 
 /**
@@ -22,15 +23,21 @@ use App\Win\JobChannel;
 beforeEach(function () {
     $this->files = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto_orfa_' . bin2hex(random_bytes(6));
     mkdir($this->files, 0o775, true);
+    // O worker grava os resultados aqui; o job e as ordens ficam em files/.
+    $this->protegida = $this->files . DIRECTORY_SEPARATOR . Elevation::DIR_PROTEGIDA;
+    mkdir($this->protegida);
     $this->canal = new JobChannel($this->files);
 });
 
 afterEach(function () {
+    // Duas pastas agora: files/ e a protegida dentro dela.
     if (is_string($this->files) && is_dir($this->files)) {
-        foreach (glob($this->files . '/*') ?: [] as $f) {
-            @unlink($f);
+        foreach ([$this->protegida, $this->files] as $pasta) {
+            foreach (glob($pasta . '/*') ?: [] as $f) {
+                is_dir($f) ? @rmdir($f) : @unlink($f);
+            }
+            @rmdir($pasta);
         }
-        @rmdir($this->files);
     }
 });
 
@@ -51,7 +58,7 @@ function deixarOrfa(
     ?string $fim = '2026-09-09 13:04:14',
     int $ms = 116000,
 ): void {
-    $dir = (string) $ctx->files;
+    $dir = (string) $ctx->protegida;
 
     file_put_contents($dir . DIRECTORY_SEPARATOR . 'win-out-' . $id . '.txt', $saida);
 
@@ -74,7 +81,7 @@ function deixarOrfa(
 /** Escreve uma conclusão crua, para os casos que o worker não produz. */
 function deixarConclusaoCrua(object $ctx, string $id, string $conteudo): void
 {
-    file_put_contents((string) $ctx->files . DIRECTORY_SEPARATOR . 'win-done-' . $id . '.json', $conteudo);
+    file_put_contents((string) $ctx->protegida . DIRECTORY_SEPARATOR . 'win-done-' . $id . '.json', $conteudo);
 }
 
 // ---------------------------------------------------------------- a fila
@@ -117,7 +124,7 @@ it('win-out SEM win-done não é recolhido: é trabalho em andamento', function 
     // O worker cria a saída antes de largar o filho, e a conclusão é o único
     // sinal de fim. Recolher só a saída registraria como terminado algo que
     // está rodando com privilégio de Administrador.
-    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-ccc333.txt', 'meio do caminho');
+    file_put_contents($this->protegida . DIRECTORY_SEPARATOR . 'win-out-ccc333.txt', 'meio do caminho');
 
     expect($this->canal->collectOrphans())->toBe([]);
 });
@@ -138,7 +145,7 @@ it('órfã de OUTRA execução do servidor é recolhida — nonce não filtra aq
     deixarOrfa($this, 'eee555000000', "de ontem\n");
 
     $bruto = json_decode(
-        (string) file_get_contents($this->files . DIRECTORY_SEPARATOR . 'win-done-eee555000000.json'),
+        (string) file_get_contents($this->protegida . DIRECTORY_SEPARATOR . 'win-done-eee555000000.json'),
         true
     );
 
@@ -203,14 +210,14 @@ it('conclusão sem a hora de fim ainda é recolhida, com finishedAt nulo', funct
 });
 
 it('conclusão ilegível é ignorada em vez de derrubar a página', function () {
-    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-444000000000.txt', 'x');
+    file_put_contents($this->protegida . DIRECTORY_SEPARATOR . 'win-out-444000000000.txt', 'x');
     deixarConclusaoCrua($this, '444000000000', 'isto não é json');
 
     expect($this->canal->collectOrphans())->toBe([]);
 });
 
 it('param aninhado é descartado: o rótulo só monta com escalar', function () {
-    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-555111000000.txt', "x\n");
+    file_put_contents($this->protegida . DIRECTORY_SEPARATOR . 'win-out-555111000000.txt', "x\n");
     deixarConclusaoCrua($this, '555111000000', (string) json_encode([
         'id'     => '555111000000',
         'exit'   => 0,
@@ -225,7 +232,7 @@ it('param aninhado é descartado: o rótulo só monta com escalar', function () 
 });
 
 it('lista de itens do worker volta como texto separado por vírgula', function () {
-    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-666111000000.txt', "x\n");
+    file_put_contents($this->protegida . DIRECTORY_SEPARATOR . 'win-out-666111000000.txt', "x\n");
     deixarConclusaoCrua($this, '666111000000', (string) json_encode([
         'id'     => '666111000000',
         'exit'   => 0,
@@ -248,9 +255,9 @@ it('discardOrphan apaga os dois arquivos, e só os do id pedido', function () {
 
     $this->canal->discardOrphan('666222000000');
 
-    expect(is_file($this->files . DIRECTORY_SEPARATOR . 'win-done-666222000000.json'))->toBeFalse()
-        ->and(is_file($this->files . DIRECTORY_SEPARATOR . 'win-out-666222000000.txt'))->toBeFalse()
-        ->and(is_file($this->files . DIRECTORY_SEPARATOR . 'win-done-777333000000.json'))->toBeTrue()
+    expect(is_file($this->protegida . DIRECTORY_SEPARATOR . 'win-done-666222000000.json'))->toBeFalse()
+        ->and(is_file($this->protegida . DIRECTORY_SEPARATOR . 'win-out-666222000000.txt'))->toBeFalse()
+        ->and(is_file($this->protegida . DIRECTORY_SEPARATOR . 'win-done-777333000000.json'))->toBeTrue()
         ->and($this->canal->collectOrphans())->toHaveCount(1);
 });
 
@@ -261,7 +268,7 @@ it('recolher NÃO apaga nada por si: quem apaga é quem gravou', function () {
 
     $this->canal->collectOrphans();
 
-    expect(is_file($this->files . DIRECTORY_SEPARATOR . 'win-done-888444000000.json'))->toBeTrue()
+    expect(is_file($this->protegida . DIRECTORY_SEPARATOR . 'win-done-888444000000.json'))->toBeTrue()
         ->and($this->canal->collectOrphans())->toHaveCount(1);
 });
 
@@ -304,7 +311,7 @@ it('conclusão com id fora do formato é ignorada, sem montar caminho', function
 it('conclusão cujo nome não é o do id é ignorada', function () {
     // Sem isto, um win-done qualquer apontaria para o par de outra execução.
     deixarOrfa($this, 'bbb222000000', "de outro\n");
-    unlink($this->files . DIRECTORY_SEPARATOR . 'win-done-bbb222000000.json');
+    unlink($this->protegida . DIRECTORY_SEPARATOR . 'win-done-bbb222000000.json');
     deixarConclusaoCrua($this, 'aaa111000000', (string) json_encode([
         'id' => 'bbb222000000', 'exit' => 0, 'ms' => 1, 'nota' => '', 'acao' => 'audit', 'params' => new stdClass(),
     ]));
@@ -312,17 +319,18 @@ it('conclusão cujo nome não é o do id é ignorada', function () {
     expect($this->canal->collectOrphans())->toBe([]);
 });
 
-it('discardOrphan com id forjado não apaga nada fora da pasta', function () {
-    // As duas pastas tornam o caminho resolvível aqui; no Windows o .. já é
-    // resolvido no texto, sem precisar delas.
-    $fora = dirname($this->files) . DIRECTORY_SEPARATOR . 'phporto_alvo_' . bin2hex(random_bytes(6));
-    mkdir($this->files . DIRECTORY_SEPARATOR . 'win-done-..');
-    mkdir($this->files . DIRECTORY_SEPARATOR . 'win-out-..');
+it('discardOrphan com id forjado não apaga nada fora da pasta protegida', function () {
+    // O alvo fica em files/, fora da pasta protegida. As duas pastas tornam o
+    // caminho resolvível aqui; no Windows o .. já é resolvido no texto.
+    $fora = $this->files . DIRECTORY_SEPARATOR . 'phporto_alvo_' . bin2hex(random_bytes(6));
+    mkdir($this->protegida . DIRECTORY_SEPARATOR . 'win-done-..');
+    mkdir($this->protegida . DIRECTORY_SEPARATOR . 'win-out-..');
     file_put_contents($fora . '.txt', 'nao apagar');
     file_put_contents($fora . '.json', 'nao apagar');
 
     try {
-        // 'win-done-..' come o primeiro '..'; os outros dois saem da pasta.
+        // 'win-done-..' come o primeiro '..', o segundo volta para a pasta
+        // protegida e o terceiro sai dela.
         $this->canal->discardOrphan('../../../' . basename($fora));
 
         expect(is_file($fora . '.txt'))->toBeTrue()
@@ -330,7 +338,17 @@ it('discardOrphan com id forjado não apaga nada fora da pasta', function () {
     } finally {
         @unlink($fora . '.txt');
         @unlink($fora . '.json');
-        @rmdir($this->files . DIRECTORY_SEPARATOR . 'win-done-..');
-        @rmdir($this->files . DIRECTORY_SEPARATOR . 'win-out-..');
+        @rmdir($this->protegida . DIRECTORY_SEPARATOR . 'win-done-..');
+        @rmdir($this->protegida . DIRECTORY_SEPARATOR . 'win-out-..');
     }
+});
+
+it('conclusão forjada em files/, fora da pasta protegida, nem é olhada', function () {
+    // files/ é gravável por qualquer processo do usuário; o worker grava na
+    // protegida, e é só lá que este lado procura.
+    $dados = ['id' => 'ccc333000000', 'exit' => 0, 'ms' => 1, 'nota' => '', 'acao' => 'audit', 'params' => new stdClass()];
+    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-done-ccc333000000.json', (string) json_encode($dados));
+    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-ccc333000000.txt', "forjada\n");
+
+    expect($this->canal->collectOrphans())->toBe([]);
 });
