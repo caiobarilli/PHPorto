@@ -85,7 +85,7 @@ it('pasta sem par nenhum não recolhe nada', function () {
 });
 
 it('par completo vira uma órfã, com ação, parâmetros e hora de FIM', function () {
-    deixarOrfa($this, 'aaa111', "linha um\nlinha dois\n", 'tweaks', ['Preset' => 'advanced', 'Undo' => true]);
+    deixarOrfa($this, 'aaa111000000', "linha um\nlinha dois\n", 'tweaks', ['Preset' => 'advanced', 'Undo' => true]);
 
     $orfas = $this->canal->collectOrphans();
 
@@ -93,7 +93,7 @@ it('par completo vira uma órfã, com ação, parâmetros e hora de FIM', functi
 
     $orfa = $orfas[0];
 
-    expect($orfa->id)->toBe('aaa111')
+    expect($orfa->id)->toBe('aaa111000000')
         ->and($orfa->acao)->toBe('tweaks')
         ->and($orfa->params)->toBe(['Preset' => 'advanced', 'Undo' => true])
         // A hora é a que o worker gravou, e não "agora".
@@ -104,7 +104,7 @@ it('par completo vira uma órfã, com ação, parâmetros e hora de FIM', functi
 });
 
 it('a saída da órfã ABRE com a nota de que foi recuperada depois do fato', function () {
-    deixarOrfa($this, 'bbb222', "saida original\n");
+    deixarOrfa($this, 'bbb222000000', "saida original\n");
 
     $saida = $this->canal->collectOrphans()[0]->result->output;
 
@@ -123,8 +123,8 @@ it('win-out SEM win-done não é recolhido: é trabalho em andamento', function 
 });
 
 it('win-done SEM win-out não é recolhido: o par tem de estar completo', function () {
-    deixarConclusaoCrua($this, 'ddd444', (string) json_encode([
-        'id' => 'ddd444', 'exit' => 0, 'ms' => 1, 'nota' => '', 'acao' => 'audit',
+    deixarConclusaoCrua($this, 'ddd444000000', (string) json_encode([
+        'id' => 'ddd444000000', 'exit' => 0, 'ms' => 1, 'nota' => '', 'acao' => 'audit',
     ]));
 
     expect($this->canal->collectOrphans())->toBe([]);
@@ -135,10 +135,10 @@ it('órfã de OUTRA execução do servidor é recolhida — nonce não filtra aq
     // que interessa é justamente o da execução anterior do servidor: é ele que
     // perdeu o registro. A conclusão nem carrega nonce, e é isso que este
     // teste trava — se alguém passar a exigi-lo, ele quebra.
-    deixarOrfa($this, 'eee555', "de ontem\n");
+    deixarOrfa($this, 'eee555000000', "de ontem\n");
 
     $bruto = json_decode(
-        (string) file_get_contents($this->files . DIRECTORY_SEPARATOR . 'win-done-eee555.json'),
+        (string) file_get_contents($this->files . DIRECTORY_SEPARATOR . 'win-done-eee555000000.json'),
         true
     );
 
@@ -152,7 +152,7 @@ it('órfã de OUTRA execução do servidor é recolhida — nonce não filtra aq
 it('a interrupção do worker vira órfã com código NULO, e não é timeout', function () {
     // O caminho medido: o php -S saiu, o worker matou o filho e deixou sinal
     // de fim. Não houve código de saída — nulo é "não se sabe", e não zero.
-    deixarOrfa($this, 'fff666', "parcial\n", 'tweaks', ['Preset' => 'advanced'], null, 'interrompido');
+    deixarOrfa($this, 'fff666000000', "parcial\n", 'tweaks', ['Preset' => 'advanced'], null, 'interrompido');
 
     $orfa = $this->canal->collectOrphans()[0];
 
@@ -161,14 +161,14 @@ it('a interrupção do worker vira órfã com código NULO, e não é timeout', 
 });
 
 it('órfã cancelada por timeout chega marcada como timedOut', function () {
-    deixarOrfa($this, 'ggg777', "cortada\n", 'network', ['Interface' => 'Ethernet'], null, 'cancelado');
+    deixarOrfa($this, '111777000000', "cortada\n", 'network', ['Interface' => 'Ethernet'], null, 'cancelado');
 
     expect($this->canal->collectOrphans()[0]->result->timedOut)->toBeTrue();
 });
 
 it('recusa da allowlist do worker chega sem ação, para o rótulo não inventar nome', function () {
     // O worker recusa ANTES de ter algo validado, então não há ação a gravar.
-    deixarOrfa($this, 'ooo555', "[phporto] job recusado\n", '', [], 126, 'recusado');
+    deixarOrfa($this, '999555000000', "[phporto] job recusado\n", '', [], 126, 'recusado');
 
     $orfa = $this->canal->collectOrphans()[0];
 
@@ -181,7 +181,7 @@ it('recusa da allowlist do worker chega sem ação, para o rótulo não inventar
 
 it('saída de órfã acima do teto é cortada, como em qualquer outra leitura', function () {
     $gigante = str_repeat('x', OutputCap::MAX_OUTPUT_BYTES + 4096);
-    deixarOrfa($this, 'hhh888', $gigante);
+    deixarOrfa($this, '222888000000', $gigante);
 
     $orfa = $this->canal->collectOrphans()[0];
 
@@ -194,7 +194,7 @@ it('saída de órfã acima do teto é cortada, como em qualquer outra leitura', 
 it('conclusão sem a hora de fim ainda é recolhida, com finishedAt nulo', function () {
     // Conclusão escrita por um worker anterior a esta mudança. Perder a hora é
     // menos grave que perder a execução: o banco carimba o agora.
-    deixarOrfa($this, 'iii999', "velha\n", 'audit', [], 0, '', null);
+    deixarOrfa($this, '333999000000', "velha\n", 'audit', [], 0, '', null);
 
     $orfa = $this->canal->collectOrphans()[0];
 
@@ -203,16 +203,16 @@ it('conclusão sem a hora de fim ainda é recolhida, com finishedAt nulo', funct
 });
 
 it('conclusão ilegível é ignorada em vez de derrubar a página', function () {
-    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-jjj000.txt', 'x');
-    deixarConclusaoCrua($this, 'jjj000', 'isto não é json');
+    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-444000000000.txt', 'x');
+    deixarConclusaoCrua($this, '444000000000', 'isto não é json');
 
     expect($this->canal->collectOrphans())->toBe([]);
 });
 
 it('param aninhado é descartado: o rótulo só monta com escalar', function () {
-    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-kkk111.txt', "x\n");
-    deixarConclusaoCrua($this, 'kkk111', (string) json_encode([
-        'id'     => 'kkk111',
+    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-555111000000.txt', "x\n");
+    deixarConclusaoCrua($this, '555111000000', (string) json_encode([
+        'id'     => '555111000000',
         'exit'   => 0,
         'ms'     => 1,
         'nota'   => '',
@@ -225,9 +225,9 @@ it('param aninhado é descartado: o rótulo só monta com escalar', function () 
 });
 
 it('lista de itens do worker volta como texto separado por vírgula', function () {
-    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-lll111.txt', "x\n");
-    deixarConclusaoCrua($this, 'lll111', (string) json_encode([
-        'id'     => 'lll111',
+    file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-666111000000.txt', "x\n");
+    deixarConclusaoCrua($this, '666111000000', (string) json_encode([
+        'id'     => '666111000000',
         'exit'   => 0,
         'ms'     => 1,
         'nota'   => '',
@@ -243,31 +243,31 @@ it('lista de itens do worker volta como texto separado por vírgula', function (
 // ---------------------------------------------------------------- o descarte
 
 it('discardOrphan apaga os dois arquivos, e só os do id pedido', function () {
-    deixarOrfa($this, 'lll222', "a\n");
-    deixarOrfa($this, 'mmm333', "b\n");
+    deixarOrfa($this, '666222000000', "a\n");
+    deixarOrfa($this, '777333000000', "b\n");
 
-    $this->canal->discardOrphan('lll222');
+    $this->canal->discardOrphan('666222000000');
 
-    expect(is_file($this->files . DIRECTORY_SEPARATOR . 'win-done-lll222.json'))->toBeFalse()
-        ->and(is_file($this->files . DIRECTORY_SEPARATOR . 'win-out-lll222.txt'))->toBeFalse()
-        ->and(is_file($this->files . DIRECTORY_SEPARATOR . 'win-done-mmm333.json'))->toBeTrue()
+    expect(is_file($this->files . DIRECTORY_SEPARATOR . 'win-done-666222000000.json'))->toBeFalse()
+        ->and(is_file($this->files . DIRECTORY_SEPARATOR . 'win-out-666222000000.txt'))->toBeFalse()
+        ->and(is_file($this->files . DIRECTORY_SEPARATOR . 'win-done-777333000000.json'))->toBeTrue()
         ->and($this->canal->collectOrphans())->toHaveCount(1);
 });
 
 it('recolher NÃO apaga nada por si: quem apaga é quem gravou', function () {
     // A separação é o que impede uma falha de banco de virar perda definitiva
     // da execução — que é exatamente o problema que isto resolve.
-    deixarOrfa($this, 'nnn444', "fica\n");
+    deixarOrfa($this, '888444000000', "fica\n");
 
     $this->canal->collectOrphans();
 
-    expect(is_file($this->files . DIRECTORY_SEPARATOR . 'win-done-nnn444.json'))->toBeTrue()
+    expect(is_file($this->files . DIRECTORY_SEPARATOR . 'win-done-888444000000.json'))->toBeTrue()
         ->and($this->canal->collectOrphans())->toHaveCount(1);
 });
 
 it('duas órfãs no disco viram duas', function () {
-    deixarOrfa($this, 'ppp666', "uma\n", 'tweaks', ['Preset' => 'advanced']);
-    deixarOrfa($this, 'qqq777', "outra\n", 'debloat', []);
+    deixarOrfa($this, 'aaa666000000', "uma\n", 'tweaks', ['Preset' => 'advanced']);
+    deixarOrfa($this, 'bbb777000000', "outra\n", 'debloat', []);
 
     $acoes = array_map(
         static fn (App\Win\OrphanRun $o): string => $o->acao,
@@ -277,4 +277,60 @@ it('duas órfãs no disco viram duas', function () {
     sort($acoes);
 
     expect($acoes)->toBe(['debloat', 'tweaks']);
+});
+
+// ------------------------------------------------- conclusão forjada
+
+it('o id só vale no formato que o worker gera', function (string $id, bool $valido) {
+    expect(JobChannel::validId($id))->toBe($valido);
+})->with([
+    'doze hex minúsculos' => ['0123456789ab', true],
+    'maiúscula'           => ['0123456789AB', false],
+    'onze'                => ['0123456789a', false],
+    'treze'               => ['0123456789abc', false],
+    'quebra de linha'     => ["0123456789ab\n", false],
+    'vazio'               => ['', false],
+    'subindo pasta'       => ['../../../x', false],
+]);
+
+it('conclusão com id fora do formato é ignorada, sem montar caminho', function () {
+    deixarConclusaoCrua($this, 'forjado', (string) json_encode([
+        'id' => '../../../segredo', 'exit' => 0, 'ms' => 1, 'nota' => '', 'acao' => 'audit', 'params' => new stdClass(),
+    ]));
+
+    expect($this->canal->collectOrphans())->toBe([]);
+});
+
+it('conclusão cujo nome não é o do id é ignorada', function () {
+    // Sem isto, um win-done qualquer apontaria para o par de outra execução.
+    deixarOrfa($this, 'bbb222000000', "de outro\n");
+    unlink($this->files . DIRECTORY_SEPARATOR . 'win-done-bbb222000000.json');
+    deixarConclusaoCrua($this, 'aaa111000000', (string) json_encode([
+        'id' => 'bbb222000000', 'exit' => 0, 'ms' => 1, 'nota' => '', 'acao' => 'audit', 'params' => new stdClass(),
+    ]));
+
+    expect($this->canal->collectOrphans())->toBe([]);
+});
+
+it('discardOrphan com id forjado não apaga nada fora da pasta', function () {
+    // As duas pastas tornam o caminho resolvível aqui; no Windows o .. já é
+    // resolvido no texto, sem precisar delas.
+    $fora = dirname($this->files) . DIRECTORY_SEPARATOR . 'phporto_alvo_' . bin2hex(random_bytes(6));
+    mkdir($this->files . DIRECTORY_SEPARATOR . 'win-done-..');
+    mkdir($this->files . DIRECTORY_SEPARATOR . 'win-out-..');
+    file_put_contents($fora . '.txt', 'nao apagar');
+    file_put_contents($fora . '.json', 'nao apagar');
+
+    try {
+        // 'win-done-..' come o primeiro '..'; os outros dois saem da pasta.
+        $this->canal->discardOrphan('../../../' . basename($fora));
+
+        expect(is_file($fora . '.txt'))->toBeTrue()
+            ->and(is_file($fora . '.json'))->toBeTrue();
+    } finally {
+        @unlink($fora . '.txt');
+        @unlink($fora . '.json');
+        @rmdir($this->files . DIRECTORY_SEPARATOR . 'win-done-..');
+        @rmdir($this->files . DIRECTORY_SEPARATOR . 'win-out-..');
+    }
 });

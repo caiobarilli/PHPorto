@@ -66,6 +66,17 @@ final class Elevation
     public const HEARTBEAT_STALE_S = 10;
 
     /**
+     * Tempo sem uso depois do qual o worker sai sozinho.
+     *
+     * O nonce fica legível no marcador, então qualquer processo Médio que o
+     * leia consegue mandar job enquanto o worker estiver de pé; sair quando
+     * ninguém usa encurta essa janela. Dez minutos é o timeout padrão de uma
+     * ação (PHPORTO_WINUTIL_TIMEOUT). O valor que vale é o $IDLE_TIMEOUT_S do
+     * worker.ps1; este só mostra o número na tela, e um teste confere os dois.
+     */
+    public const IDLE_TIMEOUT_S = 600;
+
+    /**
      * Margem dada ao limite de execução do PHP, acima do nosso próprio teto.
      *
      * MEDIDO, e foi surpresa: o `php -S` roda em SAPI cli-server com
@@ -168,7 +179,10 @@ final class Elevation
             return new ElevationState(
                 on: false,
                 detail: $idade === null
-                    ? 'O PowerShell elevado não deixou sinal de vida — ele pode ter sido encerrado por fora.'
+                    ? sprintf(
+                        'O PowerShell elevado não deixou sinal de vida — ele sai sozinho depois de %d min sem uso, ou foi encerrado por fora.',
+                        intdiv(self::IDLE_TIMEOUT_S, 60),
+                    )
                     : sprintf('O PowerShell elevado não responde há %d s.', $idade),
             );
         }

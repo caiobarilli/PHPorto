@@ -803,3 +803,64 @@ Describe "Invoke-Install reports each package from its winget exit code" {
         $output | Should -Match '\[ WARNING \] Installation complete; restart Windows to finish: VB-Audio.Voicemeeter.Potato'
     }
 }
+
+# ==============================================================
+# INVOKE-MEMORY — the downloaded exe only runs with the pinned hash
+# ==============================================================
+# O exe roda como Administrador e mora numa pasta gravavel pelo usuario. O
+# $root aponta para o TestDrive, para nada aqui tocar em src/Win/tools/.
+Describe "Invoke-Memory checks the pinned SHA-256 before running" {
+
+    BeforeAll {
+        # O Get-CimInstance nao existe no pwsh fora do Windows, e o Mock exige
+        # um comando para substituir.
+        $Script:CimStub = -not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)
+        if ($Script:CimStub) { function global:Get-CimInstance { param($ClassName) } }
+        $Script:Pinado = '8B68D56C6EE28740F76513F21B21F5A1018F0EF291467B3F3D39D43DAF0C0F2F'
+    }
+
+    AfterAll {
+        if ($Script:CimStub) { Remove-Item function:global:Get-CimInstance -ErrorAction SilentlyContinue }
+    }
+
+    BeforeEach {
+        $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $root 'tools') -Force | Out-Null
+        $Script:Exe = Join-Path $root 'tools\WinMemoryCleaner.exe'
+        Mock Start-Process { }
+        Mock Get-CimInstance { [pscustomobject]@{ FreePhysicalMemory = 1MB } }
+    }
+
+    It "a swapped exe already in tools/ is removed and never run" {
+        Set-Content -LiteralPath $Script:Exe -Value 'not the real cleaner'
+        $output = (Invoke-Memory) 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \] WinMemoryCleaner\.exe SHA-256 mismatch'
+        Test-Path -LiteralPath $Script:Exe | Should -BeFalse
+        Should -Invoke Start-Process -Times 0 -Exactly
+    }
+
+    It "a download that does not match is removed and never run" {
+        Mock Invoke-WebRequest { Set-Content -LiteralPath $OutFile -Value 'tampered download' }
+        $output = (Invoke-Memory) 6>&1 | Out-String
+
+        Should -Invoke Invoke-WebRequest -Times 1 -Exactly
+        $output | Should -Match 'SHA-256 mismatch'
+        Test-Path -LiteralPath $Script:Exe | Should -BeFalse
+        Should -Invoke Start-Process -Times 0 -Exactly
+    }
+
+    It "the pinned hash runs the cleaner" {
+        Set-Content -LiteralPath $Script:Exe -Value 'stand-in'
+        Mock Get-FileHash { [pscustomobject]@{ Algorithm = 'SHA256'; Hash = $Script:Pinado } }
+        $output = (Invoke-Memory) 6>&1 | Out-String
+
+        $output | Should -Not -Match 'mismatch'
+        Should -Invoke Start-Process -Times 1 -Exactly
+    }
+
+    It "the pinned hash in the action is the one in this test" {
+        $texto = Get-Content -Raw (Join-Path $Script:PastaWin 'actions\Invoke-Memory.ps1')
+        $texto | Should -Match ([regex]::Escape("'$Script:Pinado'"))
+    }
+}

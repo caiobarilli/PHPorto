@@ -57,6 +57,14 @@ $OutputEncoding        = [System.Text.UTF8Encoding]::new($false)
 # 711 ms entre a escrita do arquivo e a saida do processo.
 $TICK_MS = 500
 
+# Sem acao em andamento por este tempo, o worker sai sozinho. Encurta a janela
+# em que um processo Media que leu o nonce do marcador consegue mandar job para
+# ele. Dez minutos, o mesmo numero do timeout padrao de uma acao
+# (PHPORTO_WINUTIL_TIMEOUT): quem esta usando a tela nao perde o worker no meio
+# do trabalho. O Elevation.php repete o valor em IDLE_TIMEOUT_S, e um teste
+# confere os dois.
+$IDLE_TIMEOUT_S = 600
+
 # Nomes dos arquivos do canal. Um lugar so, porque o lado PHP repete estes
 # mesmos nomes e um deles ficaria para tras numa renomeacao.
 $F_HEARTBEAT = Join-Path $Dir 'win-heartbeat'
@@ -184,6 +192,12 @@ function Write-Log([string]$msg) {
         # Log e' diagnostico, nao funcao: falhar ao registrar nao pode
         # derrubar o worker e deixar um processo elevado de pe sem laco.
     }
+}
+
+function Test-WorkerOcioso([datetime]$desde, [datetime]$agora, [int]$limiteS, [bool]$temFilho) {
+    # Acao em andamento nunca e' ociosidade, por mais longa que seja.
+    if ($temFilho) { return $false }
+    return (($agora - $desde).TotalSeconds -ge $limiteS)
 }
 
 function Write-Heartbeat {
@@ -535,6 +549,10 @@ $filhoScript = $null
 $filhoAcao   = ''
 $filhoParams = $null
 
+# A ultima vez em que houve trabalho: job lido ou filho de pe. E' daqui que a
+# ociosidade conta.
+$ultimaAtividade = Get-Date
+
 function Stop-Filho([string]$motivo) {
     # Alta contra Alta: AQUI o taskkill funciona. E' o PHP, em Media, que nao
     # consegue — por isso o cancelamento chega como ordem e a morte acontece
@@ -708,6 +726,7 @@ while ($true) {
         Remove-Item $F_JOB -Force -ErrorAction SilentlyContinue
 
         if ($null -ne $bruto) {
+            $ultimaAtividade = Get-Date
             $id = [guid]::NewGuid().ToString('N').Substring(0, 12)
 
             try {
@@ -752,6 +771,16 @@ while ($true) {
                 Clear-Filho
             }
         }
+    }
+
+    # --- 6. ocioso demais? -------------------------------------------------
+    # Depois do job novo, para um job que acabou de chegar contar como
+    # atividade antes da conta. Sair aqui nao deixa filho para tras: so sai
+    # quem nao tem filho de pe.
+    if ($null -ne $filho) { $ultimaAtividade = Get-Date }
+    if (Test-WorkerOcioso $ultimaAtividade (Get-Date) $IDLE_TIMEOUT_S ($null -ne $filho)) {
+        Write-Log "ocioso por $IDLE_TIMEOUT_S s: encerrando por conta propria"
+        break
     }
 
     Start-Sleep -Milliseconds $TICK_MS

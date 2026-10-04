@@ -535,6 +535,52 @@ Describe 'worker - o provider do dns vem do dns.json' {
 # ==============================================================
 # LISTA NO SCRIPT GERADO — chega na acao como array
 # ==============================================================
+# O worker aberto aceita job de quem souber o nonce, e o nonce e' legivel no
+# marcador. Sair sozinho quando ninguem usa encurta essa janela. A conta e'
+# pura e fica numa funcao para dar para testar sem esperar dez minutos.
+Describe 'worker - sai sozinho quando fica ocioso' {
+
+    BeforeAll {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            $Script:Worker, [ref]$null, [ref]$null
+        )
+        $Script:Idle = $ast.FindAll(
+            {
+                param($n)
+                $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+                $n.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
+                $n.Left.VariablePath.UserPath -eq 'IDLE_TIMEOUT_S'
+            },
+            $false
+        ) | ForEach-Object { [int]$_.Right.Extent.Text }
+        $Script:T0 = [datetime]'2026-01-01T00:00:00'
+    }
+
+    It 'o limite vem de uma constante so, de dez minutos' {
+        @($Script:Idle).Count | Should -Be 1
+        $Script:Idle | Should -Be 600
+    }
+
+    It 'antes do limite nao sai' {
+        Test-WorkerOcioso $Script:T0 $Script:T0.AddSeconds(599) 600 $false | Should -BeFalse
+    }
+
+    It 'no limite sai' {
+        Test-WorkerOcioso $Script:T0 $Script:T0.AddSeconds(600) 600 $false | Should -BeTrue
+    }
+
+    It 'com acao em andamento nunca sai, por mais longa que seja' {
+        Test-WorkerOcioso $Script:T0 $Script:T0.AddHours(5) 600 $true | Should -BeFalse
+    }
+
+    It 'o laco usa a conta e sai com break' {
+        $texto = Get-Content -Raw $Script:Worker
+        $texto | Should -Match 'Test-WorkerOcioso \$ultimaAtividade \(Get-Date\) \$IDLE_TIMEOUT_S'
+        # Job lido conta como atividade, aceito ou recusado.
+        $texto | Should -Match '(?s)if \(\$null -ne \$bruto\) \{\s+\$ultimaAtividade = Get-Date'
+    }
+}
+
 Describe 'worker - lista chega na acao como array' {
 
     It 'a lista chega como string[], na ordem' {
