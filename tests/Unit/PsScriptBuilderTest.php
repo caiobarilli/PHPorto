@@ -90,6 +90,24 @@ it('literal DOBRA o apóstrofo, que é o único escape que existe ali', function
     expect(PsScriptBuilder::literal("O'Brien"))->toBe("'O''Brien'");
 });
 
+it('literal DOBRA cada aspa simples curva, que o PowerShell também fecha', function (string $aspa) {
+    // U+2018 a U+201B fecham literal de apóstrofo no PowerShell como o '.
+    // Sem dobrar, um valor com ’ fechava a string e o resto virava código.
+    expect(PsScriptBuilder::literal('a' . $aspa . 'b'))->toBe("'a" . $aspa . $aspa . "b'");
+})->with([
+    'U+2018' => "\u{2018}",
+    'U+2019' => "\u{2019}",
+    'U+201A' => "\u{201A}",
+    'U+201B' => "\u{201B}",
+]);
+
+it('literal dobra as cinco aspas juntas, sem sobra para fechar a string', function () {
+    $veneno = "x'\u{2018}\u{2019}\u{201A}\u{201B}; Remove-Item C:\\ -Recurse";
+
+    expect(PsScriptBuilder::literal($veneno))
+        ->toBe("'x''\u{2018}\u{2018}\u{2019}\u{2019}\u{201A}\u{201A}\u{201B}\u{201B}; Remove-Item C:\\ -Recurse'");
+});
+
 it('literal deixa inerte o que interpolaria em aspas duplas', function (string $valor) {
     // Dentro de apóstrofo simples o PowerShell não interpola nada: nem
     // $variavel, nem $(...), nem crase. É isso que permite um valor validado
