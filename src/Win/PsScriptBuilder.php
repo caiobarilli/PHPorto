@@ -91,8 +91,11 @@ final class PsScriptBuilder
      *
      * Apóstrofo simples e não duplo porque o PowerShell NÃO interpola nada
      * dentro de apóstrofo simples: nem $variavel, nem $(subshell), nem crase.
-     * O único escape que existe ali é o próprio apóstrofo, dobrado — e é o
-     * que esta função faz.
+     * O único escape que existe ali é dobrar o apóstrofo — e o PowerShell
+     * conta como apóstrofo não só o ', mas também as quatro aspas simples
+     * curvas (U+2018, U+2019, U+201A, U+201B). Dobrar só o ' deixava a curva
+     * fechar a string; esta função dobra as cinco, como o
+     * EscapeSingleQuotedStringContent do próprio PowerShell.
      *
      * Com isto, um caminho ou um valor validado entra num script gerado sem
      * poder virar código. O byte nulo é recusado sem análise: ele trunca
@@ -106,6 +109,12 @@ final class PsScriptBuilder
             throw new RuntimeException('Valor com byte nulo recusado.');
         }
 
-        return "'" . str_replace("'", "''", $value) . "'";
+        return "'" . strtr($value, [
+            "'"        => "''",
+            "\u{2018}" => "\u{2018}\u{2018}",
+            "\u{2019}" => "\u{2019}\u{2019}",
+            "\u{201A}" => "\u{201A}\u{201A}",
+            "\u{201B}" => "\u{201B}\u{201B}",
+        ]) . "'";
     }
 }

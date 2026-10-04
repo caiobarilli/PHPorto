@@ -79,6 +79,55 @@ BeforeAll {
             ArqExit  = Join-Path $Script:Trabalho ('win-exit-' + $id + '.txt')
         }
     }
+
+    # Um duble do bootstrap, para ver o que CHEGA na acao. Os parametros
+    # viajam como dado codificado, entao o texto do script nao diz mais nada
+    # sobre eles: a prova tem de ser rodar o script e olhar o outro lado.
+    # O duble so registra o que recebeu, e nao pede elevacao.
+    $Script:Duble    = Join-Path $Script:Trabalho 'bootstrap-duble.ps1'
+    $Script:Recebido = Join-Path $Script:Trabalho 'recebido.json'
+    $Script:Exe      = (Get-Process -Id $PID).Path
+
+    $duble = @(
+        'function Invoke-PhportoWinAction {'
+        '    param([string]$Action, [hashtable]$Params = @{})'
+        '    $tipos = [ordered]@{}'
+        '    foreach ($k in $Params.Keys) { $tipos[$k] = $Params[$k].GetType().FullName }'
+        '    $dados = [ordered]@{ acao = $Action; params = $Params; tipos = $tipos }'
+        ('    [System.IO.File]::WriteAllText(' + (ConvertTo-PsLiteral $Script:Recebido) + ', (ConvertTo-Json -InputObject $dados -Compress -Depth 5), [System.Text.UTF8Encoding]::new($false))')
+        '}'
+    ) -join "`r`n"
+    [System.IO.File]::WriteAllText($Script:Duble, $duble, [System.Text.UTF8Encoding]::new($true))
+
+    # Gera o script apontando para o duble e roda num PowerShell de verdade, o
+    # mesmo que roda a suite: powershell.exe no Windows, pwsh fora dele.
+    function Invoke-ScriptGerado {
+        param([string]$Acao, [hashtable]$Params = @{})
+
+        if (Test-Path $Script:Recebido) { Remove-Item $Script:Recebido -Force }
+
+        $real = $global:BOOTSTRAP
+        $global:BOOTSTRAP = $Script:Duble
+        try {
+            $g = Get-ScriptGerado -Acao $Acao -Params $Params
+        } finally {
+            $global:BOOTSTRAP = $real
+        }
+
+        & $Script:Exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $g.Caminho | Out-Null
+        $code = $LASTEXITCODE
+
+        $recebido = $null
+        if (Test-Path $Script:Recebido) {
+            $recebido = Get-Content -Path $Script:Recebido -Raw -Encoding UTF8 | ConvertFrom-Json
+        }
+
+        return [PSCustomObject]@{
+            Gerado   = $g
+            Exit     = $code
+            Recebido = $recebido
+        }
+    }
 }
 
 AfterAll {
@@ -484,21 +533,30 @@ Describe 'worker - o provider do dns vem do dns.json' {
 }
 
 # ==============================================================
-# LISTA NO SCRIPT GERADO — vira array literal
+# LISTA NO SCRIPT GERADO — chega na acao como array
 # ==============================================================
-Describe 'worker - lista vira array no script gerado' {
+Describe 'worker - lista chega na acao como array' {
 
-    It 'o array sai como @(literal, literal)' {
-        $g = Get-ScriptGerado 'tweaks' @{ Items = [string[]]@('WPFTweaksTelemetry', 'WPFTweaksServices') }
-        $g.Texto | Should -Match ([regex]::Escape("@{ 'Items' = @('WPFTweaksTelemetry', 'WPFTweaksServices') }"))
+    It 'a lista chega como string[], na ordem' {
+        $r = Invoke-ScriptGerado 'tweaks' @{ Items = [string[]]@('WPFTweaksTelemetry', 'WPFTweaksServices') }
+        $r.Recebido.tipos.Items   | Should -Be 'System.String[]'
+        @($r.Recebido.params.Items) | Should -Be @('WPFTweaksTelemetry', 'WPFTweaksServices')
     }
 
-    It 'item com apostrofo e escapado, e o script continua valido' {
-        $g = Get-ScriptGerado 'debloat' @{ Packages = [string[]]@("a'b") }
-        $g.Texto | Should -Match ([regex]::Escape("@('a''b')"))
+    It 'lista de um item so continua array' {
+        # O ConvertFrom-Json devolve Object[]; sem a conversao a mao, um item
+        # so poderia chegar como string solta num parametro [string[]].
+        $r = Invoke-ScriptGerado 'debloat' @{ Packages = [string[]]@('Microsoft.BingNews') }
+        $r.Recebido.tipos.Packages     | Should -Be 'System.String[]'
+        @($r.Recebido.params.Packages) | Should -Be @('Microsoft.BingNews')
+    }
+
+    It 'item com apostrofo chega igual, e o script continua valido' {
+        $r = Invoke-ScriptGerado 'debloat' @{ Packages = [string[]]@("a'b") }
+        @($r.Recebido.params.Packages) | Should -Be @("a'b")
 
         $erros = $null
-        [System.Management.Automation.Language.Parser]::ParseInput($g.Texto, [ref]$null, [ref]$erros) | Out-Null
+        [System.Management.Automation.Language.Parser]::ParseInput($r.Gerado.Texto, [ref]$null, [ref]$erros) | Out-Null
         $erros.Count | Should -Be 0
     }
 }
@@ -542,57 +600,121 @@ Describe 'worker - o script gerado aponta para o bootstrap' {
 }
 
 # ==============================================================
-# PARAMETROS — hashtable literal, por splatting
+# PARAMETROS — dado decodificado, por splatting
 # ==============================================================
-Describe 'worker - os parametros viram hashtable literal' {
+Describe 'worker - os parametros chegam na acao como dado' {
 
-    It 'acao sem parametro sai com hashtable vazio' {
-        $g = Get-ScriptGerado -Acao 'audit'
-        $g.Texto | Should -Match '-Params @\{\}'
+    It 'acao sem parametro chega com hashtable vazio' {
+        $r = Invoke-ScriptGerado -Acao 'audit'
+        $r.Recebido.acao | Should -Be 'audit'
+        @($r.Recebido.params.PSObject.Properties).Count | Should -Be 0
+        $r.Gerado.Texto | Should -Match '-Params \$phportoParams'
     }
 
-    It 'texto sai como literal de apostrofo' {
-        $g = Get-ScriptGerado -Acao 'dns' -Params @{ Provider = 'Cloudflare' }
-        $g.Texto | Should -Match "@\{ 'Provider' = 'Cloudflare' \}"
+    It 'texto chega como string, igual' {
+        $r = Invoke-ScriptGerado -Acao 'dns' -Params @{ Provider = 'Cloudflare' }
+        $r.Recebido.params.Provider | Should -BeExactly 'Cloudflare'
+        $r.Recebido.tipos.Provider  | Should -Be 'System.String'
     }
 
-    It 'inteiro sai sem aspas' {
-        $g = Get-ScriptGerado -Acao 'network' -Params @{ Duration = 60 }
-        $g.Texto | Should -Match "'Duration' = 60"
+    It 'inteiro chega como inteiro' {
+        # Int32 no 5.1, Int64 no 7: os dois ligam num parametro [int].
+        $r = Invoke-ScriptGerado -Acao 'network' -Params @{ Duration = 60 }
+        $r.Recebido.params.Duration | Should -Be 60
+        $r.Recebido.tipos.Duration  | Should -Match '^System\.Int(32|64)$'
     }
 
-    It 'flag verdadeira vira $true' {
-        $g = Get-ScriptGerado -Acao 'tweaks' -Params @{ Preset = 'standard'; Undo = $true }
-        $g.Texto | Should -Match "'Undo' = \`$true"
+    It 'flag verdadeira chega como $true' {
+        $r = Invoke-ScriptGerado -Acao 'tweaks' -Params @{ Preset = 'standard'; Undo = $true }
+        $r.Recebido.params.Undo | Should -BeTrue
+        $r.Recebido.tipos.Undo  | Should -Be 'System.Boolean'
     }
 
     It 'flag falsa nao entra na chamada' {
-        $g = Get-ScriptGerado -Acao 'tweaks' -Params @{ Preset = 'standard'; Undo = $false }
-        $g.Texto | Should -Not -Match "'Undo'"
+        $r = Invoke-ScriptGerado -Acao 'tweaks' -Params @{ Preset = 'standard'; Undo = $false }
+        @($r.Recebido.params.PSObject.Properties.Name) | Should -Not -Contain 'Undo'
+        $r.Recebido.params.Preset | Should -Be 'standard'
     }
 
     <#
-        A GUARDA CONTRA INJECAO. O apostrofo e' o unico caractere com escape
-        dentro de um literal de apostrofo simples, e dobra-lo e' o que impede
-        um valor de fechar a string e virar codigo. Um valor que tenta fechar a
-        string e emendar um comando tem de sair como TEXTO, e o script gerado
-        tem de continuar parseando.
+        A GUARDA CONTRA INJECAO. Um valor que tenta fechar a string e emendar
+        um comando nem aparece no texto do script: ele viaja codificado, e o
+        script gerado continua parseando.
     #>
-    It 'valor com apostrofo e escapado, e o script continua valido' {
+    It 'valor com apostrofo nao aparece no script, e o script continua valido' {
         $veneno = "x'; Remove-Item C:\ -Recurse; '"
         $g      = Get-ScriptGerado -Acao 'install' -Params @{ Apps = $veneno }
 
-        $g.Texto | Should -Match "''; Remove-Item"
-        $g.Texto | Should -Not -Match "'; Remove-Item C:\\ -Recurse; ';"
+        $g.Texto | Should -Not -Match 'Remove-Item'
 
         $erros = $null
         [System.Management.Automation.Language.Parser]::ParseFile($g.Caminho, [ref]$null, [ref]$erros) | Out-Null
         $erros.Count | Should -Be 0
     }
 
-    It 'o nome do parametro tambem sai como literal' {
-        $g = Get-ScriptGerado -Acao 'optimize' -Params @{ KeepUser = 'caiob' }
-        $g.Texto | Should -Match "'KeepUser' = 'caiob'"
+    It 'nem o nome nem o valor do parametro aparecem no script, e chegam iguais' {
+        $r = Invoke-ScriptGerado -Acao 'optimize' -Params @{ KeepUser = 'caiob' }
+        $r.Gerado.Texto | Should -Not -Match 'KeepUser'
+        $r.Gerado.Texto | Should -Not -Match 'caiob'
+        $r.Recebido.params.KeepUser | Should -BeExactly 'caiob'
+    }
+}
+
+# ==============================================================
+# ASPA CURVA — o PowerShell fecha literal de apostrofo com ela
+# ==============================================================
+#
+# U+2018, U+2019, U+201A e U+201B fecham um literal de apostrofo como o '.
+# O escape antigo so dobrava o ', entao um -Apps com uma curva fechava a
+# string, e o $(...) seguinte rodava no script gerado, em integridade Alta.
+# O veneno daqui grava um arquivo-marca se virar codigo.
+Describe 'worker - aspa curva nao vira codigo' {
+
+    It 'valor com <Nome> chega como dado, e nao executa' -ForEach @(
+        @{ Nome = 'U+0027'; Codigo = 0x0027 }
+        @{ Nome = 'U+2018'; Codigo = 0x2018 }
+        @{ Nome = 'U+2019'; Codigo = 0x2019 }
+        @{ Nome = 'U+201A'; Codigo = 0x201A }
+        @{ Nome = 'U+201B'; Codigo = 0x201B }
+    ) {
+        $aspa   = [string][char]$Codigo
+        $marca  = Join-Path $Script:Trabalho ('marca-' + [guid]::NewGuid().ToString('N'))
+        $veneno = 'x' + $aspa + '+$(Set-Content -Path "' + $marca + '" -Value 1)+' + $aspa
+
+        $r = Invoke-ScriptGerado -Acao 'install' -Params @{ Apps = $veneno }
+
+        Test-Path $marca | Should -BeFalse
+        $r.Gerado.Texto | Should -Not -Match 'Set-Content -Path'
+        $r.Recebido.params.Apps | Should -BeExactly $veneno
+        $r.Exit | Should -Be 0
+    }
+
+    It 'as cinco aspas juntas chegam iguais' {
+        $veneno = "a'" + [char]0x2018 + [char]0x2019 + [char]0x201A + [char]0x201B + 'b'
+        $r = Invoke-ScriptGerado -Acao 'network' -Params @{ Interface = $veneno }
+        $r.Recebido.params.Interface | Should -BeExactly $veneno
+    }
+
+    It 'ConvertTo-PsLiteral com <Nome> devolve um literal so, igual ao valor' -ForEach @(
+        @{ Nome = 'U+0027'; Codigo = 0x0027 }
+        @{ Nome = 'U+2018'; Codigo = 0x2018 }
+        @{ Nome = 'U+2019'; Codigo = 0x2019 }
+        @{ Nome = 'U+201A'; Codigo = 0x201A }
+        @{ Nome = 'U+201B'; Codigo = 0x201B }
+    ) {
+        # A segunda camada: mesmo onde um valor ainda vira literal (caminhos,
+        # nome da acao), nenhuma aspa fecha a string.
+        $aspa  = [string][char]$Codigo
+        $valor = 'a' + $aspa + '; Get-Process; ' + $aspa + 'b'
+
+        $erros = $null
+        $ast   = [System.Management.Automation.Language.Parser]::ParseInput((ConvertTo-PsLiteral $valor), [ref]$null, [ref]$erros)
+        $erros.Count | Should -Be 0
+
+        $textos = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.StringConstantExpressionAst] }, $true))
+        $textos.Count    | Should -Be 1
+        $textos[0].Value | Should -BeExactly $valor
+        @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)).Count | Should -Be 0
     }
 }
 

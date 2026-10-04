@@ -202,13 +202,15 @@ function Write-Heartbeat {
     Um valor como literal de string do PowerShell, entre apostrofos.
 
     Apostrofo SIMPLES porque dentro dele o PowerShell nao interpola nada: nem
-    $variavel, nem $(...), nem crase. O unico escape e' o proprio apostrofo,
-    dobrado. E' o mesmo criterio do PsScriptBuilder::literal() do lado PHP, e
-    e' o que permite um valor validado entrar num script gerado sem virar
-    codigo.
+    $variavel, nem $(...), nem crase. O unico escape e' dobrar o apostrofo — e
+    o PowerShell conta como apostrofo nao so o ', mas tambem as quatro aspas
+    simples curvas (U+2018, U+2019, U+201A, U+201B). Dobrar so o ' deixava a
+    curva fechar a string. Quem dobra as cinco e' o proprio PowerShell, pelo
+    EscapeSingleQuotedStringContent. E' o mesmo criterio do
+    PsScriptBuilder::literal() do lado PHP.
 #>
 function ConvertTo-PsLiteral([string]$value) {
-    return "'" + ($value -replace "'", "''") + "'"
+    return "'" + [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($value) + "'"
 }
 
 <#
@@ -341,8 +343,8 @@ function Test-Job($job) {
 <#
     Gera o script que chama a acao e devolve o caminho dele.
 
-    O JOB NUNCA VIRA LINHA DE COMANDO. Os valores ja validados sao emitidos
-    como literais de string dentro de um .ps1, e o que vai para a linha de
+    O JOB NUNCA VIRA LINHA DE COMANDO. Os valores ja validados viajam como
+    dado dentro de um .ps1, e o que vai para a linha de
     comando do filho e' apenas o caminho desse arquivo — a mesma regra do
     cmd.sh no lado do WSL, pelo mesmo motivo: qualquer escape que se
     escrevesse falharia em algum valor, e a falha apareceria como erro DO
@@ -353,10 +355,18 @@ function Test-Job($job) {
     mesma pasta e viajam juntos, entao nao ha o que configurar, nao ha parametro
     para manter em dia, e nao ha projeto externo a apontar.
 
-    OS PARAMETROS VAO POR SPLATTING, num hashtable literal, e nao como
-    -Nome valor soltos na chamada. Assim um nome de parametro tambem e' literal
-    de string, e nao ha ponto nenhum da linha em que um valor validado possa
-    virar outra coisa que nao dado.
+    OS PARAMETROS VIAJAM COMO DADO, nunca como codigo. Nomes e valores viram
+    JSON, o JSON vira base64, e o script gerado decodifica, monta o hashtable e
+    passa por splatting. O alfabeto do base64 nao tem aspa de especie nenhuma,
+    entao nenhum caractere de um valor chega ao parser. Antes eles iam como
+    literais de apostrofo num hashtable, e uma aspa curva (U+2019) no -Apps do
+    install bastava para fechar a string e rodar o resto como codigo em
+    integridade Alta. Com o valor fora do codigo, nao ha escape que possa
+    falhar.
+
+    O ConvertFrom-Json do 5.1 devolve PSCustomObject, e o splatting precisa de
+    hashtable: a conversao e' feita a mao, propriedade por propriedade. Lista
+    volta como string[], com um item so inclusive.
 
     O *>&1 funde todos os fluxos no de sucesso. E' o equivalente do
     "exec 2>&1" do lado bash, e e' o que faz a ordem das linhas ser a real —
@@ -373,33 +383,38 @@ function Test-Job($job) {
 function New-InvocationScript($validado, [string]$id) {
     $arqExit = Join-Path $Dir ('win-exit-' + $id + '.txt')
 
-    $pares = New-Object System.Collections.Generic.List[string]
+    $dados = [ordered]@{}
 
     foreach ($nome in $validado.params.Keys) {
         $valor = $validado.params[$nome]
 
         if ($valor -is [bool]) {
             # A allowlist so guarda flag verdadeira; falsa e' ausencia.
-            if ($valor) { $pares.Add((ConvertTo-PsLiteral $nome) + ' = $true') }
+            if ($valor) { $dados[$nome] = $true }
         } elseif ($valor -is [int]) {
-            $pares.Add((ConvertTo-PsLiteral $nome) + " = $valor")
+            $dados[$nome] = $valor
         } elseif ($valor -is [array]) {
-            $literais = @($valor | ForEach-Object { ConvertTo-PsLiteral ([string]$_) })
-            $pares.Add((ConvertTo-PsLiteral $nome) + ' = @(' + ($literais -join ', ') + ')')
+            $dados[$nome] = [string[]]@($valor | ForEach-Object { [string]$_ })
         } else {
-            $pares.Add((ConvertTo-PsLiteral $nome) + ' = ' + (ConvertTo-PsLiteral ([string]$valor)))
+            $dados[$nome] = [string]$valor
         }
     }
 
-    $hash = if ($pares.Count -eq 0) { '@{}' } else { '@{ ' + ($pares -join '; ') + ' }' }
+    $json  = ConvertTo-Json -InputObject $dados -Compress -Depth 5
+    $carga = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($json))
 
     $linhas = New-Object System.Collections.Generic.List[string]
     $linhas.Add('$ErrorActionPreference = ' + (ConvertTo-PsLiteral 'Continue'))
     $linhas.Add('[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($true)')
     $linhas.Add('$phportoRecusado = $false')
     $linhas.Add('try {')
+    $linhas.Add('    $phportoJson   = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String(' + (ConvertTo-PsLiteral $carga) + '))')
+    $linhas.Add('    $phportoParams = @{}')
+    $linhas.Add('    foreach ($phportoPar in ($phportoJson | ConvertFrom-Json).PSObject.Properties) {')
+    $linhas.Add('        if ($phportoPar.Value -is [System.Array]) { $phportoParams[$phportoPar.Name] = [string[]]$phportoPar.Value } else { $phportoParams[$phportoPar.Name] = $phportoPar.Value }')
+    $linhas.Add('    }')
     $linhas.Add('    . ' + (ConvertTo-PsLiteral $BOOTSTRAP))
-    $linhas.Add('    Invoke-PhportoWinAction -Action ' + (ConvertTo-PsLiteral $validado.acao) + ' -Params ' + $hash + ' *>&1')
+    $linhas.Add('    Invoke-PhportoWinAction -Action ' + (ConvertTo-PsLiteral $validado.acao) + ' -Params $phportoParams *>&1')
     $linhas.Add('} catch {')
     $linhas.Add('    Write-Host ("[phporto] " + $_.Exception.Message)')
     $linhas.Add('    $phportoRecusado = $true')
