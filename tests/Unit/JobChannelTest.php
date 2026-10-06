@@ -75,7 +75,7 @@ it('AÇÃO SEM PARÂMETRO VAI COMO OBJETO, e nunca como lista', function () {
 it('send() apaga a conclusão de uma ação anterior antes de mandar', function () {
     // Sem isso, a ação seguinte devolveria na hora o resultado da anterior — e
     // a pessoa leria a saída errada acreditando nela.
-    fingirWorker($this, 'antiga', 'saida velha');
+    fingirWorker($this, '0a0000000000', 'saida velha');
 
     $this->canal->send(WinAction::Memory, [], 'n');
 
@@ -91,7 +91,7 @@ it('send() recusa quando a pasta de trabalho não existe', function () {
 // ---------------------------------------------------------------- collect()
 
 it('collect() devolve a saída e o código de saída que o worker escreveu', function () {
-    fingirWorker($this, 'abc123', "[ OK ] pronto\n", 0);
+    fingirWorker($this, 'abc123000000', "[ OK ] pronto\n", 0);
 
     $r = $this->canal->collect(10);
 
@@ -104,25 +104,25 @@ it('collect() devolve a saída e o código de saída que o worker escreveu', fun
 });
 
 it('collect() preserva código de saída diferente de zero', function () {
-    fingirWorker($this, 'abc124', 'falhou', 42);
+    fingirWorker($this, 'abc124000000', 'falhou', 42);
 
     expect($this->canal->collect(10)->exitCode)->toBe(42);
 });
 
 it('collect() preserva código de saída nulo como nulo', function () {
-    fingirWorker($this, 'abc125', 'morreu', null);
+    fingirWorker($this, 'abc125000000', 'morreu', null);
 
     expect($this->canal->collect(10)->exitCode)->toBeNull();
 });
 
 it('collect() tira o BOM que o PowerShell grava na saída', function () {
-    fingirWorker($this, 'abc126', "\xEF\xBB\xBF[ INFO ] com BOM\n");
+    fingirWorker($this, 'abc126000000', "\xEF\xBB\xBF[ INFO ] com BOM\n");
 
     expect($this->canal->collect(10)->output)->toBe("[ INFO ] com BOM\n");
 });
 
 it('collect() limpa os arquivos depois de ler', function () {
-    fingirWorker($this, 'abc127', 'saida');
+    fingirWorker($this, 'abc127000000', 'saida');
 
     $this->canal->collect(10);
 
@@ -131,7 +131,7 @@ it('collect() limpa os arquivos depois de ler', function () {
 });
 
 it('collect() explica na saída quando o worker recusou pela allowlist', function () {
-    fingirWorker($this, 'abc128', "[phporto] job recusado: acao fora da allowlist\n", 126, 'recusado');
+    fingirWorker($this, 'abc128000000', "[phporto] job recusado: acao fora da allowlist\n", 126, 'recusado');
 
     $r = $this->canal->collect(10);
 
@@ -143,7 +143,7 @@ it('collect() explica na saída quando o worker recusou pela allowlist', functio
 });
 
 it('collect() marca como timeout quando o worker diz que cancelou', function () {
-    fingirWorker($this, 'abc129', "saida parcial\n", null, 'cancelado');
+    fingirWorker($this, 'abc129000000', "saida parcial\n", null, 'cancelado');
 
     $r = $this->canal->collect(10);
 
@@ -170,7 +170,7 @@ it('NO TIMEOUT DEIXA A ORDEM DE CANCELAR, e não tenta matar ninguém', function
 it('no timeout aproveita a conclusão do cancelamento se ela chegar', function () {
     // O worker obedece no laço de 500 ms — medido em 975 ms. Aqui a conclusão
     // já está no disco, então o caminho de graça a encontra na primeira volta.
-    fingirWorker($this, 'abc130', "cortada no meio\n", null, 'cancelado');
+    fingirWorker($this, 'abc130000000', "cortada no meio\n", null, 'cancelado');
 
     $r = $this->canal->collect(10);
 
@@ -188,7 +188,7 @@ it('no timeout aproveita a conclusão do cancelamento se ela chegar', function (
 
 it('collect() aplica o teto de saída do PsRunner', function () {
     $grande = str_repeat('z', \App\Domain\OutputCap::MAX_OUTPUT_BYTES + 100);
-    fingirWorker($this, 'abc131', $grande);
+    fingirWorker($this, 'abc131000000', $grande);
 
     $r = $this->canal->collect(10);
 

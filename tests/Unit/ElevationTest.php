@@ -308,3 +308,22 @@ it('desligar apaga o marcador ANTES de esperar, para a tela não mentir', functi
 it('desligar sem nada ligado não estoura', function () {
     expect(elevacao($this)->disable())->toBeString();
 });
+
+// ------------------------------------------------------------ ociosidade
+
+it('o tempo ocioso da tela é o mesmo que o worker usa', function () {
+    // Quem sai é o worker; o PHP só mostra o número. Lido como texto, pelo
+    // mesmo motivo da paridade da allowlist: PHP não executa PowerShell.
+    $worker = file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+
+    expect($worker)->toBeString();
+    expect(preg_match('/^\$IDLE_TIMEOUT_S\s*=\s*(\d+)\s*$/m', (string) $worker, $m))->toBe(1)
+        ->and((int) $m[1])->toBe(Elevation::IDLE_TIMEOUT_S);
+});
+
+it('sem heartbeat, a explicação lembra que o worker sai sozinho', function () {
+    gravarMarcador($this);
+
+    expect(elevacao($this)->state()->detail)
+        ->toContain(sprintf('%d min sem uso', intdiv(Elevation::IDLE_TIMEOUT_S, 60)));
+});

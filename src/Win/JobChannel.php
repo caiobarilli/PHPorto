@@ -40,6 +40,15 @@ final class JobChannel
      */
     private const CANCEL_GRACE_S = 3;
 
+    /**
+     * O formato do id que o worker gera: 12 dígitos hexadecimais minúsculos.
+     *
+     * O id vira parte do caminho de arquivos que este lado lê e APAGA, e quem
+     * escreve o `win-done` pode ser qualquer processo do usuário. Fora deste
+     * formato, nenhum caminho é montado.
+     */
+    public const ID_PATTERN = '/^[0-9a-f]{12}$/D';
+
     public function __construct(
         private readonly string $filesDir,
     ) {
@@ -290,6 +299,10 @@ final class JobChannel
      */
     public function discardOrphan(string $id): void
     {
+        if (!self::validId($id)) {
+            return;
+        }
+
         foreach (['win-done-' . $id . '.json', 'win-out-' . $id . '.txt'] as $nome) {
             $caminho = $this->path($nome);
 
@@ -344,7 +357,9 @@ final class JobChannel
 
         $id = $data['id'] ?? null;
 
-        if (!is_string($id) || $id === '') {
+        // O nome do arquivo tem de ser o do id: um win-done com id de outro
+        // arquivo faria este lado ler e apagar o par errado.
+        if (!is_string($id) || !self::validId($id) || basename($arquivo) !== 'win-done-' . $id . '.json') {
             return null;
         }
 
@@ -419,6 +434,11 @@ final class JobChannel
                 @unlink($arquivo);
             }
         }
+    }
+
+    public static function validId(string $id): bool
+    {
+        return preg_match(self::ID_PATTERN, $id) === 1;
     }
 
     private function order(string $nome): void

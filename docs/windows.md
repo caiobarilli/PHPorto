@@ -21,7 +21,10 @@ O estado é de vida curta:
 - **reiniciar o servidor desliga**: o processo elevado percebe que o `php -S`
   sumiu e sai sozinho;
 - **desligar na `/config`** manda uma ordem que o processo obedece e sai. Não
-  pede confirmação.
+  pede confirmação;
+- **dez minutos sem uso desligam**: sem ação em andamento por 600 s, o processo
+  elevado sai sozinho. Uma ação longa não conta como ociosidade. Para voltar a
+  usar a `/win`, ligue de novo na `/config`.
 
 Enquanto o interruptor estiver desligado, o botão do Windows na home fica
 desabilitado e nenhuma ação roda.
@@ -83,7 +86,8 @@ retorna antes de abri-la.
 ### Memória (`memory`)
 
 Limpa a RAM com o WinMemoryCleaner, baixado para `src/Win/tools/` na primeira
-execução.
+execução. Antes de rodar, o SHA-256 do executável é conferido contra o da versão
+fixada; se não bater, o arquivo é apagado e a ação para com erro.
 
 ### Processos (`processes`)
 

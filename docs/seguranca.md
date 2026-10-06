@@ -117,8 +117,8 @@ estiver declarado é recusado antes de executar. Campo de texto livre tem teto
 de 4096 bytes nas duas listas. Um teste de paridade exige que as duas conheçam
 as mesmas treze ações.
 
-Os valores validados entram no script gerado como literais entre apóstrofos,
-onde o PowerShell não interpola nada.
+Os valores validados entram no script gerado como dado, num JSON em base64, e
+chegam na ação como parâmetro; nada do que a tela manda vira código.
 
 O que a allowlist **não** faz: limitar a consequência de uma ação legítima. A
 instalação continua instalando qualquer coisa que o winget ofereça. E quem puder
@@ -128,6 +128,35 @@ quem puder reescrever `src/` é dono da aplicação.
 O PHP roda em integridade Média e não consegue encerrar o processo elevado.
 Desligar e cancelar chegam como ordem, num arquivo que o próprio processo
 elevado lê e obedece.
+
+### A janela do processo elevado
+
+O nonce que o processo elevado exige em cada trabalho fica em
+`storage/win-elevation.json`, que qualquer processo do mesmo usuário lê —
+inclusive o WSL. Enquanto o processo elevado estiver de pé, quem ler o nonce
+consegue mandar trabalho para ele, dentro da allowlist. Para encurtar essa
+janela, o processo sai sozinho depois de 600 s sem ação em andamento
+(`$IDLE_TIMEOUT_S` no `worker.ps1`, repetido em `Elevation::IDLE_TIMEOUT_S`; um
+teste confere os dois).
+
+Com `ConsentPromptBehaviorAdmin` em 0, a elevação não pede confirmação, e um
+processo Médio consegue elevar sozinho de qualquer jeito. Nesse caso nenhuma
+dessas barreiras protege contra quem já roda como o usuário.
+
+### Conclusão só com id válido
+
+O processo elevado devolve cada execução num `win-done-<id>.json`, e o id vira
+parte do caminho dos arquivos de saída que o PHP lê e apaga. O PHP só aceita id
+de 12 dígitos hexadecimais, o formato que o processo elevado gera, e confere
+isso antes de montar qualquer caminho. Um arquivo de conclusão com id fora do
+formato é ignorado e nunca apaga nem lê nada fora de `src/Win/files/`.
+
+### O executável baixado
+
+O WinMemoryCleaner é baixado na primeira execução da ação Memória e roda como
+Administrador. O SHA-256 da versão fixada está no `Invoke-Memory.ps1`; um
+arquivo que não bata é apagado antes de rodar, tanto logo depois do download
+quanto quando ele já estava em `src/Win/tools/`.
 
 ## O `.env` não é escrito pela web
 
