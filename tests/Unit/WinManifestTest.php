@@ -77,6 +77,6 @@ it('worker e PHP usam os mesmos nomes de manifesto, pasta e parâmetro', functio
 
     expect($worker)->toContain("Join-Path \$Dir '" . Elevation::F_MANIFESTO . "'")
         ->and($worker)->toContain("Join-Path \$Dir '" . Elevation::DIR_PROTEGIDA . "'")
-        ->and($worker)->toContain('[Parameter(Mandatory)] [string]$ManifestoSha256')
+        ->and($worker)->toContain("[Parameter(Mandatory, ParameterSetName = 'Laco')] [string]\$ManifestoSha256")
         ->and($elevation)->toContain("'-ManifestoSha256',");
 });

@@ -34,7 +34,7 @@ BeforeAll {
         $false
     ) | ForEach-Object { Invoke-Expression $_.Extent.Text }
 
-    # E as duas constantes que a Test-Job consulta. Vem do arquivo, e nao
+    # E as constantes que a Test-Job consulta. Vem do arquivo, e nao
     # copiadas para ca: uma copia viraria um segundo lugar para atualizar, e o
     # teste passaria a conferir a copia em vez da tranca.
     $ast.FindAll(
@@ -42,12 +42,13 @@ BeforeAll {
             param($n)
             $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
             $n.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
-            $n.Left.VariablePath.UserPath -in @('ALLOWLIST', 'MAX_PARAM_BYTES', 'SID_ADMINS', 'SID_SYSTEM', 'SID_DONO')
+            $n.Left.VariablePath.UserPath -in @('ALLOWLIST', 'SENSIVEIS', 'MAX_PARAM_BYTES', 'SID_ADMINS', 'SID_SYSTEM', 'SID_DONO')
         },
         $false
     ) | ForEach-Object { Invoke-Expression $_.Extent.Text }
 
     $global:ALLOWLIST       = $ALLOWLIST
+    $global:SENSIVEIS       = $SENSIVEIS
     $global:MAX_PARAM_BYTES = $MAX_PARAM_BYTES
     $global:SID_ADMINS      = $SID_ADMINS
     $global:SID_SYSTEM      = $SID_SYSTEM
@@ -328,7 +329,10 @@ Describe 'worker - a allowlist do lado elevado' {
             params = [PSCustomObject]@{ SubAction = $_ }
         }
 
-        (Test-Job $job).params['SubAction'] | Should -Be $_
+        # A sensivel so passa no uso unico; o worker longo a recusa (ver
+        # 'worker - acoes sensiveis').
+        $modo = if (Test-AcaoSensivel 'sunshine' @{ SubAction = $_ }) { 'UmaVez' } else { 'Laco' }
+        (Test-Job $job -Modo $modo).params['SubAction'] | Should -Be $_
     }
 
     It 'recusa uma subacao que o sunshine nao tem (pareamento inclusive)' {
@@ -348,7 +352,10 @@ Describe 'worker - a allowlist do lado elevado' {
             params = [PSCustomObject]@{ SubAction = $_ }
         }
 
-        (Test-Job $job).params['SubAction'] | Should -Be $_
+        # A sensivel so passa no uso unico; o worker longo a recusa (ver
+        # 'worker - acoes sensiveis').
+        $modo = if (Test-AcaoSensivel 'rdp' @{ SubAction = $_ }) { 'UmaVez' } else { 'Laco' }
+        (Test-Job $job -Modo $modo).params['SubAction'] | Should -Be $_
     }
 
     It 'recusa subacao que o rdp nao tem' {
@@ -953,7 +960,7 @@ Describe 'worker - o manifesto vem do arquivo cujo hash veio na linha de comando
         $ast = [System.Management.Automation.Language.Parser]::ParseFile($Script:Worker, [ref]$null, [ref]$null)
         $p = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'ManifestoSha256' }
         $p | Should -Not -BeNullOrEmpty
-        $p.Attributes.Extent.Text | Should -Contain '[Parameter(Mandatory)]'
+        $p.Attributes.Extent.Text | Should -Contain "[Parameter(Mandatory, ParameterSetName = 'Laco')]"
     }
 
     It 'sobe so depois de ler o manifesto e preparar a pasta, e o motivo da recusa vai na prova' {
@@ -1238,5 +1245,323 @@ Describe 'worker - resultados na pasta protegida' {
 
     It 'a trava e solta no fim' {
         Get-Content -Raw $Script:Worker | Should -Match '\$TRAVA\.Dispose\(\)'
+    }
+}
+
+# ==============================================================
+# ACOES SENSIVEIS — o worker longo recusa, o uso unico so roda elas
+# ==============================================================
+Describe 'worker - acoes sensiveis' {
+
+    It 'toda acao e subacao sensivel existe na allowlist' {
+        foreach ($acao in $global:SENSIVEIS.Keys) {
+            $global:ALLOWLIST.ContainsKey($acao) | Should -BeTrue -Because $acao
+            $regra = $global:SENSIVEIS[$acao]
+            if ($regra -is [string]) { $regra | Should -Be '*'; continue }
+            foreach ($sub in $regra) {
+                $global:ALLOWLIST[$acao]['SubAction'].valores | Should -Contain $sub -Because "$acao $sub"
+            }
+        }
+    }
+
+    It 'Test-AcaoSensivel <Acao> <Sub> e <Esperado>' -ForEach @(
+        @{ Acao = 'install';  Sub = $null;            Esperado = $true }
+        @{ Acao = 'rdp';      Sub = 'on';             Esperado = $true }
+        @{ Acao = 'rdp';      Sub = 'off';            Esperado = $false }
+        @{ Acao = 'rdp';      Sub = 'h264-on';        Esperado = $false }
+        @{ Acao = 'sunshine'; Sub = 'install';        Esperado = $true }
+        @{ Acao = 'sunshine'; Sub = 'firewall-open';  Esperado = $true }
+        @{ Acao = 'sunshine'; Sub = 'firewall-close'; Esperado = $false }
+        @{ Acao = 'exporter'; Sub = 'install';        Esperado = $true }
+        @{ Acao = 'exporter'; Sub = 'firewall';       Esperado = $true }
+        @{ Acao = 'exporter'; Sub = 'metrics';        Esperado = $false }
+        @{ Acao = 'gpu';      Sub = 'install';        Esperado = $true }
+        @{ Acao = 'gpu';      Sub = 'uninstall';      Esperado = $false }
+        @{ Acao = 'network';  Sub = $null;            Esperado = $false }
+        @{ Acao = 'optimize'; Sub = $null;            Esperado = $false }
+        @{ Acao = 'dns';      Sub = $null;            Esperado = $false }
+    ) {
+        $params = [ordered]@{}
+        if ($null -ne $Sub) { $params['SubAction'] = $Sub }
+        Test-AcaoSensivel $Acao $params | Should -Be $Esperado
+    }
+
+    It 'o worker longo recusa <Acao> <Sub>, mesmo com o nonce certo' -ForEach @(
+        @{ Acao = 'rdp';      Sub = 'on' }
+        @{ Acao = 'sunshine'; Sub = 'firewall-open' }
+        @{ Acao = 'sunshine'; Sub = 'install' }
+        @{ Acao = 'exporter'; Sub = 'install' }
+        @{ Acao = 'exporter'; Sub = 'firewall' }
+        @{ Acao = 'gpu';      Sub = 'install' }
+    ) {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = $Acao; params = [PSCustomObject]@{ SubAction = $Sub } }
+        { Test-Job $job } | Should -Throw -ExpectedMessage "acao sensivel: '$Acao $Sub' so roda com UAC proprio, pela tela"
+    }
+
+    It 'o worker longo recusa install, e a recusa sai com o nome da acao' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'install'; params = [PSCustomObject]@{ Apps = 'Mozilla.Firefox' } }
+        { Test-Job $job } | Should -Throw -ExpectedMessage "acao sensivel: 'install' so roda com UAC proprio, pela tela"
+    }
+
+    It 'a subacao conta na grafia da LISTA: RDP ON tambem e sensivel' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'rdp'; params = [PSCustomObject]@{ SubAction = 'ON' } }
+        { Test-Job $job } | Should -Throw -ExpectedMessage '*acao sensivel*'
+    }
+
+    It 'o uso unico aceita a sensivel sem nonce: quem faz esse papel e o hash do pedido' {
+        $job = [PSCustomObject]@{ acao = 'install'; params = [PSCustomObject]@{ Apps = 'Mozilla.Firefox' } }
+        $ok = Test-Job $job -Modo UmaVez
+        $ok.acao           | Should -Be 'install'
+        $ok.params['Apps'] | Should -Be 'Mozilla.Firefox'
+    }
+
+    It 'o uso unico recusa acao comum' {
+        $job = [PSCustomObject]@{ acao = 'rdp'; params = [PSCustomObject]@{ SubAction = 'off' } }
+        { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "*so roda acao sensivel, e 'rdp off' nao e'*"
+    }
+
+    It 'o uso unico continua passando pela allowlist' {
+        $job = [PSCustomObject]@{ acao = 'rdp'; params = [PSCustomObject]@{ SubAction = 'on'; Kill = 'x' } }
+        { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "parametro fora da allowlist para 'rdp': 'Kill'"
+    }
+
+    It 'o worker longo segue aceitando a comum' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'rdp'; params = [PSCustomObject]@{ SubAction = 'off' } }
+        (Test-Job $job).params['SubAction'] | Should -Be 'off'
+    }
+}
+
+# ==============================================================
+# O PEDIDO DO USO UNICO
+# ==============================================================
+Describe 'worker - Read-PhportoPedido' {
+
+    BeforeAll {
+        function New-PedidoDeTeste([hashtable]$Troca = @{}, [string]$Nome) {
+            $id = if ($Troca.ContainsKey('id')) { $Troca['id'] } else { -join ((1..12) | ForEach-Object { '0123456789abcdef'[(Get-Random -Maximum 16)] }) }
+            $agora = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+            $p = [ordered]@{
+                v         = 1
+                id        = $id
+                acao      = 'rdp'
+                params    = [ordered]@{ SubAction = 'on' }
+                php_pid   = $PID
+                raiz_win  = $Script:PastaWin
+                dir       = $Script:Trabalho
+                criado_em = $agora
+                expira_em = $agora + 75
+                prazo_s   = 615
+                manifesto = [ordered]@{ 'bootstrap.ps1' = ('ab' * 32) }
+            }
+            foreach ($k in $Troca.Keys) { if ($k -ne 'id') { $p[$k] = $Troca[$k] } }
+            if (-not $Nome) { $Nome = 'win-oneshot-' + $id + '.json' }
+
+            $caminho = Join-Path $Script:Trabalho $Nome
+            [System.IO.File]::WriteAllText($caminho, (ConvertTo-Json -InputObject $p -Compress -Depth 5), [System.Text.UTF8Encoding]::new($false))
+
+            return [PSCustomObject]@{
+                Id      = $id
+                Caminho = $caminho
+                Hash    = (Get-FileHash -LiteralPath $caminho -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+        }
+    }
+
+    It 'com o hash certo, devolve o pedido e o CONSOME: uma segunda leitura falha' {
+        $n = New-PedidoDeTeste
+
+        $p = Read-PhportoPedido $n.Caminho $n.Hash
+        $p.id                 | Should -Be $n.Id
+        $p.acao               | Should -Be 'rdp'
+        $p.params.SubAction   | Should -Be 'on'
+        $p.php_pid            | Should -Be $PID
+        $p.prazo_s            | Should -Be 615
+        $p.manifesto          | Should -BeOfType [hashtable]
+        $p.manifesto['bootstrap.ps1'] | Should -Be ('ab' * 32)
+
+        Test-Path -LiteralPath $n.Caminho | Should -BeFalse
+        { Read-PhportoPedido $n.Caminho $n.Hash } | Should -Throw -ExpectedMessage '*pedido ausente*'
+    }
+
+    It 'pedido trocado depois do clique e recusado, e fica onde estava' {
+        $n = New-PedidoDeTeste
+        Add-Content -LiteralPath $n.Caminho -Value ' '
+
+        { Read-PhportoPedido $n.Caminho $n.Hash } | Should -Throw -ExpectedMessage "*nao e' o que o PHP gravou*"
+        Test-Path -LiteralPath $n.Caminho | Should -BeTrue
+    }
+
+    It 'nome fora do formato e recusado antes de ler: <_>' -ForEach @('win-oneshot-ABC000000000.json', 'win-oneshot-abc.json', 'pedido.json', 'win-oneshot-abc000000000.json.txt') {
+        $n = New-PedidoDeTeste -Nome $_
+        { Read-PhportoPedido $n.Caminho $n.Hash } | Should -Throw -ExpectedMessage '*nome fora do formato*'
+    }
+
+    It 'pedido expirado e recusado: aceitar o prompt tarde nao roda nada' {
+        $n = New-PedidoDeTeste @{ expira_em = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - 1 }
+        { Read-PhportoPedido $n.Caminho $n.Hash } | Should -Throw -ExpectedMessage '*expirado*'
+    }
+
+    It 'id de dentro diferente do nome e recusado' {
+        $n = New-PedidoDeTeste
+        $outro = Join-Path $Script:Trabalho 'win-oneshot-fff000000000.json'
+        Move-Item -LiteralPath $n.Caminho -Destination $outro
+        { Read-PhportoPedido $outro $n.Hash } | Should -Throw -ExpectedMessage "*id que nao e' o do nome*"
+    }
+
+    It 'prazo fora de 60-3615 s e recusado: <_>' -ForEach @(59, 3616, 'x') {
+        $n = New-PedidoDeTeste @{ prazo_s = $_ }
+        { Read-PhportoPedido $n.Caminho $n.Hash } | Should -Throw -ExpectedMessage '*prazo fora da faixa*'
+    }
+
+    It 'php -S que ja saiu e recusado' {
+        $n = New-PedidoDeTeste @{ php_pid = 2147483000 }
+        { Read-PhportoPedido $n.Caminho $n.Hash } | Should -Throw -ExpectedMessage '*nao existe mais*'
+    }
+
+    It 'versao desconhecida e recusada' {
+        $n = New-PedidoDeTeste @{ v = 2 }
+        { Read-PhportoPedido $n.Caminho $n.Hash } | Should -Throw -ExpectedMessage '*versao desconhecida*'
+    }
+
+    It 'campo de texto vazio e recusado: <_>' -ForEach @('acao', 'raiz_win', 'dir') {
+        $n = New-PedidoDeTeste @{ $_ = '' }
+        { Read-PhportoPedido $n.Caminho $n.Hash } | Should -Throw -ExpectedMessage "*sem '$_'*"
+    }
+
+    It 'manifesto sem o bootstrap, ou com hash que nao e SHA-256, e recusado' {
+        $n = New-PedidoDeTeste @{ manifesto = [ordered]@{ 'lib/x.ps1' = ('cd' * 32) } }
+        { Read-PhportoPedido $n.Caminho $n.Hash } | Should -Throw -ExpectedMessage '*sem o bootstrap*'
+
+        $n = New-PedidoDeTeste @{ manifesto = [ordered]@{ 'bootstrap.ps1' = 'x' } }
+        { Read-PhportoPedido $n.Caminho $n.Hash } | Should -Throw -ExpectedMessage '*SHA-256 invalido*'
+    }
+}
+
+# ==============================================================
+# OS DOIS MODOS DE LINHA DE COMANDO
+# ==============================================================
+Describe 'worker - dois modos de linha de comando' {
+
+    BeforeAll {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($Script:Worker, [ref]$null, [ref]$null)
+        $Script:Conjuntos = @{}
+        foreach ($p in $ast.ParamBlock.Parameters) {
+            $texto = $p.Attributes.Extent.Text -join ' '
+            if ($texto -match "ParameterSetName = '(\w+)'") { $Script:Conjuntos[$p.Name.VariablePath.UserPath] = $Matches[1] }
+        }
+        $Script:Binding = ($ast.ParamBlock.Attributes | Where-Object { $_.TypeName.Name -eq 'CmdletBinding' }).Extent.Text
+    }
+
+    It 'o padrao e o worker longo' {
+        $Script:Binding | Should -Match "DefaultParameterSetName\s*=\s*'Laco'"
+    }
+
+    It '<_> e do worker longo' -ForEach @('ParentPid', 'Dir', 'Nonce', 'ManifestoSha256') {
+        $Script:Conjuntos[$_] | Should -Be 'Laco'
+    }
+
+    It '<_> e do uso unico' -ForEach @('Pedido', 'PedidoSha256') {
+        $Script:Conjuntos[$_] | Should -Be 'UmaVez'
+    }
+
+    It 'misturar os dois modos nao resolve conjunto e nao roda nada' {
+        $log = Join-Path $Script:Trabalho 'win-worker.log'
+        Remove-Item -LiteralPath $log -ErrorAction SilentlyContinue
+
+        $saida = & $Script:Exe -NoProfile -NonInteractive -File $Script:Worker -Pedido 'x.json' -PedidoSha256 'y' -ParentPid 1 -Dir $Script:Trabalho -Nonce 'n' -ManifestoSha256 'z' 2>&1
+        $LASTEXITCODE | Should -Not -Be 0
+        ($saida | Out-String) | Should -Match 'Parameter set|conjunto de par'
+        Test-Path -LiteralPath $log | Should -BeFalse
+    }
+
+    It 'no uso unico, o modo sai antes da prova, do heartbeat e do laco' {
+        $texto = Get-Content -Raw $Script:Worker
+        $texto | Should -Match "(?s)IsInRole.*if \(\`$PSCmdlet\.ParameterSetName -eq 'UmaVez'\) \{\s*exit \(Invoke-UmaVez\)\s*\}.*Read-PhportoManifesto \`$F_MANIFESTO"
+    }
+}
+
+# ==============================================================
+# A TRAVA: o worker longo e o uso unico ao mesmo tempo
+# ==============================================================
+Describe 'worker - a trava abre duas vezes' {
+
+    It 'dois Initialize-PastaProtegida na mesma pasta convivem' {
+        $pasta = Join-Path $Script:Trabalho ('trava-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $pasta | Out-Null
+        Mock Get-PastaInfo { [PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $false; Dono = 'S-1-5-32-544' } }
+        Mock New-AclProtegida { 'acl' }
+        Mock Set-PastaProtegidaAcl { }
+
+        $a = Initialize-PastaProtegida $pasta 'S-1-5-21-1'
+        try {
+            $b = Initialize-PastaProtegida $pasta 'S-1-5-21-1'
+            try {
+                $a.CanRead | Should -BeTrue
+                $b.CanRead | Should -BeTrue
+                $a.CanWrite | Should -BeFalse -Because 'so leitura: quem segura a pasta nao precisa escrever'
+            } finally { $b.Dispose() }
+        } finally { $a.Dispose() }
+    }
+
+    It 'com a trava aberta, ninguem apaga o arquivo da trava' -Skip:(-not $IsWindows -and $PSVersionTable.PSVersion.Major -ge 6) {
+        # Comportamento do Windows: arquivo aberto sem FILE_SHARE_DELETE nao
+        # sai. No Linux o unlink de arquivo aberto e permitido, dai o Skip.
+        $pasta = Join-Path $Script:Trabalho ('trava-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $pasta | Out-Null
+        Mock Get-PastaInfo { [PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $false; Dono = 'S-1-5-32-544' } }
+        Mock New-AclProtegida { 'acl' }
+        Mock Set-PastaProtegidaAcl { }
+
+        $a = Initialize-PastaProtegida $pasta 'S-1-5-21-1'
+        try {
+            { Remove-Item -LiteralPath (Join-Path $pasta 'win-trava') -Force -ErrorAction Stop } | Should -Throw
+        } finally { $a.Dispose() }
+    }
+}
+
+# ==============================================================
+# O USO UNICO DE PONTA A PONTA, com o Windows trocado por Mock
+# ==============================================================
+Describe 'worker - Invoke-UmaVez' {
+
+    BeforeEach {
+        $Script:IdUma  = -join ((1..12) | ForEach-Object { '0123456789abcdef'[(Get-Random -Maximum 16)] })
+        $Script:Estado = Join-Path $Script:Trabalho ('win-oneshot-' + $Script:IdUma + '.estado')
+        $Script:PedUma = Join-Path $Script:Trabalho ('win-oneshot-' + $Script:IdUma + '.json')
+        $global:Pedido = $Script:PedUma
+        $global:Dir    = $Script:Trabalho
+
+        Mock Initialize-PastaProtegida { [System.IO.MemoryStream]::new() }
+        Mock Get-UsuarioPhp { 'S-1-5-21-1' }
+        Mock Write-Log { }
+        $global:filho = $null
+    }
+
+    AfterEach { $global:Dir = $Script:Trabalho }
+
+    It 'pedido recusado vira ERRO= no recado, e nada roda' {
+        Mock Read-PhportoPedido { throw 'pedido expirado' }
+        Mock Start-FilhoJob { throw 'nao devia rodar' }
+
+        Invoke-UmaVez | Should -Be 1
+        (Get-Content -Raw -LiteralPath $Script:Estado) | Should -Match '^ERRO=pedido expirado'
+        Should -Invoke Start-FilhoJob -Times 0 -Exactly
+    }
+
+    It 'pedido de outra pasta de trabalho e recusado' {
+        Mock Read-PhportoPedido { [PSCustomObject]@{ id = $Script:IdUma; acao = 'rdp'; params = [PSCustomObject]@{ SubAction = 'on' }; php_pid = $PID; raiz_win = 'C:\w'; dir = 'C:\outra'; prazo_s = 615; manifesto = @{} } }
+        Mock Start-FilhoJob { throw 'nao devia rodar' }
+
+        Invoke-UmaVez | Should -Be 1
+        (Get-Content -Raw -LiteralPath $Script:Estado) | Should -Match 'outra pasta de trabalho'
+    }
+
+    It 'acao comum no pedido e recusada com 126, depois do ACEITO' {
+        Mock Read-PhportoPedido { [PSCustomObject]@{ id = $Script:IdUma; acao = 'rdp'; params = [PSCustomObject]@{ SubAction = 'off' }; php_pid = $PID; raiz_win = 'C:\w'; dir = $Script:Trabalho; prazo_s = 615; manifesto = @{} } }
+        Mock Write-Recusa { }
+
+        Invoke-UmaVez | Should -Be 126
+        (Get-Content -Raw -LiteralPath $Script:Estado) | Should -Match "^ACEITO=$PID"
+        Should -Invoke Write-Recusa -Times 1 -Exactly -ParameterFilter { $motivo -like '*so roda acao sensivel*' }
     }
 }
