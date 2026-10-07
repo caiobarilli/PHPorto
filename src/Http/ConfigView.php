@@ -51,6 +51,13 @@ final readonly class ConfigView
      *
      * @param bool    $hypervEnabled   se o painel do Hyper-V está habilitado
      * @param ?string $hypervEnabledAt desde quando, em UTC, ou null
+     *
+     * O UAC entra na seção do PowerShell porque é dele que as ações sensíveis
+     * dependem: cada uma abre o próprio prompt, e sem prompt (UAC silencioso
+     * ou desligado) elas são recusadas.
+     *
+     * @param bool   $uacOk      se a política do UAC garante um prompt por ação sensível
+     * @param string $uacSummary a linha que diz em que pé o UAC está
      */
     public function __construct(
         public string $provider,
@@ -69,6 +76,8 @@ final readonly class ConfigView
         public int $winProofTimeout,
         public bool $hypervEnabled,
         public ?string $hypervEnabledAt,
+        public bool $uacOk,
+        public string $uacSummary,
     ) {
     }
 }

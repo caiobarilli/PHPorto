@@ -99,6 +99,31 @@ final class Elevation
     public const TIME_LIMIT_MARGIN_S = 15;
 
     /**
+     * Quanto uma ação sensível espera alguém responder ao prompt de UAC.
+     *
+     * Mais que o PROOF_TIMEOUT_S da ligação: aqui o prompt é sempre humano
+     * (com CPBA = 0 a ação sensível nem chega a abrir prompt, é recusada), e
+     * quem clicou pode estar lendo o que o prompt diz. Passado o prazo o
+     * pedido é apagado, e aceitar o prompt depois não roda nada.
+     */
+    public const ONESHOT_CONSENT_S = 60;
+
+    /**
+     * Quanto o PHP espera o PowerShell de uso único dar sinal, depois de o
+     * prompt ser aceito. Ele confere o próprio arquivo e o pedido, prepara a
+     * pasta protegida e escreve ACEITO; numa máquina velha isso passa de
+     * alguns segundos, e 15 s ainda cabem.
+     */
+    public const ONESHOT_START_S = 15;
+
+    /**
+     * O prefixo dos arquivos de um uso único em files/: o pedido
+     * (win-oneshot-<id>.json), o recado (.estado) e o lançador
+     * (win-oneshot-launcher-<id>.ps1). Ver OneShot.
+     */
+    public const ONESHOT_PREFIX = 'win-oneshot-';
+
+    /**
      * Nomes do canal.
      *
      * O worker.ps1 carrega os MESMOS nomes, e essa duplicação é inerente: um
@@ -241,21 +266,23 @@ final class Elevation
 
         $runner = new PsRunner($this->filesDir);
 
+        // ANTES do lançador, e não depois: ver TIME_LIMIT_MARGIN_S. Com o UAC
+        // no padrão (CPBA = 5), o Start-Process -Verb RunAs BLOQUEIA enquanto
+        // o prompt está na tela, e no Windows o max_execution_time conta tempo
+        // de relógio. Levantado só depois, um prompt respondido aos ~28 s
+        // derrubava a requisição com fatal antes de ela dizer o que houve.
+        set_time_limit(self::PROOF_TIMEOUT_S + self::TIME_LIMIT_MARGIN_S);
+
         try {
-            // O lançador só dispara o Start-Process e sai; o timeout curto
-            // aqui é para ele, não para a elevação. A espera pela elevação é
-            // a sondagem da prova, logo abaixo.
+            // Com CPBA = 0 o lançador dispara o Start-Process e sai na hora;
+            // com prompt, ele volta quando a pessoa responde. A espera pela
+            // prova, logo abaixo, é a que vale.
             $r = $runner->run($launcher, self::PROOF_TIMEOUT_S);
         } catch (RuntimeException $e) {
             return 'Não foi possível chamar o powershell.exe: ' . $e->getMessage();
         } finally {
             @unlink($launcher);
         }
-
-        // Antes de esperar: ver TIME_LIMIT_MARGIN_S. Sem isto o limite de 30 s
-        // do cli-server mata a requisição justamente no instante em que ela
-        // teria a resposta a dar.
-        set_time_limit(self::PROOF_TIMEOUT_S + self::TIME_LIMIT_MARGIN_S);
 
         $limite = microtime(true) + self::PROOF_TIMEOUT_S;
         $bruto  = null;
@@ -400,8 +427,11 @@ final class Elevation
      * .gitignore mal escrito ou um deploy que copiou só o que o autoloader
      * conhece deixam src/Win sem os .ps1. Sem esta mensagem, o sintoma seria
      * uma elevação que sobe e sai em silêncio, ou um job que nunca conclui.
+     *
+     * Pública porque a ação sensível (OneShot) não depende do PowerShell
+     * elevado longo, mas depende do mesmo checkout.
      */
-    private function configProblem(): ?string
+    public function configProblem(): ?string
     {
         foreach ([self::SCRIPT_WORKER, self::SCRIPT_BOOTSTRAP] as $nome) {
             $caminho = $this->scriptPath($nome);
@@ -523,6 +553,11 @@ final class Elevation
         foreach (glob($this->filesDir . DIRECTORY_SEPARATOR . 'win-prova-*.txt') ?: [] as $antiga) {
             @unlink($antiga);
         }
+
+        // Sobras de um uso único cuja requisição morreu antes do finally.
+        foreach (glob($this->filesDir . DIRECTORY_SEPARATOR . self::ONESHOT_PREFIX . '*') ?: [] as $antiga) {
+            @unlink($antiga);
+        }
     }
 
     /**
@@ -533,34 +568,42 @@ final class Elevation
      * "o conjunto de parâmetros não pode ser resolvido". É por isso que a
      * prova de que o worker subiu chega por ARQUIVO, e não por pipe.
      *
-     * Todo argumento entra como literal de apóstrofo simples: dentro dele o
-     * PowerShell não interpola nada, então nem um caminho com $ ou crase
-     * vira código.
+     * O -ArgumentList VAI COMO UMA STRING SÓ. Como array, o Start-Process do
+     * 5.1 junta os itens com espaço e SEM aspas, e um projeto em
+     * "C:\Meus Projetos" chegava ao powershell.exe partido em dois argumentos.
+     * Na string, os caminhos vão entre aspas duplas; o resto é número, nonce
+     * e hash, que não têm espaço. A string inteira entra como literal de
+     * apóstrofo simples: dentro dele o PowerShell não interpola nada, então
+     * nem um caminho com $ ou crase vira código.
      */
     private function launcherBody(string $nonce, string $manifestoSha256): string
     {
-        $args = [
-            '-NoProfile',
-            '-NonInteractive',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-File',
-            $this->scriptPath(self::SCRIPT_WORKER),
-            '-ParentPid',
-            (string) getmypid(),
-            '-Dir',
-            $this->filesDir,
-            '-Nonce',
-            $nonce,
-            '-ManifestoSha256',
-            $manifestoSha256,
-        ];
+        $argLine = implode(' ', [
+            '-NoProfile -NonInteractive -ExecutionPolicy Bypass',
+            '-File ' . self::quoted($this->scriptPath(self::SCRIPT_WORKER)),
+            '-ParentPid ' . getmypid(),
+            '-Dir ' . self::quoted($this->filesDir),
+            '-Nonce ' . $nonce,
+            '-ManifestoSha256 ' . $manifestoSha256,
+        ]);
 
         return sprintf(
             'Start-Process -FilePath %s -Verb RunAs -WindowStyle Hidden -ArgumentList %s',
             PsScriptBuilder::literal('powershell.exe'),
-            implode(',', array_map([PsScriptBuilder::class, 'literal'], $args))
+            PsScriptBuilder::literal($argLine)
         );
+    }
+
+    /**
+     * Um caminho entre aspas duplas, para uma linha de comando do Windows.
+     *
+     * Sem barra no fim: na linha de comando do Windows, \" é aspa escapada, e
+     * "C:\files\" engoliria a aspa que fecha. Caminho do Windows não tem aspa
+     * dupla dentro, então não há o que escapar.
+     */
+    private static function quoted(string $caminho): string
+    {
+        return '"' . rtrim($caminho, '\\/') . '"';
     }
 
     private function path(string $dir, string $nome): string

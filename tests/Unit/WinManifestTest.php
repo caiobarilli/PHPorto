@@ -78,5 +78,15 @@ it('worker e PHP usam os mesmos nomes de manifesto, pasta e parâmetro', functio
     expect($worker)->toContain("Join-Path \$Dir '" . Elevation::F_MANIFESTO . "'")
         ->and($worker)->toContain("Join-Path \$Dir '" . Elevation::DIR_PROTEGIDA . "'")
         ->and($worker)->toContain("[Parameter(Mandatory, ParameterSetName = 'Laco')] [string]\$ManifestoSha256")
-        ->and($elevation)->toContain("'-ManifestoSha256',");
+        ->and($elevation)->toContain("'-ManifestoSha256 ' . \$manifestoSha256");
+});
+
+it('worker e OneShot usam os mesmos nomes de parâmetro do uso único', function () {
+    $worker  = (string) file_get_contents($this->winDir . '/worker.ps1');
+    $oneShot = (string) file_get_contents($this->winDir . '/OneShot.php');
+
+    expect($worker)->toContain("[Parameter(Mandatory, ParameterSetName = 'UmaVez')] [string]\$Pedido,")
+        ->and($worker)->toContain("[Parameter(Mandatory, ParameterSetName = 'UmaVez')] [string]\$PedidoSha256")
+        ->and($oneShot)->toContain("' -Pedido '")
+        ->and($oneShot)->toContain("' -PedidoSha256 '");
 });

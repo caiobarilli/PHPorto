@@ -16,6 +16,8 @@ use App\Win\Elevation;
 use App\Win\HypervGate;
 use App\Win\HypervListing;
 use App\Win\JobChannel;
+use App\Win\OneShot;
+use App\Win\UacPolicy;
 use App\Win\WinAction;
 use App\Win\WinConfig;
 use App\Wsl\Distro;
@@ -60,6 +62,8 @@ final class Pages
         private readonly string $filesDir,
         private readonly Elevation $elevation,
         private readonly HypervGate $hyperv,
+        private readonly OneShot $oneShot,
+        private readonly UacPolicy $uac,
     ) {
     }
 
@@ -136,6 +140,8 @@ final class Pages
             winProofTimeout: Elevation::PROOF_TIMEOUT_S,
             hypervEnabled: $this->hyperv->enabled(),
             hypervEnabledAt: $this->hyperv->enabledAt(),
+            uacOk: $this->uac->blockingReason() === null,
+            uacSummary: $this->uac->summary(),
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view));
@@ -435,6 +441,11 @@ final class Pages
             dnsChosen: $dnsEscolha,
             dnsProblem: $dnsProblem,
             tab: $aba,
+            // A ação sensível não depende do PowerShell elevado longo, só do
+            // checkout. A política do UAC NÃO entra aqui: ler o registro a
+            // cada carga da /win é um processo a mais por página, e a recusa
+            // por UAC chega com a frase certa no clique.
+            sensitiveBlocked: $failed ?? $this->elevation->configProblem(),
         );
 
         Respond::html('PHPorto — Windows', Respond::render('win.php', $view));
@@ -478,13 +489,6 @@ final class Pages
             Respond::redirect($aba->url());
         }
 
-        $blocked = $this->winBlockingReason();
-
-        if ($blocked !== null) {
-            $this->flash($blocked);
-            Respond::redirect($aba->url());
-        }
-
         // Só os campos que chegaram como texto, ou como lista de textos — a
         // lista de checkboxes (Items[], Packages[]), que vira texto separado
         // por vírgula. O resto não é entrada válida de formulário, e deixar
@@ -502,6 +506,9 @@ final class Pages
             }
         }
 
+        // VALIDA ANTES DE CHECAR O BLOQUEIO, e a ordem mudou com o uso único:
+        // é o SubAction validado que diz por qual caminho a ação vai, e cada
+        // caminho tem o seu bloqueio. A validação não toca em nada.
         try {
             $params = $acao->validate($entrada);
         } catch (InvalidArgumentException $e) {
@@ -509,21 +516,34 @@ final class Pages
             Respond::redirect($aba->url());
         }
 
-        $this->saveWinSelection($acao, $params);
+        // Ação sensível: um prompt de UAC só para ela, e o PowerShell elevado
+        // longo nem é consultado — ele recusaria. Ver OneShot.
+        $sensivel = $acao->isSensitive($params);
+        $blocked  = $sensivel ? $this->oneShot->blockingReason() : $this->winBlockingReason();
 
-        $nonce = $this->elevation->nonce();
-
-        if ($nonce === null) {
-            // Corrida real: o interruptor foi desligado entre o GET que
-            // desenhou o formulário e este POST.
-            $this->flash('O PowerShell elevado não está mais de pé. Ligue de novo na configuração.');
+        if ($blocked !== null) {
+            $this->flash($blocked);
             Respond::redirect($aba->url());
         }
 
-        $canal = new JobChannel($this->filesDir);
+        $this->saveWinSelection($acao, $params);
 
         try {
-            $run = $canal->dispatch($acao, $params, $nonce, $this->config['winutil']['timeout']);
+            if ($sensivel) {
+                $run = $this->oneShot->dispatch($acao, $params, $this->config['winutil']['timeout']);
+            } else {
+                $nonce = $this->elevation->nonce();
+
+                if ($nonce === null) {
+                    // Corrida real: o interruptor foi desligado entre o GET que
+                    // desenhou o formulário e este POST.
+                    $this->flash('O PowerShell elevado não está mais de pé. Ligue de novo na configuração.');
+                    Respond::redirect($aba->url());
+                }
+
+                $run = (new JobChannel($this->filesDir))
+                    ->dispatch($acao, $params, $nonce, $this->config['winutil']['timeout']);
+            }
         } catch (RuntimeException $e) {
             $this->flash($e->getMessage());
             Respond::redirect($aba->url());

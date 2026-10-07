@@ -95,7 +95,48 @@ function baterHeartbeat(object $ctx, int $segundosAtras = 0): void
 it('os prazos são constantes com nome e valor documentado', function () {
     expect(Elevation::PROOF_TIMEOUT_S)->toBe(30)
         ->and(Elevation::SHUTDOWN_WAIT_S)->toBe(5)
-        ->and(Elevation::HEARTBEAT_STALE_S)->toBe(10);
+        ->and(Elevation::HEARTBEAT_STALE_S)->toBe(10)
+        ->and(Elevation::ONESHOT_CONSENT_S)->toBe(60)
+        ->and(Elevation::ONESHOT_START_S)->toBe(15);
+});
+
+it('o limite de tempo sobe ANTES de rodar o lançador, e não depois', function () {
+    // Com prompt (CPBA = 5) o Start-Process -Verb RunAs bloqueia, e o
+    // max_execution_time do Windows conta relógio. Levantado depois, um prompt
+    // respondido aos ~28 s derrubava a requisição antes da resposta. Lido como
+    // texto: o caminho de verdade exige elevar.
+    $fonte  = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/Elevation.php');
+    $enable = substr($fonte, (int) strpos($fonte, 'public function enable()'));
+    $limite = strpos($enable, 'set_time_limit(self::PROOF_TIMEOUT_S');
+    $roda   = strpos($enable, '$runner->run(');
+
+    expect($limite)->toBeInt()
+        ->and($roda)->toBeInt()
+        ->and($limite)->toBeLessThan($roda);
+});
+
+it('o lançador manda o -ArgumentList como uma string só, com os caminhos entre aspas', function () {
+    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/Elevation.php');
+
+    expect($fonte)->toContain("'-File ' . self::quoted(")
+        ->and($fonte)->toContain("'-Dir ' . self::quoted(")
+        ->and($fonte)->toContain('-ArgumentList %s')
+        ->and($fonte)->not->toContain("PsScriptBuilder::literal('-File')");
+});
+
+it('a limpeza do canal leva as sobras de um uso único', function () {
+    // Os arquivos do canal também, como a limpeza os encontraria de verdade.
+    $canal = [Elevation::F_ORDEM_DESLIGAR, Elevation::F_ORDEM_CANCELAR, Elevation::F_JOB, Elevation::F_HEARTBEAT, Elevation::F_MANIFESTO];
+
+    foreach ([...$canal, 'win-oneshot-abc000000001.json', 'win-oneshot-abc000000001.estado', 'win-oneshot-launcher-abc000000001.ps1'] as $nome) {
+        file_put_contents($this->files . DIRECTORY_SEPARATOR . $nome, 'x');
+    }
+
+    // Privado, e chamado só pelo enable(), que no fim abre o powershell.exe:
+    // por reflexão, para testar a limpeza sem tentar elevar.
+    (new ReflectionMethod(Elevation::class, 'cleanupChannel'))->invoke(elevacao($this));
+
+    expect(glob($this->files . DIRECTORY_SEPARATOR . '*'))->toBe([]);
 });
 
 // ---------------------------------------------------------------- bloqueado

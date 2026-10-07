@@ -44,6 +44,8 @@ use App\Http\Respond;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
 use App\Win\HypervGate;
+use App\Win\OneShot;
+use App\Win\UacPolicy;
 use App\Wsl\Distro;
 
 /**
@@ -135,22 +137,32 @@ if (!$config['dashboard_enabled']) {
 // O marcador da elevação mora em storage/, ao lado do flags.json, e não em
 // files/: files/ é área de trabalho descartável do que está executando, e o
 // marcador precisa sobreviver a uma limpeza dela.
+$winDir    = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Win';
+$elevation = new Elevation(
+    filesDir: $filesDir,
+    storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
+    winDir: $winDir,
+);
+
+// A política do UAC é lida só quando alguém pergunta (a /config e a ação
+// sensível), e uma vez por requisição. Ver UacPolicy.
+$uac = new UacPolicy();
+
 $pages = new Pages(
     config: $config,
     distroChecker: $distro,
     makeService: $makeService,
     filesDir: $filesDir,
-    elevation: new Elevation(
-        filesDir: $filesDir,
-        storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
-        winDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Win',
-    ),
+    elevation: $elevation,
     // O painel do Hyper-V é decisão persistente, não prova de elevação: mora em
     // storage/hyperv.json e sobrevive a reiniciar o servidor. Ver HypervGate.
     hyperv: new HypervGate(
         storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
         filesDir: $filesDir,
     ),
+    // A ação sensível: um prompt de UAC por execução. Ver OneShot.
+    oneShot: new OneShot($filesDir, $winDir, $elevation, $uac),
+    uac: $uac,
 );
 
 match ($path) {

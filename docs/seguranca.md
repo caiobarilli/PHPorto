@@ -139,9 +139,15 @@ janela, o processo sai sozinho depois de 600 s sem ação em andamento
 (`$IDLE_TIMEOUT_S` no `worker.ps1`, repetido em `Elevation::IDLE_TIMEOUT_S`; um
 teste confere os dois).
 
+E o que se consegue por essa janela ficou menor: o processo elevado longo
+**recusa as ações sensíveis** (instalar, ligar o RDP, abrir porta no firewall),
+com código 126 e o motivo "acao sensivel". Cada uma delas pede um prompt de UAC
+próprio — ver [Ações sensíveis: UAC por execução](#ações-sensíveis-uac-por-execução).
+
 Com `ConsentPromptBehaviorAdmin` em 0, a elevação não pede confirmação, e um
 processo Médio consegue elevar sozinho de qualquer jeito. Nesse caso nenhuma
-dessas barreiras protege contra quem já roda como o usuário.
+dessas barreiras protege contra quem já roda como o usuário, e a tela recusa as
+ações sensíveis em vez de fingir que pediu confirmação.
 
 ### Conclusão só com id válido
 
@@ -190,6 +196,12 @@ aberto o arquivo `win-trava` lá dentro: o Windows não renomeia nem move pasta
 com arquivo aberto dentro, e sem isso quem escreve em `files/` poderia trocar a
 pasta inteira por outra. A conferência que vale é a feita com a trava já aberta.
 
+A trava abre com acesso de **leitura** e compartilha leitura e escrita, mas não
+exclusão. Assim o worker longo e um worker de uso único seguram a mesma pasta
+ao mesmo tempo (antes, a trava abria sem compartilhar nada, e o segundo
+falhava), e o que impede a troca da pasta continua de pé: nenhum dos dois
+compartilha exclusão.
+
 O usuário que recebe leitura é o dono do processo do `php -S`, e não o do
 worker: com elevação "por cima do ombro" (usuário padrão digitando a senha de
 um admin), o worker roda como o admin.
@@ -200,9 +212,13 @@ um admin), o worker roda como o admin.
   `src/Win` na hora de ligar. Quem trocou um arquivo antes disso entra no mapa
   como se fosse o certo, do mesmo jeito que um `worker.ps1` reescrito antes de
   ligar é dono da elevação.
-- **O `worker.ps1` e o lançador.** O worker não confere a si mesmo, e o
+- **O `worker.ps1` e o lançador.** O worker longo não confere a si mesmo, e o
   `files/win-launcher.ps1` roda em integridade Média. Trocar qualquer um dos dois
-  antes de ligar dá o mesmo que pedir uma elevação por conta própria.
+  antes de ligar dá o mesmo que pedir uma elevação por conta própria. Na ação
+  sensível é diferente: o stub do `-EncodedCommand` confere o SHA-256 do
+  `worker.ps1` tirado no clique, e um `worker.ps1` trocado entre o clique e o
+  prompt sai com 97 sem rodar nada. Trocado **antes** do clique, entra como
+  certo.
 - **UAC desligado.** A ACL só separa o processo Médio do elevado porque, com
   UAC, Administradores entra só para negar no token Médio. Com `EnableLUA` em 0
   o usuário já é Administrador pleno, e a pasta não o barra.
@@ -222,6 +238,119 @@ O WinMemoryCleaner é baixado na primeira execução da ação Memória e roda c
 Administrador. O SHA-256 da versão fixada está no `Invoke-Memory.ps1`; um
 arquivo que não bata é apagado antes de rodar, tanto logo depois do download
 quanto quando ele já estava em `src/Win/tools/`.
+
+## Ações sensíveis: UAC por execução
+
+Com o processo elevado longo de pé, quem lê o nonce manda trabalho para ele sem
+prompt nenhum. Para a maioria das ações isso é aceitável — elas leem estado, ou
+desfazem. Para algumas, não. Essas são as **sensíveis**, e cada execução delas
+pede um prompt de UAC próprio:
+
+| ação | subações |
+| --- | --- |
+| `install` | todas (o winget instala qualquer coisa do catálogo) |
+| `rdp` | `on` (abre o acesso remoto e a porta no firewall) |
+| `sunshine` | `install`, `firewall-open` |
+| `exporter` | `install`, `firewall` |
+| `gpu` | `install` (cria uma tarefa agendada como SYSTEM) |
+
+A lista mora em dois lugares, `WinAction::SENSITIVE` (PHP, escolhe o caminho) e
+`$SENSIVEIS` (`worker.ps1`, a tranca), e um teste confere que são a mesma.
+`network`, `optimize -Undo`, `dns` e os ajustes de Defender/BitLocker ficam de
+fora: reduzem a exposição, só leem, ou ficam para outra etapa.
+
+### O fluxo
+
+1. O PHP grava o **pedido** em `files/win-oneshot-<id>.json`: a ação, os
+   parâmetros já validados, o PID do `php -S`, a pasta de trabalho, o prazo e o
+   manifesto de `src/Win` tirado **no clique**. O id é do PHP, e é por ele que
+   o resultado volta.
+2. Um lançador em integridade Média chama `Start-Process powershell.exe -Verb
+   RunAs` com um stub em `-EncodedCommand`. O stub leva só dois caminhos que o
+   PHP escreveu e dois SHA-256 — o do `worker.ps1` e o dos bytes do pedido. O
+   texto que a pessoa digitou nunca vai na linha de comando.
+3. O prompt aparece. Recusado, sem resposta em 60 s ou com erro do Windows, o
+   PHP apaga o pedido e diz que nada foi executado. Aceitar o prompt depois não
+   roda nada: o pedido sumiu, e ele expira em 75 s de qualquer jeito.
+4. O stub lê o `worker.ps1` uma vez, confere o hash desses bytes e roda o texto
+   deles. O worker, no modo de uso único, confere o hash do pedido, **apaga o
+   pedido** (um pedido serve uma vez), confere o resto (id, prazo, se o
+   `php -S` ainda existe), prepara a pasta protegida e avisa o PHP com
+   `ACEITO` em `files/win-oneshot-<id>.estado`.
+5. A ação roda pela mesma allowlist e pelo mesmo script gerado do worker longo.
+   O resultado chega pela pasta protegida, pelo id; o cancelamento por tempo vai
+   numa ordem só daquele id (`win-ordem-cancelar-<id>`), que não afeta o worker
+   longo. Feita a ação, o processo elevado sai.
+
+A ação sensível **não depende do processo elevado longo**: roda com o
+interruptor desligado. Só depende do checkout de `src/Win` e de a política do
+UAC garantir um prompt.
+
+### A política do UAC
+
+O PHP lê `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`
+com `reg.exe` na `/config` e a cada ação sensível (`UacPolicy`), e recusa a ação
+quando não haveria prompt:
+
+| política | ação sensível |
+| --- | --- |
+| `EnableLUA` = 1 e `ConsentPromptBehaviorAdmin` entre 1 e 5 | roda, com prompt |
+| `ConsentPromptBehaviorAdmin` = 0 (eleva sem perguntar) | recusada |
+| `EnableLUA` = 0 (UAC desligado) | recusada |
+| política ilegível | recusada |
+
+Não há escape pelo `.env`. O alvo é o **padrão do Windows**, `CPBA = 5`
+("Solicitar consentimento para binários não Windows"), e quem muda é a pessoa,
+à mão — uma ação do PHPorto que escrevesse política de UAC seria ruim de raiz.
+Em `secpol.msc` → Políticas Locais → Opções de Segurança, "Controle de Conta de
+Usuário: Comportamento do prompt de elevação para administradores no Modo de
+Aprovação de Administrador", ou num prompt elevado:
+
+```
+reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v ConsentPromptBehaviorAdmin /t REG_DWORD /d 5 /f
+```
+
+Vale na hora, sem reiniciar. Ligar o UAC (`EnableLUA` = 1) exige reiniciar.
+
+**Endurecimento opcional: `CPBA = 2`** ("Sempre notificar", na área de trabalho
+segura). No CPBA 5, binários do Windows com auto-elevação deixam um processo
+Médio de um administrador elevar sem prompt; é a família de bypass conhecida, e
+a própria Microsoft não trata o UAC como fronteira nesse nível. O CPBA 2 fecha
+essa família, ao custo de um prompt também para as configurações do Windows. Não
+é exigido.
+
+A leitura da política roda em integridade Média e pode ser forjada por um
+processo Médio. Não importa: com CPBA 0 ou UAC desligado esse processo já eleva
+sozinho. A checagem existe para a tela não mentir; a tranca é o próprio UAC,
+mais o worker longo recusando as sensíveis.
+
+### O que o uso único não cobre
+
+- **No CPBA 5, o UAC não é fronteira.** O uso único fecha o canal barato (ler o
+  nonce e mandar trabalho para o worker longo) e garante um prompt visível por
+  ação; não fecha um atacante Médio determinado. Só o CPBA 2 fecha a
+  auto-elevação.
+- **O prompt não diz qual ação está sendo aprovada.** Ele mostra "Windows
+  PowerShell" e, nos detalhes, um base64. A pessoa correlaciona com o próprio
+  clique. O hash amarra o que ela aprovou ao que roda; um prompt forjado por
+  terceiro é outro prompt, fora de hora.
+- **Arquivo trocado antes do clique** entra como certo (`worker.ps1`,
+  `src/Win`). A janela agora começa no clique, e não na hora de ligar.
+- **Aceite tardio.** Na corrida estreita em que o uso único lê o pedido um
+  instante antes de o PHP desistir e apagá-lo, a ação roda e vira órfã,
+  recolhida na próxima `/win` com nota.
+- **Pasta protegida pré-criada**, como no worker longo: uma conclusão forjada
+  com o id (visível no nome do pedido) seria lida como sucesso.
+- **Negação de serviço do lado Médio** é inevitável: apagar o pedido, segurar a
+  `win-trava` sem compartilhar, forjar `ERRO=` no `.estado`. Só nega execução.
+- **As ações em si não ficam mais seguras.** A tarefa SYSTEM do `gpu install`
+  aponta para um exe em `runtime/`, gravável pelo usuário; o MSI do exporter não
+  tem hash; o winget é aberto; o WinMemoryCleaner tem janela entre conferir e
+  rodar; o `tshark` vem do PATH; o `optimize -Undo` lê arquivo gravável. O uso
+  único só garante que cada execução sensível teve prompt próprio.
+- **Caminho longo.** O `-Verb RunAs` corta a linha em ~2048 caracteres sem
+  avisar. Acima de 1900, o PHP recusa antes de abrir o prompt e pede para mover
+  o projeto para um caminho mais curto.
 
 ## O `.env` não é escrito pela web
 
