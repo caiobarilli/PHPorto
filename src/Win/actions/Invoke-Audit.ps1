@@ -11,7 +11,9 @@ function Invoke-Audit {
                 return
             }
             Write-Status INFO "Generating system audit..."
-            & $auditScript
+            # Pelo texto conferido, e nao pelo caminho: elevado, o audit.ps1
+            # so roda se bater com o manifesto (ver Read-PhportoFonte).
+            & ([scriptblock]::Create((Read-PhportoFonte 'audit/audit.ps1')))
             Write-Status OK "Audit complete."
         }
         'open' {

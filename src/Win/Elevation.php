@@ -116,6 +116,15 @@ final class Elevation
 
     public const F_MARCADOR = 'win-elevation.json';
 
+    public const F_MANIFESTO = 'win-manifesto.json';
+
+    /**
+     * A pasta, dentro de files/, onde o worker grava os scripts gerados e os
+     * resultados. A ACL dela é do worker: este lado só lê e apaga. Ver
+     * docs/seguranca.md.
+     */
+    public const DIR_PROTEGIDA = 'win-protected';
+
     /**
      * Os dois .ps1 que o motor precisa em src/Win.
      *
@@ -223,7 +232,9 @@ final class Elevation
         $launcher = $this->path($this->filesDir, 'win-launcher.ps1');
 
         try {
-            PsScriptBuilder::write($launcher, $this->launcherBody($nonce));
+            // O manifesto é tirado agora, uma vez por ligação: ver WinManifest.
+            $manifesto = WinManifest::write($this->winDir, $this->path($this->filesDir, self::F_MANIFESTO));
+            PsScriptBuilder::write($launcher, $this->launcherBody($nonce, $manifesto));
         } catch (Throwable $e) {
             return 'Não foi possível preparar o lançador: ' . $e->getMessage();
         }
@@ -255,7 +266,7 @@ final class Elevation
             if (is_file($prova)) {
                 $lido = @file_get_contents($prova);
 
-                if (is_string($lido) && str_contains($lido, 'PID=')) {
+                if (is_string($lido) && (str_contains($lido, 'PID=') || str_starts_with($lido, 'ERRO='))) {
                     $bruto = $lido;
                     break;
                 }
@@ -274,6 +285,14 @@ final class Elevation
             return 'A permissão de Administrador não foi concedida'
                 . sprintf(' (nada respondeu em %d s).', self::PROOF_TIMEOUT_S)
                 . ($extra === '' ? '' : ' O PowerShell disse: ' . $extra);
+        }
+
+        // O worker subiu elevado e recusou continuar: manifesto que não bate
+        // ou pasta protegida suspeita. O motivo veio na prova.
+        if (str_starts_with($bruto, 'ERRO=')) {
+            @unlink($prova);
+
+            return 'O PowerShell elevado recusou subir: ' . trim(substr($bruto, 5));
         }
 
         preg_match('/PID=(\d+)/', $bruto, $m);
@@ -497,7 +516,7 @@ final class Elevation
     /** Apaga sobras do canal, para uma tentativa não ler resposta da anterior. */
     private function cleanupChannel(): void
     {
-        foreach ([self::F_ORDEM_DESLIGAR, self::F_ORDEM_CANCELAR, self::F_JOB, self::F_HEARTBEAT] as $nome) {
+        foreach ([self::F_ORDEM_DESLIGAR, self::F_ORDEM_CANCELAR, self::F_JOB, self::F_HEARTBEAT, self::F_MANIFESTO] as $nome) {
             @unlink($this->path($this->filesDir, $nome));
         }
 
@@ -518,7 +537,7 @@ final class Elevation
      * PowerShell não interpola nada, então nem um caminho com $ ou crase
      * vira código.
      */
-    private function launcherBody(string $nonce): string
+    private function launcherBody(string $nonce, string $manifestoSha256): string
     {
         $args = [
             '-NoProfile',
@@ -533,6 +552,8 @@ final class Elevation
             $this->filesDir,
             '-Nonce',
             $nonce,
+            '-ManifestoSha256',
+            $manifestoSha256,
         ];
 
         return sprintf(

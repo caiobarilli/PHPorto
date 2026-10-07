@@ -42,26 +42,45 @@ BeforeAll {
             param($n)
             $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
             $n.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
-            $n.Left.VariablePath.UserPath -in @('ALLOWLIST', 'MAX_PARAM_BYTES')
+            $n.Left.VariablePath.UserPath -in @('ALLOWLIST', 'MAX_PARAM_BYTES', 'SID_ADMINS', 'SID_SYSTEM', 'SID_DONO')
         },
         $false
     ) | ForEach-Object { Invoke-Expression $_.Extent.Text }
 
     $global:ALLOWLIST       = $ALLOWLIST
     $global:MAX_PARAM_BYTES = $MAX_PARAM_BYTES
+    $global:SID_ADMINS      = $SID_ADMINS
+    $global:SID_SYSTEM      = $SID_SYSTEM
+    $global:SID_DONO        = $SID_DONO
+
+    # O manifesto que o PHP gravaria ao ligar, tirado aqui com as mesmas
+    # fontes do WinManifest::FONTES. O teste de PHP confere que essas fontes
+    # cobrem a arvore; aqui so importa ter o mapa de uma arvore real.
+    function New-ManifestoDeTeste([string]$raiz) {
+        $m = @{}
+        foreach ($fonte in 'bootstrap.ps1', 'audit/audit.ps1', 'actions/*.ps1', 'lib/*.ps1', 'config/*.json') {
+            Get-ChildItem -Path (Join-Path $raiz $fonte) -File -ErrorAction SilentlyContinue | ForEach-Object {
+                $pasta = if ($fonte -like '*/*') { $fonte.Split('/')[0] + '/' } else { '' }
+                $m[$pasta + $_.Name] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+            }
+        }
+        return $m
+    }
     $global:Nonce           = 'nonce-de-teste'
 
     # O que o worker teria em escopo de script quando gera o arquivo.
     #
-    # $BOOTSTRAP aponta para o bootstrap DE VERDADE, e nao para um dublê: os
-    # testes que rodam o script gerado precisam do arquivo real na ponta, senao
-    # provariam apenas que o texto foi escrito.
+    # $RAIZ_WIN aponta para o src/Win DE VERDADE, com o manifesto dele, e nao
+    # para um dublê: os testes que rodam o script gerado precisam do arquivo
+    # real na ponta, senao provariam apenas que o texto foi escrito. A pasta
+    # protegida, aqui, e' a de trabalho: a ACL e' coberta a parte.
     $Script:Trabalho = Join-Path ([System.IO.Path]::GetTempPath()) ("phporto-worker-" + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $Script:Trabalho -Force | Out-Null
 
     $global:Dir       = $Script:Trabalho
-    $global:BOOTSTRAP = Join-Path $Script:PastaWin 'bootstrap.ps1'
-    $global:CONFIG_DIR = Join-Path $Script:PastaWin 'config'
+    $global:PROTEGIDA = $Script:Trabalho
+    $global:RAIZ_WIN  = $Script:PastaWin
+    $global:MANIFESTO = New-ManifestoDeTeste $Script:PastaWin
 
     function Get-ScriptGerado {
         param([string]$Acao, [hashtable]$Params = @{})
@@ -83,8 +102,12 @@ BeforeAll {
     # Um duble do bootstrap, para ver o que CHEGA na acao. Os parametros
     # viajam como dado codificado, entao o texto do script nao diz mais nada
     # sobre eles: a prova tem de ser rodar o script e olhar o outro lado.
-    # O duble so registra o que recebeu, e nao pede elevacao.
-    $Script:Duble    = Join-Path $Script:Trabalho 'bootstrap-duble.ps1'
+    # O duble so registra o que recebeu, e nao pede elevacao. Mora numa raiz
+    # propria, com manifesto proprio, porque o script gerado so carrega
+    # bootstrap conferido.
+    $Script:RaizDuble = Join-Path $Script:Trabalho 'raiz-duble'
+    New-Item -ItemType Directory -Path $Script:RaizDuble -Force | Out-Null
+    $Script:Duble    = Join-Path $Script:RaizDuble 'bootstrap.ps1'
     $Script:Recebido = Join-Path $Script:Trabalho 'recebido.json'
     $Script:Exe      = (Get-Process -Id $PID).Path
 
@@ -98,6 +121,7 @@ BeforeAll {
         '}'
     ) -join "`r`n"
     [System.IO.File]::WriteAllText($Script:Duble, $duble, [System.Text.UTF8Encoding]::new($true))
+    $Script:ManifestoDuble = @{ 'bootstrap.ps1' = (Get-FileHash -LiteralPath $Script:Duble -Algorithm SHA256).Hash }
 
     # Gera o script apontando para o duble e roda num PowerShell de verdade, o
     # mesmo que roda a suite: powershell.exe no Windows, pwsh fora dele.
@@ -106,12 +130,15 @@ BeforeAll {
 
         if (Test-Path $Script:Recebido) { Remove-Item $Script:Recebido -Force }
 
-        $real = $global:BOOTSTRAP
-        $global:BOOTSTRAP = $Script:Duble
+        $raiz = $global:RAIZ_WIN
+        $mapa = $global:MANIFESTO
+        $global:RAIZ_WIN  = $Script:RaizDuble
+        $global:MANIFESTO = $Script:ManifestoDuble
         try {
             $g = Get-ScriptGerado -Acao $Acao -Params $Params
         } finally {
-            $global:BOOTSTRAP = $real
+            $global:RAIZ_WIN  = $raiz
+            $global:MANIFESTO = $mapa
         }
 
         & $Script:Exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $g.Caminho | Out-Null
@@ -610,7 +637,15 @@ Describe 'worker - o script gerado aponta para o bootstrap' {
 
     It 'carrega o bootstrap.ps1 de src/Win, e nao um winutil externo' {
         $g = Get-ScriptGerado -Acao 'audit'
-        $g.Texto | Should -Match ([regex]::Escape(". '" + (Join-Path $Script:PastaWin 'bootstrap.ps1') + "'"))
+        $g.Texto | Should -Match ([regex]::Escape('$global:root = ' + "'" + $Script:PastaWin + "'"))
+        $g.Texto | Should -Match ([regex]::Escape("Read-PhportoConferido `$global:root 'bootstrap.ps1' `$global:PhportoManifesto"))
+    }
+
+    It 'nunca carrega o bootstrap pelo caminho, so pelo texto conferido' {
+        # Dot-source pelo caminho leria o arquivo de novo, depois da
+        # conferencia, e quem o trocasse em laco acertaria a janela.
+        $g = Get-ScriptGerado -Acao 'audit'
+        $g.Texto | Should -Not -Match "\. '[^']*bootstrap\.ps1'"
     }
 
     It 'nao chama mais nenhum winutil-cli.ps1' {
@@ -808,5 +843,400 @@ Describe 'worker - o script gerado roda e devolve codigo' {
 
         $p.ExitCode | Should -Be 1
         ([System.IO.File]::ReadAllText($g.ArqExit)).Trim() | Should -Be '1'
+    }
+}
+
+# ==============================================================
+# MANIFESTO — o que entra elevado e' o que estava la ao ligar
+# ==============================================================
+#
+# src/Win e' gravavel por qualquer processo do usuario. O PHP tira o SHA-256 de
+# cada arquivo ao ligar, e o lado elevado confere logo antes de carregar. A
+# conferencia e' sobre os MESMOS bytes que entram: ler, conferir e depois
+# carregar pelo caminho deixaria uma janela para quem troca o arquivo em laco.
+Describe 'worker - Read-PhportoConferido' {
+
+    BeforeAll {
+        $Script:Raiz = Join-Path $Script:Trabalho ('conferido-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $Script:Raiz 'lib') -Force | Out-Null
+        $Script:Lib = Join-Path $Script:Raiz 'lib/a.ps1'
+    }
+
+    BeforeEach {
+        [System.IO.File]::WriteAllText($Script:Lib, "function Get-A { 'a' }`r`n", [System.Text.UTF8Encoding]::new($true))
+        $Script:Mapa = @{ 'lib/a.ps1' = (Get-FileHash -LiteralPath $Script:Lib -Algorithm SHA256).Hash }
+    }
+
+    It 'hash que bate devolve o texto, sem o BOM' {
+        $texto = Read-PhportoConferido $Script:Raiz 'lib/a.ps1' $Script:Mapa
+        $texto | Should -BeExactly "function Get-A { 'a' }`r`n"
+    }
+
+    It 'aceita o caminho com barra invertida, como o do Windows' {
+        Read-PhportoConferido $Script:Raiz 'lib\a.ps1' $Script:Mapa | Should -Match 'Get-A'
+    }
+
+    It 'o hash em minusculas, como o PHP grava, tambem bate' {
+        $mapa = @{ 'lib/a.ps1' = $Script:Mapa['lib/a.ps1'].ToLowerInvariant() }
+        Read-PhportoConferido $Script:Raiz 'lib/a.ps1' $mapa | Should -Match 'Get-A'
+    }
+
+    It 'arquivo alterado e recusado, com o que fazer' {
+        [System.IO.File]::AppendAllText($Script:Lib, "Remove-Item C:\ -Recurse`r`n")
+        { Read-PhportoConferido $Script:Raiz 'lib/a.ps1' $Script:Mapa } |
+            Should -Throw -ExpectedMessage '*lib/a.ps1 mudou depois que o PowerShell elevado foi ligado*desligue e ligue de novo*'
+    }
+
+    It 'arquivo que sumiu e recusado' {
+        Remove-Item -LiteralPath $Script:Lib -Force
+        { Read-PhportoConferido $Script:Raiz 'lib/a.ps1' $Script:Mapa } |
+            Should -Throw -ExpectedMessage '*lib/a.ps1 sumiu*'
+    }
+
+    It 'arquivo que nao estava no manifesto e recusado, mesmo existindo' {
+        Set-Content -LiteralPath (Join-Path $Script:Raiz 'lib/novo.ps1') -Value "'novo'"
+        { Read-PhportoConferido $Script:Raiz 'lib/novo.ps1' $Script:Mapa } |
+            Should -Throw -ExpectedMessage '*lib/novo.ps1 nao estava em src/Win*'
+    }
+
+    It 'todo arquivo do manifesto real decodifica e parseia' {
+        # Os sem BOM saem como UTF-8, e nao como ANSI: dois deles tem acento,
+        # so em comentario. Este teste acusa se um dia houver acento fora dele.
+        foreach ($chave in $global:MANIFESTO.Keys) {
+            $texto = Read-PhportoConferido $Script:PastaWin $chave $global:MANIFESTO
+            if ($chave -like '*.json') {
+                { $texto | ConvertFrom-Json } | Should -Not -Throw -Because $chave
+            } else {
+                $erros = $null
+                [System.Management.Automation.Language.Parser]::ParseInput($texto, [ref]$null, [ref]$erros) | Out-Null
+                $erros.Count | Should -Be 0 -Because $chave
+            }
+        }
+    }
+}
+
+Describe 'worker - o manifesto vem do arquivo cujo hash veio na linha de comando' {
+
+    BeforeEach {
+        $Script:Arq = Join-Path $Script:Trabalho ('manifesto-' + [guid]::NewGuid().ToString('N') + '.json')
+        $json = '{"bootstrap.ps1":"' + ('ab' * 32) + '","lib/x.ps1":"' + ('CD' * 32) + '"}'
+        [System.IO.File]::WriteAllText($Script:Arq, $json, [System.Text.UTF8Encoding]::new($false))
+        $Script:Hash = (Get-FileHash -LiteralPath $Script:Arq -Algorithm SHA256).Hash
+    }
+
+    It 'com o hash certo, o mapa vira hashtable' {
+        $m = Read-PhportoManifesto $Script:Arq $Script:Hash
+        $m | Should -BeOfType [hashtable]
+        $m.Count | Should -Be 2
+        $m['bootstrap.ps1'] | Should -Be ('ab' * 32)
+        $m['LIB/X.PS1'] | Should -Be ('CD' * 32) -Because 'o Windows nao distingue maiuscula em caminho'
+    }
+
+    It 'manifesto trocado depois de o PHP gravar e recusado' {
+        [System.IO.File]::WriteAllText($Script:Arq, '{"bootstrap.ps1":"' + ('ef' * 32) + '"}')
+        { Read-PhportoManifesto $Script:Arq $Script:Hash } | Should -Throw -ExpectedMessage "*nao e' o que o PHP gravou*"
+    }
+
+    It 'valor que nao e SHA-256 e recusado' {
+        [System.IO.File]::WriteAllText($Script:Arq, '{"bootstrap.ps1":"x"}')
+        $h = (Get-FileHash -LiteralPath $Script:Arq -Algorithm SHA256).Hash
+        { Read-PhportoManifesto $Script:Arq $h } | Should -Throw -ExpectedMessage '*SHA-256 invalido*'
+    }
+
+    It 'manifesto sem o bootstrap e recusado' {
+        [System.IO.File]::WriteAllText($Script:Arq, '{}')
+        $h = (Get-FileHash -LiteralPath $Script:Arq -Algorithm SHA256).Hash
+        { Read-PhportoManifesto $Script:Arq $h } | Should -Throw -ExpectedMessage '*sem o bootstrap*'
+    }
+
+    It 'o worker exige o hash na linha de comando' {
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($Script:Worker, [ref]$null, [ref]$null)
+        $p = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'ManifestoSha256' }
+        $p | Should -Not -BeNullOrEmpty
+        $p.Attributes.Extent.Text | Should -Contain '[Parameter(Mandatory)]'
+    }
+
+    It 'sobe so depois de ler o manifesto e preparar a pasta, e o motivo da recusa vai na prova' {
+        $texto = Get-Content -Raw $Script:Worker
+        $texto | Should -Match '(?s)Read-PhportoManifesto \$F_MANIFESTO \$ManifestoSha256.*Initialize-PastaProtegida \$PROTEGIDA.*''ERRO='' \+.*exit 1.*"PID=\$PID;ADMIN=True'
+    }
+}
+
+Describe 'worker - o script gerado so roda bootstrap conferido' {
+
+    BeforeAll {
+        function Invoke-Gerado([scriptblock]$Antes) {
+            $raiz = $global:RAIZ_WIN; $mapa = $global:MANIFESTO
+            $global:RAIZ_WIN = $Script:RaizDuble; $global:MANIFESTO = $Script:ManifestoDuble
+            try { $g = Get-ScriptGerado -Acao 'audit' } finally { $global:RAIZ_WIN = $raiz; $global:MANIFESTO = $mapa }
+
+            $original = [System.IO.File]::ReadAllBytes($Script:Duble)
+            try {
+                & $Antes
+                if (Test-Path $Script:Recebido) { Remove-Item $Script:Recebido -Force }
+                $saida = & $Script:Exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $g.Caminho 2>&1 | Out-String
+                return [PSCustomObject]@{ Exit = $LASTEXITCODE; Saida = $saida; Rodou = (Test-Path $Script:Recebido) }
+            } finally {
+                [System.IO.File]::WriteAllBytes($Script:Duble, $original)
+            }
+        }
+    }
+
+    It 'bootstrap igual ao do manifesto roda a acao' {
+        $r = Invoke-Gerado { }
+        $r.Exit  | Should -Be 0
+        $r.Rodou | Should -BeTrue
+    }
+
+    It 'bootstrap trocado depois de gerar e recusado com exit 1, e nada roda' {
+        $r = Invoke-Gerado { [System.IO.File]::AppendAllText($Script:Duble, "`r`n# trocado`r`n") }
+        $r.Exit  | Should -Be 1
+        $r.Rodou | Should -BeFalse
+        $r.Saida | Should -Match '\[phporto\] PHPorto: bootstrap\.ps1 mudou depois que o PowerShell elevado foi ligado'
+    }
+
+    It 'bootstrap que sumiu e recusado com exit 1' {
+        $r = Invoke-Gerado { Remove-Item -LiteralPath $Script:Duble -Force }
+        $r.Exit  | Should -Be 1
+        $r.Rodou | Should -BeFalse
+        $r.Saida | Should -Match 'bootstrap\.ps1 sumiu'
+    }
+
+    It 'o manifesto viaja no script como dado em base64, nao como codigo' {
+        $g = Get-ScriptGerado -Acao 'audit'
+        $g.Texto | Should -Not -Match ([regex]::Escape($global:MANIFESTO['lib/Set-WinUtilDNS.ps1']))
+        $g.Texto | Should -Match '\$global:PhportoManifesto\[\$phportoPar\.Name\]'
+    }
+}
+
+# O bootstrap e' quem confere lib/, actions/ e config/. Aqui ele roda numa
+# copia de src/Win, para o teste poder estragar arquivo sem tocar no real.
+Describe 'bootstrap - com manifesto, so carrega o que bate' {
+
+    BeforeAll {
+        $Script:Copia = Join-Path $Script:Trabalho ('win-' + [guid]::NewGuid().ToString('N'))
+        Copy-Item -LiteralPath $Script:PastaWin -Destination $Script:Copia -Recurse
+        $Script:BootCopia = Join-Path $Script:Copia 'bootstrap.ps1'
+    }
+
+    AfterEach {
+        Remove-Variable -Name PhportoManifesto -Scope Global -ErrorAction SilentlyContinue
+    }
+
+    It 'arvore igual ao manifesto carrega' {
+        $global:PhportoManifesto = New-ManifestoDeTeste $Script:Copia
+        # Fora de { }: dentro dele as funcoes do bootstrap morreriam com o bloco.
+        Remove-Item function:Invoke-PhportoWinAction -ErrorAction SilentlyContinue
+        . $Script:BootCopia
+        Get-Command Invoke-PhportoWinAction -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+        $global:sync.configs.dns | Should -Not -BeNullOrEmpty
+    }
+
+    It 'lib alterado depois do manifesto bloqueia a carga' {
+        $global:PhportoManifesto = New-ManifestoDeTeste $Script:Copia
+        $alvo = Join-Path $Script:Copia 'lib/Set-WinUtilDNS.ps1'
+        $antes = [System.IO.File]::ReadAllBytes($alvo)
+        try {
+            [System.IO.File]::AppendAllText($alvo, "`r`n# trocado`r`n")
+            { . $Script:BootCopia } | Should -Throw -ExpectedMessage '*lib/Set-WinUtilDNS.ps1 mudou*'
+        } finally {
+            [System.IO.File]::WriteAllBytes($alvo, $antes)
+        }
+    }
+
+    It 'config alterado depois do manifesto bloqueia a carga' {
+        # O tweaks.json carrega PowerShell: config e' codigo aqui.
+        $global:PhportoManifesto = New-ManifestoDeTeste $Script:Copia
+        $alvo = Join-Path $Script:Copia 'config/dns.json'
+        $antes = [System.IO.File]::ReadAllBytes($alvo)
+        try {
+            [System.IO.File]::AppendAllText($alvo, ' ')
+            { . $Script:BootCopia } | Should -Throw -ExpectedMessage '*config/dns.json mudou*'
+        } finally {
+            [System.IO.File]::WriteAllBytes($alvo, $antes)
+        }
+    }
+
+    It 'acao nova na pasta, que nao estava no manifesto, bloqueia a carga' {
+        $global:PhportoManifesto = New-ManifestoDeTeste $Script:Copia
+        $novo = Join-Path $Script:Copia 'actions/Invoke-Intrusa.ps1'
+        try {
+            Set-Content -LiteralPath $novo -Value 'function Invoke-Intrusa { }'
+            { . $Script:BootCopia } | Should -Throw -ExpectedMessage '*actions/Invoke-Intrusa.ps1 nao estava em src/Win*'
+        } finally {
+            Remove-Item -LiteralPath $novo -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'sem manifesto (teste, prompt) carrega do disco, como antes' {
+        { . $Script:BootCopia } | Should -Not -Throw
+    }
+}
+
+# ==============================================================
+# PASTA PROTEGIDA — onde moram os scripts gerados e os resultados
+# ==============================================================
+#
+# As chamadas de ACL so existem no Windows. A decisao fica em funcoes puras,
+# testadas aqui; o que toca o disco fica em funcoes pequenas, trocadas por
+# Mock, como os outros testes fazem com os cmdlets do Windows.
+Describe 'worker - as regras da pasta protegida' {
+
+    BeforeAll {
+        $Script:Regras  = Get-RegrasProtegida 'S-1-5-21-1-2-3-1001'
+        $Script:Usuario = @($Script:Regras | Where-Object { $_.Sid -eq 'S-1-5-21-1-2-3-1001' })
+    }
+
+    It 'Administradores e SYSTEM fazem tudo' {
+        foreach ($sid in $global:SID_ADMINS, $global:SID_SYSTEM) {
+            ($Script:Regras | Where-Object { $_.Sid -eq $sid }).Direitos | Should -Be 'FullControl'
+        }
+    }
+
+    It 'o usuario do php -S so le e apaga arquivo, e nunca escreve' {
+        @($Script:Usuario.Direitos) | Should -Be @('ReadAndExecute', 'Delete')
+        ($Script:Usuario | Where-Object { $_.Direitos -eq 'Delete' }).SoArquivos | Should -BeTrue
+        $Script:Usuario.Direitos | Should -Not -Contain 'Write'
+        $Script:Usuario.Direitos | Should -Not -Contain 'Modify'
+        $Script:Usuario.Direitos | Should -Not -Contain 'FullControl'
+    }
+
+    It 'OWNER RIGHTS so le: o dono de um arquivo nao reescreve a ACL dele' {
+        ($Script:Regras | Where-Object { $_.Sid -eq $global:SID_DONO }).Direitos | Should -Be 'ReadAndExecute'
+        $global:SID_DONO | Should -Be 'S-1-3-4'
+    }
+
+    It 'monta a ACL de verdade, protegida e com Administradores de dono' -Skip:($env:OS -ne 'Windows_NT') {
+        $acl = New-AclProtegida 'S-1-5-21-1-2-3-1001' -ComDono
+        $acl.AreAccessRulesProtected | Should -BeTrue
+        $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value | Should -Be 'S-1-5-32-544'
+        @($acl.GetAccessRules($true, $false, [System.Security.Principal.SecurityIdentifier])).Count | Should -Be 5
+    }
+}
+
+Describe 'worker - Test-PastaProtegida' {
+
+    It 'pasta de <Dono> passa' -ForEach @(@{ Dono = 'S-1-5-32-544' }, @{ Dono = 'S-1-5-18' }) {
+        Test-PastaProtegida ([PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $false; Dono = $Dono }) | Should -BeNullOrEmpty
+    }
+
+    It 'link ou juncao e recusado' {
+        Test-PastaProtegida ([PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $true; Dono = $null }) | Should -Match 'link ou juncao'
+    }
+
+    It 'pasta do proprio usuario e recusada: o dono reescreve a ACL' {
+        Test-PastaProtegida ([PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $false; Dono = 'S-1-5-21-1-2-3-1001' }) | Should -Match 'dono S-1-5-21-1-2-3-1001'
+    }
+
+    It 'arquivo no lugar da pasta e recusado' {
+        Test-PastaProtegida ([PSCustomObject]@{ Existe = $true; Pasta = $false; Link = $false; Dono = 'S-1-5-32-544' }) | Should -Match 'uma pasta'
+    }
+}
+
+Describe 'worker - Initialize-PastaProtegida' {
+
+    BeforeEach {
+        # A trava e' um arquivo de verdade, entao a pasta existe de verdade; a
+        # criacao e a ACL e' que sao trocadas por Mock.
+        $Script:Pasta = Join-Path $Script:Trabalho ('protegida-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $Script:Pasta | Out-Null
+        $Script:Ok = [PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $false; Dono = 'S-1-5-32-544' }
+
+        Mock New-AclProtegida { 'acl' }
+        Mock New-PastaProtegida { }
+        Mock Set-PastaProtegidaAcl { }
+    }
+
+    It 'pasta ausente nasce com a ACL e o dono, e a trava fica aberta' {
+        $Script:Chamadas = 0
+        Mock Get-PastaInfo { $Script:Chamadas++; if ($Script:Chamadas -eq 1) { [PSCustomObject]@{ Existe = $false } } else { $Script:Ok } }
+
+        $trava = Initialize-PastaProtegida $Script:Pasta 'S-1-5-21-1'
+        try {
+            $trava.CanRead | Should -BeTrue
+            Should -Invoke New-PastaProtegida -Times 1 -Exactly
+            Should -Invoke New-AclProtegida -Times 1 -Exactly -ParameterFilter { $ComDono }
+            Should -Invoke Set-PastaProtegidaAcl -Times 0 -Exactly
+        } finally { $trava.Dispose() }
+    }
+
+    It 'pasta que ja existe e e de Administradores tem a ACL reparada, sem trocar o dono' {
+        Mock Get-PastaInfo { $Script:Ok }
+
+        $trava = Initialize-PastaProtegida $Script:Pasta 'S-1-5-21-1'
+        try {
+            Should -Invoke Set-PastaProtegidaAcl -Times 1 -Exactly
+            Should -Invoke New-AclProtegida -Times 1 -Exactly -ParameterFilter { -not $ComDono }
+            Should -Invoke New-PastaProtegida -Times 0 -Exactly
+        } finally { $trava.Dispose() }
+    }
+
+    It 'pasta que e link e recusada antes de tocar em qualquer coisa' {
+        Mock Get-PastaInfo { [PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $true; Dono = $null } }
+
+        { Initialize-PastaProtegida $Script:Pasta 'S-1-5-21-1' } | Should -Throw -ExpectedMessage '*link ou juncao*Apague a pasta*'
+        Should -Invoke Set-PastaProtegidaAcl -Times 0 -Exactly
+        Test-Path (Join-Path $Script:Pasta 'win-trava') | Should -BeFalse
+    }
+
+    It 'pasta de outro dono e recusada' {
+        Mock Get-PastaInfo { [PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $false; Dono = 'S-1-5-21-9' } }
+
+        { Initialize-PastaProtegida $Script:Pasta 'S-1-5-21-1' } | Should -Throw -ExpectedMessage '*dono S-1-5-21-9*'
+        Should -Invoke Set-PastaProtegidaAcl -Times 0 -Exactly
+    }
+
+    It 'pasta trocada entre a conferencia e a trava e recusada, e a trava e solta' {
+        $Script:Chamadas = 0
+        Mock Get-PastaInfo { $Script:Chamadas++; if ($Script:Chamadas -eq 1) { $Script:Ok } else { [PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $true; Dono = $null } } }
+
+        { Initialize-PastaProtegida $Script:Pasta 'S-1-5-21-1' } | Should -Throw -ExpectedMessage '*link ou juncao*'
+        # Trava solta: o arquivo abre de novo sem compartilhar nada.
+        $f = [System.IO.File]::Open((Join-Path $Script:Pasta 'win-trava'), 'Open', 'ReadWrite', 'None')
+        $f.Dispose()
+    }
+}
+
+Describe 'worker - Get-UsuarioPhp' {
+
+    BeforeAll {
+        # Os cmdlets de CIM nao existem no pwsh fora do Windows, e o Mock exige
+        # um comando para substituir.
+        # Cada um a parte: outro arquivo de teste pode ter deixado um deles.
+        $Script:StubGet = -not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)
+        $Script:StubInv = -not (Get-Command Invoke-CimMethod -ErrorAction SilentlyContinue)
+        if ($Script:StubGet) { function global:Get-CimInstance { param($ClassName, $Filter) } }
+        if ($Script:StubInv) { function global:Invoke-CimMethod { param($InputObject, $MethodName) } }
+    }
+
+    AfterAll {
+        if ($Script:StubGet) { Remove-Item function:global:Get-CimInstance -ErrorAction SilentlyContinue }
+        if ($Script:StubInv) { Remove-Item function:global:Invoke-CimMethod -ErrorAction SilentlyContinue }
+    }
+
+    It 'devolve o SID do dono do processo do php -S' {
+        Mock Get-CimInstance { [PSCustomObject]@{ ProcessId = 4242 } }
+        Mock Invoke-CimMethod { [PSCustomObject]@{ Sid = 'S-1-5-21-1-2-3-1001' } }
+        Get-UsuarioPhp 4242 | Should -Be 'S-1-5-21-1-2-3-1001'
+    }
+
+    It 'sem processo, recusa em vez de adivinhar' {
+        Mock Get-CimInstance { $null }
+        { Get-UsuarioPhp 4242 } | Should -Throw -ExpectedMessage '*usuario do php -S*'
+    }
+}
+
+Describe 'worker - resultados na pasta protegida' {
+
+    It 'script gerado, saida, erro, codigo e conclusao vao para a pasta protegida' {
+        $texto = Get-Content -Raw $Script:Worker
+        foreach ($prefixo in 'win-exec-', 'win-out-', 'win-err-', 'win-exit-', 'win-done-') {
+            $texto | Should -Not -Match ("Join-Path \`$Dir \('" + $prefixo) -Because $prefixo
+            $texto | Should -Match ("Join-Path \`$PROTEGIDA \('" + $prefixo) -Because $prefixo
+        }
+    }
+
+    It 'a trava e solta no fim' {
+        Get-Content -Raw $Script:Worker | Should -Match '\$TRAVA\.Dispose\(\)'
     }
 }

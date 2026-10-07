@@ -257,7 +257,7 @@ final class JobChannel
 
         $orfas = [];
 
-        foreach (glob($this->filesDir . DIRECTORY_SEPARATOR . 'win-done-*.json') ?: [] as $arquivo) {
+        foreach (glob($this->resultPath('win-done-*.json')) ?: [] as $arquivo) {
             $done = self::parseDone($arquivo);
 
             if ($done === null) {
@@ -266,7 +266,7 @@ final class JobChannel
 
             // O par tem de estar completo: sem a saída não há execução a
             // registrar, só um arquivo de conclusão perdido.
-            if (!is_file($this->path('win-out-' . $done['id'] . '.txt'))) {
+            if (!is_file($this->resultPath('win-out-' . $done['id'] . '.txt'))) {
                 continue;
             }
 
@@ -304,7 +304,7 @@ final class JobChannel
         }
 
         foreach (['win-done-' . $id . '.json', 'win-out-' . $id . '.txt'] as $nome) {
-            $caminho = $this->path($nome);
+            $caminho = $this->resultPath($nome);
 
             if (is_file($caminho)) {
                 @unlink($caminho);
@@ -321,7 +321,7 @@ final class JobChannel
     {
         clearstatcache();
 
-        foreach (glob($this->filesDir . DIRECTORY_SEPARATOR . 'win-done-*.json') ?: [] as $arquivo) {
+        foreach (glob($this->resultPath('win-done-*.json')) ?: [] as $arquivo) {
             $done = self::parseDone($arquivo);
 
             if ($done !== null) {
@@ -408,7 +408,7 @@ final class JobChannel
      */
     private function readOutput(string $id): array
     {
-        return PsRunner::readBounded($this->path('win-out-' . $id . '.txt'));
+        return PsRunner::readBounded($this->resultPath('win-out-' . $id . '.txt'));
     }
 
     /**
@@ -430,7 +430,7 @@ final class JobChannel
     private function cleanupArtifacts(): void
     {
         foreach (['win-done-*.json', 'win-out-*.txt', 'win-err-*.txt', 'win-exit-*.txt'] as $padrao) {
-            foreach (glob($this->filesDir . DIRECTORY_SEPARATOR . $padrao) ?: [] as $arquivo) {
+            foreach (glob($this->resultPath($padrao)) ?: [] as $arquivo) {
                 @unlink($arquivo);
             }
         }
@@ -449,6 +449,13 @@ final class JobChannel
     private function path(string $nome): string
     {
         return rtrim($this->filesDir, '\\/') . DIRECTORY_SEPARATOR . $nome;
+    }
+
+    private function resultPath(string $nome): string
+    {
+        // O worker grava saída e conclusão na pasta protegida, onde este lado
+        // só lê e apaga: um win-done forjado em files/ nem é olhado.
+        return $this->path(Elevation::DIR_PROTEGIDA) . DIRECTORY_SEPARATOR . $nome;
     }
 
     private static function withNewline(string $s): string
