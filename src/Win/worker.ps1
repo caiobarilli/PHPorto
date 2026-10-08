@@ -27,23 +27,32 @@
     morreu exatamente durante a acao mais longa — um install de dez minutos
     derrubaria o indicador dele mesmo. Um laco so faz tudo: heartbeat, vigia
     do pai, ordens, job novo e sondagem do filho.
+
+    DOIS MODOS, um arquivo so. O LACO (-ParentPid -Dir -Nonce
+    -ManifestoSha256) e' o worker longo, ligado na /config, que atende as
+    acoes comuns. O de USO UNICO (-Pedido -PedidoSha256) nasce de um prompt de
+    UAC proprio para UMA acao sensivel (ver $SENSIVEIS): confere o pedido pelo
+    hash, roda um job e sai — sem laco ocioso, sem heartbeat, sem segundo job.
+    O laco recusa as sensiveis, entao quem le o nonce do marcador nao alcanca
+    nenhuma delas sem prompt.
 #>
 
+[CmdletBinding(DefaultParameterSetName = 'Laco')]
 param(
     # PID do php -S que pediu a elevacao. Este worker sai sozinho quando ele
     # desaparecer: e' o UNICO lado capaz de se encerrar, ja que Media nao mata
     # Alta. Sem isto, fechar o servidor deixaria um processo elevado de pe sem
     # ninguem para recolher.
-    [Parameter(Mandatory)] [int]$ParentPid,
+    [Parameter(Mandatory, ParameterSetName = 'Laco')] [int]$ParentPid,
 
     # Pasta de trabalho (files/ do projeto): job, saida, ordens e heartbeat.
-    [Parameter(Mandatory)] [string]$Dir,
+    [Parameter(Mandatory, ParameterSetName = 'Laco')] [string]$Dir,
 
     # Carimbo desta execucao do servidor. NAO E' TRANCA: ele mora no marcador,
     # em storage/, que qualquer processo do mesmo usuario le. E' guarda de
     # OBSOLESCENCIA — job deixado por uma execucao anterior do servidor nao e'
     # confundido com job desta.
-    [Parameter(Mandatory)] [string]$Nonce,
+    [Parameter(Mandatory, ParameterSetName = 'Laco')] [string]$Nonce,
 
     # SHA-256 do win-manifesto.json que o PHP gravou ao ligar: o mapa
     # {caminho relativo: sha256} de tudo o que o lado elevado carrega. O
@@ -52,11 +61,25 @@ param(
     # enquanto o worker roda. Vai o hash, e nao o mapa inteiro, porque o
     # -Verb RunAs passa pelo ShellExecuteEx, que pode cortar a linha em ~2048
     # caracteres sem avisar, e o mapa em base64 passa de 4 KB.
-    [Parameter(Mandatory)] [string]$ManifestoSha256
+    [Parameter(Mandatory, ParameterSetName = 'Laco')] [string]$ManifestoSha256,
+
+    # USO UNICO: o pedido que o PHP gravou no clique, files/win-oneshot-<id>.json
+    # (job + manifesto de src/Win tirado na hora). Ele mora em files/, que
+    # qualquer processo do usuario escreve; o que o torna confiavel e' o
+    # SHA-256 abaixo, que veio na linha de comando aprovada pelo prompt de UAC.
+    # Pai, pasta, raiz e manifesto saem de dentro dele, ja conferido.
+    [Parameter(Mandatory, ParameterSetName = 'UmaVez')] [string]$Pedido,
+    [Parameter(Mandatory, ParameterSetName = 'UmaVez')] [string]$PedidoSha256
 )
 
 $ErrorActionPreference = 'Stop'
 $OutputEncoding        = [System.Text.UTF8Encoding]::new($false)
+
+# No uso unico a pasta de trabalho e' a do pedido, que o PHP grava em files/.
+# Sai do caminho, e nao de dentro do pedido, porque os nomes abaixo precisam
+# dela antes de o pedido ser conferido; o Invoke-UmaVez confere depois que o
+# "dir" do pedido diz a mesma coisa.
+if ($PSCmdlet.ParameterSetName -eq 'UmaVez') { $Dir = Split-Path -Parent $Pedido }
 
 # ============================================================
 # CONSTANTES
@@ -108,6 +131,10 @@ $SID_DONO    = 'S-1-3-4'
 # medido — $PSScriptRoot dentro de uma funcao recriada por Invoke-Expression
 # vem VAZIO e ainda sombreia o global, entao a funcao nao teria como saber onde
 # esta, e o teste que a extrai por AST nao teria como dizer.
+#
+# No uso unico este arquivo roda como scriptblock (ver o stub do OneShot.php),
+# e ai $PSScriptRoot vem vazio: a raiz sai do pedido conferido, no
+# Invoke-UmaVez.
 $RAIZ_WIN    = $PSScriptRoot
 
 # ============================================================
@@ -201,6 +228,26 @@ $ALLOWLIST = @{
     # O hyperv so lista, e listar nao tem parametro: allowlist vazia, como
     # memory e processes. A rota /hyperv atende so a leitura nesta fatia.
     'hyperv'      = @{}
+}
+
+# ============================================================
+# SENSIVEIS — so com UAC proprio
+# ============================================================
+#
+# As acoes que abrem a maquina para a rede, instalam programa ou registram
+# tarefa SYSTEM. O laco RECUSA estas (Test-Job -Modo Laco): com o worker longo
+# de pe, quem lesse o nonce do marcador rodaria qualquer uma delas sem prompt.
+# Elas so rodam no modo de uso unico, que nasce de um prompt de UAC por clique,
+# e o uso unico so roda estas.
+#
+# '*' = toda execucao da acao; lista = so essas subacoes. O lado PHP repete a
+# tabela em WinAction::SENSITIVE (roteia), e um teste confere as duas.
+$SENSIVEIS = @{
+    'install'  = '*'
+    'rdp'      = @('on')
+    'sunshine' = @('install', 'firewall-open')
+    'exporter' = @('install', 'firewall')
+    'gpu'      = @('install')
 }
 
 # ============================================================
@@ -432,7 +479,13 @@ function Initialize-PastaProtegida([string]$caminho, [string]$usuarioSid) {
     # todas as pastas acima. Sem ela, quem escreve em files/ trocaria a pasta
     # inteira por outra, e ACL nenhuma impede: renomear filho e' direito de
     # quem e' dono da pasta de cima.
-    $trava = [System.IO.File]::Open((Join-Path $caminho 'win-trava'), 'OpenOrCreate', 'ReadWrite', 'Read')
+    #
+    # Acesso so de LEITURA, compartilhando leitura e escrita: o worker longo e
+    # o de uso unico abrem a mesma trava, em qualquer ordem, e o segundo que
+    # pedisse escrita tomaria violacao de compartilhamento. O que impede a
+    # renomeacao e' o handle aberto, nao o modo dele; e, sem Delete no
+    # compartilhamento, ninguem apaga a trava enquanto ela estiver aberta.
+    $trava = [System.IO.File]::Open((Join-Path $caminho 'win-trava'), 'OpenOrCreate', 'Read', 'ReadWrite')
 
     # Esta e' a conferencia que vale: com a trava aberta, a pasta nao muda
     # mais de lugar.
@@ -446,14 +499,32 @@ function Initialize-PastaProtegida([string]$caminho, [string]$usuarioSid) {
 }
 
 <#
+    Diz se uma acao, com os parametros ja validados, esta em $SENSIVEIS.
+#>
+function Test-AcaoSensivel([string]$acao, $params) {
+    if (-not $SENSIVEIS.ContainsKey($acao)) { return $false }
+
+    $regra = $SENSIVEIS[$acao]
+    if ($regra -is [string]) { return $true }
+
+    $sub = if ($null -ne $params -and $params.Contains('SubAction')) { [string]$params['SubAction'] } else { '' }
+    return ($sub -in $regra)
+}
+
+<#
     Valida um job contra a allowlist e devolve os pares nome/valor aceitos.
 
     Lanca em qualquer desvio. Quem chama trata a excecao como recusa: nada
     executa, e o motivo vai para o arquivo de conclusao.
+
+    -Modo diz quem pergunta. No Laco o job vem do win-job.json e precisa do
+    nonce desta execucao do servidor; no UmaVez quem faz esse papel e' o hash
+    do pedido na linha de comando, e nao ha nonce. A regra de sensivel vale nos
+    dois sentidos: o laco recusa sensivel, o uso unico recusa o resto.
 #>
-function Test-Job($job) {
+function Test-Job($job, [ValidateSet('Laco', 'UmaVez')] [string]$Modo = 'Laco') {
     if ($null -eq $job) { throw 'job vazio' }
-    if ($job.nonce -ne $Nonce) { throw "nonce de outra execucao do servidor (obsoleto)" }
+    if ($Modo -eq 'Laco' -and $job.nonce -ne $Nonce) { throw "nonce de outra execucao do servidor (obsoleto)" }
 
     $acao = [string]$job.acao
     if (-not $ALLOWLIST.ContainsKey($acao)) { throw "acao fora da allowlist: '$acao'" }
@@ -543,6 +614,17 @@ function Test-Job($job) {
                 default { throw "regra desconhecida para '$nome'" }
             }
         }
+    }
+
+    # Depois da allowlist, e nao antes: a subacao ja esta na grafia da lista.
+    $sensivel = Test-AcaoSensivel $acao $aceitos
+    $rotulo   = if ($aceitos.Contains('SubAction')) { $acao + ' ' + $aceitos['SubAction'] } else { $acao }
+
+    if ($Modo -eq 'Laco' -and $sensivel) {
+        throw "acao sensivel: '$rotulo' so roda com UAC proprio, pela tela"
+    }
+    if ($Modo -eq 'UmaVez' -and -not $sensivel) {
+        throw "o modo de uso unico so roda acao sensivel, e '$rotulo' nao e'"
     }
 
     return @{ acao = $acao; params = $aceitos }
@@ -724,39 +806,7 @@ function Write-Done {
 }
 
 # ============================================================
-# PROVA — a primeira coisa que o PHP espera ver
-# ============================================================
-
-$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
-if (-not $admin) {
-    # Sem elevacao este worker nao serve para nada: o despachante do
-    # bootstrap recusa toda acao por falta de Administrador. Melhor nao
-    # escrever prova e deixar o PHP dizer que a permissao nao foi concedida,
-    # em vez de aceitar jobs para recusar um por um.
-    Write-Log "recusado: processo nao esta elevado (pid=$PID)"
-    exit 1
-}
-
-# Manifesto e pasta protegida ANTES da prova: sem os dois o worker nao executa
-# nada com seguranca, e e' melhor nao subir. O motivo vai na propria prova, para
-# a tela dizer por que nao ligou em vez de esperar 30 s e culpar o UAC.
-try {
-    $MANIFESTO = Read-PhportoManifesto $F_MANIFESTO $ManifestoSha256
-    $TRAVA     = Initialize-PastaProtegida $PROTEGIDA (Get-UsuarioPhp $ParentPid)
-} catch {
-    Write-Log "recusado ao subir: $($_.Exception.Message)"
-    Set-Content -Path $F_PROVA -Value ('ERRO=' + $_.Exception.Message) -Encoding ASCII
-    exit 1
-}
-
-# Prova em ASCII e sem BOM, para o PHP casar o conteudo sem tirar bytes antes.
-Set-Content -Path $F_PROVA -Value "PID=$PID;ADMIN=True;NONCE=$Nonce" -Encoding ASCII
-Write-Heartbeat
-Write-Log "iniciado pid=$PID pai=$ParentPid raiz='$RAIZ_WIN' manifesto=$($MANIFESTO.Count) arquivos"
-
-# ============================================================
-# LACO — 500 ms, cinco tarefas
+# O FILHO — a acao em andamento, nos dois modos
 # ============================================================
 
 $filho       = $null   # processo da acao em andamento
@@ -769,10 +819,6 @@ $filhoScript = $null
 # conclusao os carrega: quem recolhe a execucao depois nao tem outra fonte.
 $filhoAcao   = ''
 $filhoParams = $null
-
-# A ultima vez em que houve trabalho: job lido ou filho de pe. E' daqui que a
-# ociosidade conta.
-$ultimaAtividade = Get-Date
 
 function Stop-Filho([string]$motivo) {
     # Alta contra Alta: AQUI o taskkill funciona. E' o PHP, em Media, que nao
@@ -857,6 +903,318 @@ function Stop-FilhoComSinal([string]$motivo) {
     Clear-Filho
 }
 
+<#
+    Gera o script do job validado e larga o filho elevado, sem esperar.
+
+    O mesmo para os dois modos: so muda quem espera depois — o laco, entre
+    heartbeats, ou o Invoke-UmaVez, ate o filho acabar.
+#>
+function Start-FilhoJob($validado, [string]$id) {
+    $script:filhoScript = New-InvocationScript $validado $id
+    $script:filhoOut    = Join-Path $PROTEGIDA ('win-out-' + $id + '.txt')
+    $erro               = Join-Path $PROTEGIDA ('win-err-' + $id + '.txt')
+
+    # O caminho do script gerado e' o UNICO conteudo variavel na linha de
+    # comando, e quem o escreveu foi este codigo. Aspas explicitas porque a
+    # pasta do projeto pode ter espaco.
+    $argLine = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $script:filhoScript + '"'
+
+    $script:filho = Start-Process -FilePath 'powershell.exe' `
+        -ArgumentList $argLine `
+        -RedirectStandardOutput $script:filhoOut `
+        -RedirectStandardError $erro `
+        -WindowStyle Hidden `
+        -PassThru
+
+    $script:filhoId     = $id
+    $script:filhoT0     = Get-Date
+    $script:filhoAcao   = $validado.acao
+    $script:filhoParams = $validado.params
+    Write-Log "job aceito id=$id acao=$($validado.acao) filho=$($script:filho.Id)"
+}
+
+<#
+    Fecha o job cujo filho terminou: junta o stderr, le o codigo, grava a
+    conclusao e limpa. Devolve o codigo de saida (nulo quando nao houve).
+#>
+function Complete-Filho {
+    $ms = [int]((Get-Date) - $script:filhoT0).TotalMilliseconds
+
+    # O fluxo de erro nao vem sempre pelo *>&1: um Write-Error do script
+    # chamado pode escapar para o stderr do processo. Medido — um
+    # Write-Error do alvo nao apareceu na saida e estava no arquivo de
+    # erro. Juntar os dois e' o que o Runner do WSL ja faz com o stderr
+    # residual do shell de login, pelo mesmo motivo: o que sobrou num
+    # canto tem de aparecer na tela.
+    $arqErr = Join-Path $PROTEGIDA ('win-err-' + $script:filhoId + '.txt')
+    if (Test-Path $arqErr) {
+        try {
+            $residuo = [System.IO.File]::ReadAllText($arqErr)
+            if ($residuo.Trim().Length -gt 0) {
+                [System.IO.File]::AppendAllText($script:filhoOut, $residuo, [System.Text.UTF8Encoding]::new($false))
+            }
+        } catch {
+            Write-Log "falha ao juntar o stderr: $($_.Exception.Message)"
+        }
+        Remove-Item $arqErr -Force -ErrorAction SilentlyContinue
+    }
+
+    $arqExit = Join-Path $PROTEGIDA ('win-exit-' + $script:filhoId + '.txt')
+    $code    = $null
+    if (Test-Path $arqExit) {
+        $bruto = ([System.IO.File]::ReadAllText($arqExit)).Trim()
+        $n     = 0
+        if ([int]::TryParse($bruto, [ref]$n)) { $code = $n }
+        Remove-Item $arqExit -Force -ErrorAction SilentlyContinue
+    }
+
+    Write-Done $script:filhoId $code $ms '' $script:filhoAcao $script:filhoParams
+    Write-Log "filho concluido id=$($script:filhoId) exit=$code ms=$ms"
+    Clear-Filho
+
+    return $code
+}
+
+<#
+    Recusa um job: a saida diz o motivo, e a conclusao sai com 126.
+
+    Recusa e' resposta: o PHP esta esperando um arquivo de conclusao, e sem
+    ele ficaria sondando ate o timeout.
+#>
+function Write-Recusa([string]$id, [string]$motivo) {
+    Write-Log "job RECUSADO id=$id : $motivo"
+    [System.IO.File]::WriteAllText(
+        (Join-Path $PROTEGIDA ('win-out-' + $id + '.txt')),
+        "[phporto] job recusado pela allowlist do worker: $motivo`r`n",
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    # Sem acao nem parametros: a recusa aconteceu ANTES de a allowlist
+    # devolver algo validado, e inventar um nome aqui seria gravar como fato o
+    # que o worker justamente nao aceitou. Quem recolher esta conclusao
+    # registra o que ha — a saida acima diz o motivo.
+    Write-Done $id 126 0 'recusado'
+    Clear-Filho
+}
+
+# ============================================================
+# USO UNICO — um job, com UAC proprio, e sai
+# ============================================================
+
+<#
+    Le o pedido do uso unico, confere e CONSOME.
+
+    O hash da linha de comando e' o que vale, como no Read-PhportoManifesto: o
+    arquivo so e' aceito se for byte a byte o que o PHP gravou no clique. Os
+    bytes sao lidos UMA vez, e o arquivo e' apagado logo depois de o hash
+    bater: relancar com os mesmos argumentos nao acha pedido nenhum.
+
+    Devolve o pedido com o manifesto ja em hashtable. Lanca em qualquer desvio.
+#>
+function Read-PhportoPedido([string]$caminho, [string]$sha256) {
+    $nome = [System.IO.Path]::GetFileName($caminho)
+    if ($nome -cnotmatch '\Awin-oneshot-([0-9a-f]{12})\.json\z') { throw "pedido com nome fora do formato: '$nome'" }
+    $idDoNome = $Matches[1]
+
+    if (-not (Test-Path -LiteralPath $caminho -PathType Leaf)) {
+        throw 'pedido ausente: ja foi consumido, ou o PHP desistiu de esperar e o apagou'
+    }
+
+    $bytes = [System.IO.File]::ReadAllBytes($caminho)
+    $lido  = (Get-FileHash -InputStream ([System.IO.MemoryStream]::new($bytes)) -Algorithm SHA256).Hash
+
+    if ($lido -ne $sha256) {
+        throw "o pedido em files/ nao e' o que o PHP gravou no clique (SHA-256 $lido, esperado $sha256)"
+    }
+
+    Remove-Item -LiteralPath $caminho -Force
+
+    try {
+        $p = [System.Text.Encoding]::UTF8.GetString($bytes) | ConvertFrom-Json
+    } catch {
+        throw 'pedido que nao e JSON valido'
+    }
+
+    if ($null -eq $p -or $p.v -ne 1) { throw 'pedido de versao desconhecida' }
+    if ([string]$p.id -cne $idDoNome) { throw "pedido com id que nao e' o do nome do arquivo" }
+
+    $agora = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $expira = 0L
+    if (-not [long]::TryParse([string]$p.expira_em, [ref]$expira) -or $expira -lt $agora) {
+        throw 'pedido expirado: o prompt foi aceito depois de o PHP desistir de esperar'
+    }
+
+    $prazo = 0
+    if (-not [int]::TryParse([string]$p.prazo_s, [ref]$prazo) -or $prazo -lt 60 -or $prazo -gt 3615) {
+        throw 'pedido com prazo fora da faixa (60-3615 s)'
+    }
+
+    $pai = 0
+    if (-not [int]::TryParse([string]$p.php_pid, [ref]$pai) -or $pai -le 0) { throw 'pedido sem o pid do php -S' }
+    # Sem o servidor que pediu, nao ha quem leia o resultado.
+    if (-not (Get-Process -Id $pai -ErrorAction SilentlyContinue)) { throw "o php -S que pediu (pid $pai) nao existe mais" }
+
+    foreach ($campo in 'acao', 'raiz_win', 'dir') {
+        if ($p.$campo -isnot [string] -or $p.$campo -eq '') { throw "pedido sem '$campo'" }
+    }
+
+    if ($p.manifesto -isnot [System.Management.Automation.PSCustomObject]) { throw 'pedido sem manifesto' }
+    $manifesto = @{}
+    foreach ($par in $p.manifesto.PSObject.Properties) {
+        if ([string]$par.Value -notmatch '\A[0-9a-fA-F]{64}\z') {
+            throw "manifesto com SHA-256 invalido para '$($par.Name)'"
+        }
+        $manifesto[$par.Name] = [string]$par.Value
+    }
+    if (-not $manifesto.ContainsKey('bootstrap.ps1')) { throw 'manifesto sem o bootstrap.ps1' }
+
+    return [PSCustomObject]@{
+        id        = $idDoNome
+        acao      = [string]$p.acao
+        params    = $p.params
+        php_pid   = $pai
+        raiz_win  = [string]$p.raiz_win
+        dir       = [string]$p.dir
+        prazo_s   = $prazo
+        manifesto = $manifesto
+    }
+}
+
+<#
+    O modo de uso unico, inteiro. Devolve o codigo de saida do processo.
+
+    A sequencia: confere e consome o pedido; prepara a pasta protegida com a
+    MESMA funcao do laco (ACL, dono, link, trava); avisa o PHP por
+    win-oneshot-<id>.estado; valida o job com a MESMA allowlist; roda o filho
+    com o MESMO script gerado; e espera so enquanto o filho vive. Nao le
+    win-job.json, nao tem heartbeat nem prova, nao aceita segundo job.
+
+    O .estado e' o unico recado antes do resultado: ACEITO=<pid> quando seguiu,
+    ERRO=<motivo> quando recusou antes de tocar em qualquer coisa. Ele mora em
+    files/, como a prova do laco, porque so diz se o processo subiu; o
+    resultado de verdade vai para a pasta protegida, como no laco.
+#>
+function Invoke-UmaVez {
+    $estado = $null
+    if ([System.IO.Path]::GetFileName($Pedido) -cmatch '\Awin-oneshot-([0-9a-f]{12})\.json\z') {
+        $estado = Join-Path $Dir ('win-oneshot-' + $Matches[1] + '.estado')
+    }
+
+    try {
+        $p = Read-PhportoPedido $Pedido $PedidoSha256
+
+        if ($p.dir.TrimEnd('\', '/') -ne $Dir.TrimEnd('\', '/')) {
+            throw "o pedido aponta para outra pasta de trabalho ('$($p.dir)')"
+        }
+
+        $script:MANIFESTO = $p.manifesto
+        if (-not $script:RAIZ_WIN) { $script:RAIZ_WIN = $p.raiz_win }
+        $script:TRAVA = Initialize-PastaProtegida $PROTEGIDA (Get-UsuarioPhp $p.php_pid)
+    } catch {
+        Write-Log "uso unico recusado: $($_.Exception.Message)"
+        if ($estado) { Set-Content -LiteralPath $estado -Value ('ERRO=' + $_.Exception.Message) -Encoding ASCII }
+        return 1
+    }
+
+    Set-Content -LiteralPath $estado -Value "ACEITO=$PID" -Encoding ASCII
+    Write-Log "uso unico pid=$PID pai=$($p.php_pid) id=$($p.id) acao=$($p.acao)"
+
+    $code = $null
+    try {
+        try {
+            Start-FilhoJob (Test-Job ([PSCustomObject]@{ acao = $p.acao; params = $p.params }) -Modo UmaVez) $p.id
+        } catch {
+            Write-Recusa $p.id $_.Exception.Message
+            return 126
+        }
+
+        # A ordem de cancelar e' DESTE id: o worker longo, se estiver de pe,
+        # le a dele, e uma nao cancela a outra.
+        $cancelar = Join-Path $Dir ('win-ordem-cancelar-' + $p.id)
+        $limite   = (Get-Date).AddSeconds($p.prazo_s)
+
+        while ($null -ne $script:filho) {
+            if ($script:filho.HasExited) {
+                $code = Complete-Filho
+                break
+            }
+
+            if (-not (Get-Process -Id $p.php_pid -ErrorAction SilentlyContinue)) {
+                Stop-FilhoComSinal 'pai desapareceu'
+                break
+            }
+
+            if (Test-Path $cancelar) {
+                Remove-Item $cancelar -Force -ErrorAction SilentlyContinue
+                $ms = [int]((Get-Date) - $script:filhoT0).TotalMilliseconds
+                Stop-Filho 'cancelado'
+                Write-Done $script:filhoId $null $ms 'cancelado' $script:filhoAcao $script:filhoParams
+                Clear-Filho
+                break
+            }
+
+            # O teto que o PHP pos no pedido: o timeout da acao com folga. Se
+            # o PHP morreu sem cancelar, nao fica processo elevado para sempre.
+            if ((Get-Date) -gt $limite) {
+                Stop-FilhoComSinal 'prazo'
+                break
+            }
+
+            Start-Sleep -Milliseconds $TICK_MS
+        }
+    } finally {
+        $script:TRAVA.Dispose()
+        Write-Log "fim do uso unico pid=$PID id=$($p.id) exit=$code"
+    }
+
+    if ($null -eq $code) { return 1 }
+    return $code
+}
+
+# ============================================================
+# PROVA — a primeira coisa que o PHP espera ver
+# ============================================================
+
+$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $admin) {
+    # Sem elevacao este worker nao serve para nada: o despachante do
+    # bootstrap recusa toda acao por falta de Administrador. Melhor nao
+    # escrever prova e deixar o PHP dizer que a permissao nao foi concedida,
+    # em vez de aceitar jobs para recusar um por um.
+    Write-Log "recusado: processo nao esta elevado (pid=$PID)"
+    exit 1
+}
+
+# O uso unico sai daqui: nao tem prova, heartbeat nem laco. Ver Invoke-UmaVez.
+if ($PSCmdlet.ParameterSetName -eq 'UmaVez') {
+    exit (Invoke-UmaVez)
+}
+
+# Manifesto e pasta protegida ANTES da prova: sem os dois o worker nao executa
+# nada com seguranca, e e' melhor nao subir. O motivo vai na propria prova, para
+# a tela dizer por que nao ligou em vez de esperar 30 s e culpar o UAC.
+try {
+    $MANIFESTO = Read-PhportoManifesto $F_MANIFESTO $ManifestoSha256
+    $TRAVA     = Initialize-PastaProtegida $PROTEGIDA (Get-UsuarioPhp $ParentPid)
+} catch {
+    Write-Log "recusado ao subir: $($_.Exception.Message)"
+    Set-Content -Path $F_PROVA -Value ('ERRO=' + $_.Exception.Message) -Encoding ASCII
+    exit 1
+}
+
+# Prova em ASCII e sem BOM, para o PHP casar o conteudo sem tirar bytes antes.
+Set-Content -Path $F_PROVA -Value "PID=$PID;ADMIN=True;NONCE=$Nonce" -Encoding ASCII
+Write-Heartbeat
+Write-Log "iniciado pid=$PID pai=$ParentPid raiz='$RAIZ_WIN' manifesto=$($MANIFESTO.Count) arquivos"
+
+# ============================================================
+# LACO — 500 ms, cinco tarefas
+# ============================================================
+
+# A ultima vez em que houve trabalho: job lido ou filho de pe. E' daqui que a
+# ociosidade conta.
+$ultimaAtividade = Get-Date
+
 while ($true) {
     Write-Heartbeat
 
@@ -894,39 +1252,7 @@ while ($true) {
 
     # --- 4. o filho terminou? ----------------------------------------------
     if ($null -ne $filho -and $filho.HasExited) {
-        $ms = [int]((Get-Date) - $filhoT0).TotalMilliseconds
-
-        # O fluxo de erro nao vem sempre pelo *>&1: um Write-Error do script
-        # chamado pode escapar para o stderr do processo. Medido — um
-        # Write-Error do alvo nao apareceu na saida e estava no arquivo de
-        # erro. Juntar os dois e' o que o Runner do WSL ja faz com o stderr
-        # residual do shell de login, pelo mesmo motivo: o que sobrou num
-        # canto tem de aparecer na tela.
-        $arqErr = Join-Path $PROTEGIDA ('win-err-' + $filhoId + '.txt')
-        if (Test-Path $arqErr) {
-            try {
-                $residuo = [System.IO.File]::ReadAllText($arqErr)
-                if ($residuo.Trim().Length -gt 0) {
-                    [System.IO.File]::AppendAllText($filhoOut, $residuo, [System.Text.UTF8Encoding]::new($false))
-                }
-            } catch {
-                Write-Log "falha ao juntar o stderr: $($_.Exception.Message)"
-            }
-            Remove-Item $arqErr -Force -ErrorAction SilentlyContinue
-        }
-
-        $arqExit = Join-Path $PROTEGIDA ('win-exit-' + $filhoId + '.txt')
-        $code    = $null
-        if (Test-Path $arqExit) {
-            $bruto = ([System.IO.File]::ReadAllText($arqExit)).Trim()
-            $n     = 0
-            if ([int]::TryParse($bruto, [ref]$n)) { $code = $n }
-            Remove-Item $arqExit -Force -ErrorAction SilentlyContinue
-        }
-
-        Write-Done $filhoId $code $ms '' $filhoAcao $filhoParams
-        Write-Log "filho concluido id=$filhoId exit=$code ms=$ms"
-        Clear-Filho
+        Complete-Filho | Out-Null
     }
 
     # --- 5. job novo, so quando nao ha filho de pe -------------------------
@@ -951,45 +1277,11 @@ while ($true) {
             $id = [guid]::NewGuid().ToString('N').Substring(0, 12)
 
             try {
-                $job       = $bruto | ConvertFrom-Json
-                $validado  = Test-Job $job
-                $script:filhoScript = New-InvocationScript $validado $id
-                $script:filhoOut    = Join-Path $PROTEGIDA ('win-out-' + $id + '.txt')
-                $erro               = Join-Path $PROTEGIDA ('win-err-' + $id + '.txt')
-
-                # O caminho do script gerado e' o UNICO conteudo variavel na
-                # linha de comando, e quem o escreveu foi este codigo. Aspas
-                # explicitas porque a pasta do projeto pode ter espaco.
-                $argLine = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $script:filhoScript + '"'
-
-                $script:filho = Start-Process -FilePath 'powershell.exe' `
-                    -ArgumentList $argLine `
-                    -RedirectStandardOutput $script:filhoOut `
-                    -RedirectStandardError $erro `
-                    -WindowStyle Hidden `
-                    -PassThru
-
-                $script:filhoId     = $id
-                $script:filhoT0     = Get-Date
-                $script:filhoAcao   = $validado.acao
-                $script:filhoParams = $validado.params
-                Write-Log "job aceito id=$id acao=$($validado.acao) filho=$($script:filho.Id)"
+                $job      = $bruto | ConvertFrom-Json
+                $validado = Test-Job $job
+                Start-FilhoJob $validado $id
             } catch {
-                # Recusa e' resposta: o PHP esta esperando um arquivo de
-                # conclusao, e sem ele ficaria sondando ate o timeout.
-                Write-Log "job RECUSADO id=$id : $($_.Exception.Message)"
-                [System.IO.File]::WriteAllText(
-                    (Join-Path $PROTEGIDA ('win-out-' + $id + '.txt')),
-                    "[phporto] job recusado pela allowlist do worker: $($_.Exception.Message)`r`n",
-                    [System.Text.UTF8Encoding]::new($false)
-                )
-                # Sem acao nem parametros: a recusa aconteceu ANTES de a
-                # allowlist devolver algo validado, e inventar um nome aqui
-                # seria gravar como fato o que o worker justamente nao aceitou.
-                # Quem recolher esta conclusao registra o que ha — a saida
-                # acima diz o motivo.
-                Write-Done $id 126 0 'recusado'
-                Clear-Filho
+                Write-Recusa $id $_.Exception.Message
             }
         }
     }

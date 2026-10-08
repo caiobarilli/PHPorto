@@ -491,3 +491,81 @@ it('optimize combina preset, lista, usuário protegido e undo', function () {
 it('optimize recusa lista acima do teto de bytes', function () {
     WinAction::Optimize->validate(['Kill' => str_repeat('x', WinAction::MAX_PARAM_BYTES + 1)]);
 })->throws(InvalidArgumentException::class);
+
+// ---------------------------------------------------------------- sensíveis
+
+it('a ação sensível é reconhecida pelo SubAction validado', function (WinAction $acao, array $params, bool $esperado) {
+    expect($acao->isSensitive($params))->toBe($esperado);
+})->with([
+    'install, qualquer app'    => [WinAction::Install, ['Apps' => 'Mozilla.Firefox'], true],
+    'install sem nada'         => [WinAction::Install, [], true],
+    'rdp on'                   => [WinAction::Rdp, ['SubAction' => 'on'], true],
+    'rdp off'                  => [WinAction::Rdp, ['SubAction' => 'off'], false],
+    'rdp status'               => [WinAction::Rdp, ['SubAction' => 'status'], false],
+    'rdp h264-on'              => [WinAction::Rdp, ['SubAction' => 'h264-on'], false],
+    'sunshine install'         => [WinAction::Sunshine, ['SubAction' => 'install'], true],
+    'sunshine firewall-open'   => [WinAction::Sunshine, ['SubAction' => 'firewall-open'], true],
+    'sunshine firewall-close'  => [WinAction::Sunshine, ['SubAction' => 'firewall-close'], false],
+    'sunshine start'           => [WinAction::Sunshine, ['SubAction' => 'start'], false],
+    'exporter install'         => [WinAction::Exporter, ['SubAction' => 'install'], true],
+    'exporter firewall'        => [WinAction::Exporter, ['SubAction' => 'firewall'], true],
+    'exporter metrics'         => [WinAction::Exporter, ['SubAction' => 'metrics'], false],
+    'gpu install'              => [WinAction::Gpu, ['SubAction' => 'install'], true],
+    'gpu uninstall'            => [WinAction::Gpu, ['SubAction' => 'uninstall'], false],
+    'network fica de fora'     => [WinAction::Network, ['Interface' => 'Ethernet', 'Duration' => 30], false],
+    'optimize -Undo fica fora' => [WinAction::Optimize, ['Undo' => true], false],
+    'dns Custom fica de fora'  => [WinAction::Dns, ['Provider' => 'Custom', 'PrimaryDNS' => '1.1.1.1'], false],
+    'subação ausente'          => [WinAction::Rdp, [], false],
+    'subação de outro tipo'    => [WinAction::Rdp, ['SubAction' => true], false],
+]);
+
+it('as duas listas de sensíveis são a mesma, a do PHP e a $SENSIVEIS do worker', function () {
+    // Mesmo motivo da paridade da allowlist: a lista do PHP só escolhe o
+    // caminho, e a do worker é a tranca. Uma ação que só o PHP achasse
+    // sensível abriria prompt à toa; uma que só o worker achasse seria
+    // recusada pelo worker longo sem a tela oferecer o caminho do UAC.
+    $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+
+    expect(preg_match('/\$SENSIVEIS\s*=\s*@\{(.*?)\r?\n\}/s', $worker, $bloco))->toBe(1);
+    expect(preg_match_all("/^    '([a-z-]+)'\s*=\s*(.+?)\s*$/m", $bloco[1], $linhas, PREG_SET_ORDER))->toBeGreaterThan(0);
+
+    $noWorker = [];
+    foreach ($linhas as [, $acao, $valor]) {
+        if ($valor === "'*'") {
+            $noWorker[$acao] = '*';
+            continue;
+        }
+
+        preg_match_all("/'([a-z0-9-]+)'/", $valor, $subs);
+        $noWorker[$acao] = $subs[1];
+    }
+
+    ksort($noWorker);
+    $noPhp = WinAction::SENSITIVE;
+    ksort($noPhp);
+
+    expect($noWorker)->toBe($noPhp);
+});
+
+it('toda subação sensível existe na lista de subações da ação', function () {
+    $listas = [
+        'rdp'      => WinAction::RDP_SUBACTIONS,
+        'sunshine' => WinAction::SUNSHINE_SUBACTIONS,
+        'exporter' => WinAction::EXPORTER_SUBACTIONS,
+        'gpu'      => WinAction::GPU_SUBACTIONS,
+    ];
+
+    foreach (WinAction::SENSITIVE as $acao => $regra) {
+        expect(WinAction::tryFrom($acao))->not->toBeNull();
+
+        if ($regra === '*') {
+            continue;
+        }
+
+        expect($listas)->toHaveKey($acao);
+
+        foreach ($regra as $sub) {
+            expect($listas[$acao])->toContain($sub);
+        }
+    }
+});

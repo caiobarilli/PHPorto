@@ -111,6 +111,18 @@ use App\Http\Respond;
         <code>flags.json</code> de propósito — aquele arquivo existe para sobreviver a reinício,
         e aqui se quer o contrário.
       </p>
+
+      <p class="nota-estado" id="uac-estado">
+        As ações que <strong>abrem o UAC</strong> (instalar, ligar o RDP, abrir porta no
+        firewall) não passam por este PowerShell: cada uma pede o próprio prompt, e roda mesmo
+        com o interruptor desligado.
+        <br>
+        <?php if ($view->uacOk): ?>
+          <?= Respond::e($view->uacSummary) ?>
+        <?php else: ?>
+          <strong><?= Respond::e($view->uacSummary) ?></strong>
+        <?php endif; ?>
+      </p>
     </form>
   </section>
 

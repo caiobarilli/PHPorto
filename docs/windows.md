@@ -40,7 +40,24 @@ O estado é de vida curta:
   usar a `/win`, ligue de novo na `/config`.
 
 Enquanto o interruptor estiver desligado, o botão do Windows na home fica
-desabilitado e nenhuma ação roda.
+desabilitado e nenhuma ação comum roda. As sensíveis, abaixo, não dependem dele.
+
+## Ações que abrem o UAC
+
+Algumas ações pedem **um prompt de UAC a cada execução**, mesmo com o
+PowerShell elevado ligado: instalar apps (`install`), ligar o acesso remoto
+(`rdp on`), instalar o Sunshine e abrir a porta dele no firewall, instalar o
+windows_exporter e liberá-lo no firewall, e instalar o exportador da GPU. Na
+tela, o botão ou a opção delas diz **abre o UAC**.
+
+- O prompt mostra "Windows PowerShell". Ele é a confirmação daquele clique;
+  um prompt que apareça sem você ter clicado não é do PHPorto.
+- Recusar, ou não responder em 60 s, não executa nada, e a tela diz isso.
+- Elas rodam com o interruptor do PowerShell elevado **desligado**: cada uma
+  abre e fecha o próprio processo elevado.
+- Com o UAC silencioso (`ConsentPromptBehaviorAdmin` = 0) ou desligado, elas
+  são recusadas, com a correção na mensagem. A `/config` mostra em que pé o UAC
+  está. Ver [seguranca.md](seguranca.md#ações-sensíveis-uac-por-execução).
 
 ## Como as ações rodam
 

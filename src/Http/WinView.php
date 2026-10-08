@@ -56,6 +56,10 @@ final readonly class WinView
      * @param array<string, string> $dnsChosen   a última escolha de DNS guardada
      * @param string|null     $dnsProblem      por que a lista de DNS não pôde ser lida
      * @param WinTab          $tab             a aba aberta
+     * @param string|null     $sensitiveBlocked por que as ações sensíveis (as que
+     *                                          abrem o próprio UAC) não podem
+     *                                          rodar, ou null; elas não dependem
+     *                                          do PowerShell elevado longo
      */
     public function __construct(
         public array $rows,
@@ -84,6 +88,7 @@ final readonly class WinView
         public array $dnsChosen,
         public ?string $dnsProblem,
         public WinTab $tab = WinTab::Sistema,
+        public ?string $sensitiveBlocked = null,
     ) {
     }
 }

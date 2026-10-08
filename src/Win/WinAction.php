@@ -138,6 +138,30 @@ enum WinAction: string
     /** on ativa o plano de desempenho máximo; off volta ao Balanceado. Sem State, on. */
     public const PERFORMANCE_STATES = ['on', 'off'];
 
+    /**
+     * As execuções que só rodam com UAC próprio, pelo worker de uso único.
+     *
+     * São as que abrem a máquina para a rede (rdp on, as portas do firewall),
+     * instalam programa ou serviço (install, sunshine install, exporter
+     * install) ou registram tarefa SYSTEM (gpu install). Com o PowerShell elevado longo de pé,
+     * quem lesse o nonce do marcador rodaria qualquer uma delas sem prompt;
+     * por isso o worker longo as RECUSA, e cada uma abre o próprio prompt do
+     * Windows (ver OneShot).
+     *
+     * '*' = toda execução da ação; lista = só essas subações. Esta tabela
+     * ROTEIA. A tranca é o $SENSIVEIS do worker.ps1, e o teste de paridade em
+     * tests/Unit/WinActionTest.php confere as duas, como faz com as allowlists.
+     *
+     * @var array<string, '*'|list<string>>
+     */
+    public const SENSITIVE = [
+        'install'  => '*',
+        'rdp'      => ['on'],
+        'sunshine' => ['install', 'firewall-open'],
+        'exporter' => ['install', 'firewall'],
+        'gpu'      => ['install'],
+    ];
+
     public const NETWORK_DURATION_MIN = 1;
 
     public const NETWORK_DURATION_MAX = 3600;
@@ -181,6 +205,25 @@ enum WinAction: string
             self::Sunshine  => ['SubAction' => $this->pick($input, 'SubAction', self::SUNSHINE_SUBACTIONS, obrigatorio: true)],
             self::Optimize  => $this->optimize($input),
         };
+    }
+
+    /**
+     * Diz se esta execução só roda com UAC próprio (ver SENSITIVE).
+     *
+     * Recebe os parâmetros JÁ validados: a subação chega na grafia da lista, e
+     * a comparação pode ser exata.
+     *
+     * @param array<string, string|int|bool> $params
+     */
+    public function isSensitive(array $params): bool
+    {
+        $regra = self::SENSITIVE[$this->value] ?? null;
+
+        if ($regra === null) {
+            return false;
+        }
+
+        return $regra === '*' || in_array($params['SubAction'] ?? '', $regra, true);
     }
 
     /**

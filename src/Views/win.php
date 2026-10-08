@@ -43,14 +43,27 @@ $subRotulos = [
     'enable'    => 'religar',
 ];
 
-/** Uma opção de subação: o rótulo em português, com o valor da ação ao lado. */
-$opcao = static function (string $valor) use ($subRotulos): string {
-    return '<option value="' . Respond::e($valor) . '">'
-        . Respond::e(($subRotulos[$valor] ?? $valor) . ' (' . $valor . ')') . '</option>';
-};
-
 $travado = $view->blocked !== null;
 $dis     = $travado ? ' disabled' : '';
+
+// As ações sensíveis abrem o próprio UAC e não dependem do PowerShell elevado
+// longo: só o checkout (ou o banco fora do ar) as trava. Ver App\Win\OneShot.
+$disSens   = $view->sensitiveBlocked !== null ? ' disabled' : '';
+$sensivel  = static fn (string $acao, string $campo, string $valor): bool => \App\Win\WinAction::from($acao)->isSensitive([$campo => $valor]);
+$avisoUac  = ' · abre o UAC';
+
+/**
+ * Uma opção de subação: o rótulo em português, com o valor da ação ao lado.
+ *
+ * Num select que mistura as duas espécies (exporter, gpu), a opção sensível
+ * diz que abre o UAC, e cada opção trava pelo bloqueio do caminho dela.
+ */
+$opcao = static function (string $valor, string $acao = '') use ($subRotulos, $sensivel, $dis, $disSens, $avisoUac): string {
+    $sens = $acao !== '' && $sensivel($acao, 'SubAction', $valor);
+
+    return '<option value="' . Respond::e($valor) . '"' . ($sens ? $disSens : $dis) . '>'
+        . Respond::e(($subRotulos[$valor] ?? $valor) . ' (' . $valor . ')' . ($sens ? $avisoUac : '')) . '</option>';
+};
 
 /**
  * Um formulário de um botão só, com um campo oculto.
@@ -58,13 +71,15 @@ $dis     = $travado ? ' disabled' : '';
  * Recebe a ação, o nome e o valor do campo, o rótulo e se o botão é
  * secundário. Devolve o HTML do formulário.
  */
-$botao = static function (string $acao, string $campo, string $valor, string $rotulo, bool $secundario) use ($view, $dis): string {
+$botao = static function (string $acao, string $campo, string $valor, string $rotulo, bool $secundario) use ($view, $dis, $disSens, $sensivel, $avisoUac): string {
+    $sens = $sensivel($acao, $campo, $valor);
+
     return '<form method="post">'
         . '<input type="hidden" name="' . Respond::e($view->csrfField) . '" value="' . Respond::e($view->csrfToken) . '">'
         . '<input type="hidden" name="acao" value="' . Respond::e($acao) . '">'
         . '<input type="hidden" name="' . Respond::e($campo) . '" value="' . Respond::e($valor) . '">'
-        . '<button type="submit" class="btn btn-sm' . ($secundario ? ' btn-ghost' : '') . '"' . $dis . '>'
-        . Respond::e($rotulo) . '</button></form>';
+        . '<button type="submit" class="btn btn-sm' . ($secundario ? ' btn-ghost' : '') . '"' . ($sens ? $disSens : $dis) . '>'
+        . Respond::e($rotulo . ($sens ? $avisoUac : '')) . '</button></form>';
 };
 
 /** Abre o painel de uma aba; o da aba que não está aberta nasce escondido. */
@@ -108,6 +123,9 @@ foreach ($view->tweaks as $tw) {
       <?= Respond::e($view->blocked) ?>
       <?php if ($view->win->canTry() && !$view->win->on): ?>
         <br>Ligue o interruptor de PowerShell na <a href="/config">configuração</a>.
+      <?php endif; ?>
+      <?php if ($view->sensitiveBlocked === null): ?>
+        <br>As ações marcadas com <strong>abre o UAC</strong> não dependem dele: cada uma pede o próprio prompt.
       <?php endif; ?>
     </div>
   <?php endif; ?>
@@ -352,13 +370,13 @@ foreach ($view->tweaks as $tw) {
         <div class="campo">
           <label for="ins-apps">Apps</label>
           <input type="text" id="ins-apps" name="Apps"
-                 placeholder="Mozilla.Firefox,Notepad++.Notepad++"<?= $dis ?>>
-          <button type="submit" class="btn btn-campo"<?= $dis ?>>Instalar</button>
+                 placeholder="Mozilla.Firefox,Notepad++.Notepad++"<?= $disSens ?>>
+          <button type="submit" class="btn btn-campo"<?= $disSens ?>>Instalar<?= Respond::e($avisoUac) ?></button>
         </div>
         <div class="colunas-4">
           <?php foreach (\App\Win\WinAction::INSTALL_SUGGESTIONS as $id => $nome): ?>
             <label class="caixa">
-              <input type="checkbox" name="AppsMarcados[]" value="<?= Respond::e($id) ?>"<?= $dis ?>>
+              <input type="checkbox" name="AppsMarcados[]" value="<?= Respond::e($id) ?>"<?= $disSens ?>>
               <span>
                 <?= Respond::e($nome) ?>
                 <small><code><?= Respond::e($id) ?></code></small>
@@ -385,13 +403,13 @@ foreach ($view->tweaks as $tw) {
         <input type="hidden" name="acao" value="exporter">
         <div class="campo">
           <label for="exp-sub">Subação</label>
-          <select id="exp-sub" name="SubAction"<?= $dis ?>>
+          <select id="exp-sub" name="SubAction"<?= $disSens ?>>
             <?php foreach (\App\Win\WinAction::EXPORTER_SUBACTIONS as $s): ?>
-              <?= $opcao($s) ?>
+              <?= $opcao($s, 'exporter') ?>
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Executar</button></div>
+        <div class="row"><button type="submit" class="btn btn-sm"<?= $disSens ?>>Executar</button></div>
       </form>
     </section>
     <section id="acao-gpu">
@@ -401,13 +419,13 @@ foreach ($view->tweaks as $tw) {
         <input type="hidden" name="acao" value="gpu">
         <div class="campo">
           <label for="gpu-sub">Subação</label>
-          <select id="gpu-sub" name="SubAction"<?= $dis ?>>
+          <select id="gpu-sub" name="SubAction"<?= $disSens ?>>
             <?php foreach (\App\Win\WinAction::GPU_SUBACTIONS as $s): ?>
-              <?= $opcao($s) ?>
+              <?= $opcao($s, 'gpu') ?>
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Executar</button></div>
+        <div class="row"><button type="submit" class="btn btn-sm"<?= $disSens ?>>Executar</button></div>
         <p class="dica">Conjunto diferente das métricas do Windows: aqui existe <strong>desinstalar</strong> e não
           existe <strong>liberar no firewall</strong>.</p>
       </form>

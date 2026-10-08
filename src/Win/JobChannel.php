@@ -116,9 +116,22 @@ final class JobChannel
      * integridade Alta, e taskkill do PHP contra ele devolve "Acesso negado"
      * (medido, rc=128). Escreve a ordem de cancelar, e é o worker que mata o
      * próprio filho.
+     *
+     * COM $id, ESPERA SÓ AQUELA CONCLUSÃO. É o caminho do worker de uso único:
+     * quem gera o id é o PHP, então ele sabe exatamente qual `win-done` é o
+     * seu, e qualquer outro é ignorado. A ordem de cancelar, nesse caso, também
+     * é a daquele id ($cancelOrder), para não colidir com o worker longo.
+     * Sem $id, o comportamento é o de sempre: a primeira conclusão válida.
      */
-    public function collect(int $timeoutSeconds): PsResult
-    {
+    public function collect(
+        int $timeoutSeconds,
+        ?string $id = null,
+        string $cancelOrder = Elevation::F_ORDEM_CANCELAR,
+    ): PsResult {
+        if ($id !== null && !self::validId($id)) {
+            throw new RuntimeException('Id de execução fora do formato: ' . $id);
+        }
+
         // Ver TIME_LIMIT_MARGIN_S na Elevation: o php -S corta a requisição em
         // 30 s por padrão (SAPI cli-server usa o php.ini, não o 0 do CLI), e
         // sem levantar isso NENHUMA ação longa terminaria. A guarda do PHP
@@ -129,7 +142,7 @@ final class JobChannel
         $done    = null;
 
         while ((microtime(true) - $started) < $timeoutSeconds) {
-            $done = $this->findDone();
+            $done = $this->findDone($id);
 
             if ($done !== null) {
                 break;
@@ -139,12 +152,12 @@ final class JobChannel
         }
 
         if ($done === null) {
-            $this->order(Elevation::F_ORDEM_CANCELAR);
+            $this->order($cancelOrder);
 
             $limite = microtime(true) + self::CANCEL_GRACE_S;
 
             while (microtime(true) < $limite && $done === null) {
-                $done = $this->findDone();
+                $done = $this->findDone($id);
                 usleep(self::POLL_US);
             }
 
@@ -313,13 +326,19 @@ final class JobChannel
     }
 
     /**
-     * O arquivo de conclusão, se houver.
+     * O arquivo de conclusão, se houver: o daquele id, ou o primeiro válido.
      *
      * @return array{id: string, exit: int|null, ms: int, nota: string, acao: string, params: array<string, string|int|bool>, fim: string|null}|null
      */
-    private function findDone(): ?array
+    private function findDone(?string $id = null): ?array
     {
         clearstatcache();
+
+        if ($id !== null) {
+            $arquivo = $this->resultPath('win-done-' . $id . '.json');
+
+            return is_file($arquivo) ? self::parseDone($arquivo) : null;
+        }
 
         foreach (glob($this->resultPath('win-done-*.json')) ?: [] as $arquivo) {
             $done = self::parseDone($arquivo);

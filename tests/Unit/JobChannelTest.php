@@ -184,6 +184,39 @@ it('no timeout aproveita a conclusão do cancelamento se ela chegar', function (
         ->and($r->output)->toContain('cortada no meio');
 });
 
+// ---------------------------------------------------------------- por id
+
+it('collect() com id espera só aquela conclusão, e ignora a de outro id', function () {
+    fingirWorker($this, 'aaa000000001', "a de outro\n");
+    fingirWorker($this, 'bbb000000002', "a minha\n", 7);
+
+    $r = $this->canal->collect(10, 'bbb000000002');
+
+    expect($r->output)->toBe("a minha\n")
+        ->and($r->exitCode)->toBe(7);
+});
+
+it('collect() com id não aceita conclusão de outro id nem no prazo de graça', function () {
+    fingirWorker($this, 'aaa000000003', "a de outro\n");
+
+    $r = $this->canal->collect(1, 'bbb000000004', Elevation::F_ORDEM_CANCELAR . '-bbb000000004');
+
+    expect($r->timedOut)->toBeTrue()
+        ->and($r->output)->not->toContain('a de outro');
+});
+
+it('NO TIMEOUT COM ID, a ordem de cancelar é a daquele id, e não a do worker longo', function () {
+    $r = $this->canal->collect(1, 'ccc000000005', Elevation::F_ORDEM_CANCELAR . '-ccc000000005');
+
+    expect($r->timedOut)->toBeTrue()
+        ->and(is_file($this->files . DIRECTORY_SEPARATOR . Elevation::F_ORDEM_CANCELAR . '-ccc000000005'))->toBeTrue()
+        ->and(is_file($this->files . DIRECTORY_SEPARATOR . Elevation::F_ORDEM_CANCELAR))->toBeFalse();
+});
+
+it('collect() recusa id fora do formato antes de montar caminho', function () {
+    $this->canal->collect(1, '../../x');
+})->throws(RuntimeException::class, 'fora do formato');
+
 /*
  * Não há teste de dispatch(): ele é send() seguido de collect(), com as duas
  * metades cobertas acima. Um teste dele pagaria outros quatro segundos de

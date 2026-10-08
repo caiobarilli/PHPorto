@@ -15,8 +15,15 @@ use App\Win\ElevationState;
  * @param list<string> $acoes
  * @param list<string> $pendentes
  */
-function winHtml(array $marcados = [], array $aplicados = [], array $acoes = [], WinTab $aba = WinTab::Sistema, array $pendentes = []): string
-{
+function winHtml(
+    array $marcados = [],
+    array $aplicados = [],
+    array $acoes = [],
+    WinTab $aba = WinTab::Sistema,
+    array $pendentes = [],
+    ?string $blocked = null,
+    ?string $sensitiveBlocked = null,
+): string {
     $tweaks = [];
     foreach (['A', 'B', 'C'] as $k) {
         $tweaks[] = ['key' => $k, 'content' => 'tweak ' . $k, 'description' => '', 'category' => 'Essential', 'caution' => false, 'explorer' => false];
@@ -25,11 +32,11 @@ function winHtml(array $marcados = [], array $aplicados = [], array $acoes = [],
     return Respond::render('win.php', new WinView(
         rows: [],
         result: null,
-        blocked: null,
+        blocked: $blocked,
         notice: null,
         csrfToken: 't',
         csrfField: '_csrf',
-        win: new ElevationState(on: true, psPid: 1),
+        win: $blocked === null ? new ElevationState(on: true, psPid: 1) : new ElevationState(on: false),
         timeout: 600,
         tz: 'America/Sao_Paulo',
         maxOutputBytes: 1048576,
@@ -49,6 +56,7 @@ function winHtml(array $marcados = [], array $aplicados = [], array $acoes = [],
         dnsChosen: [],
         dnsProblem: null,
         tab: $aba,
+        sensitiveBlocked: $sensitiveBlocked,
     ));
 }
 
@@ -306,7 +314,42 @@ it('A NUMERAÇÃO [1] A [13] SUMIU da tela', function () {
 it('subação aparece em português, com o valor da ação ao lado e no envio', function () {
     $html = winHtml(aba: WinTab::Servicos);
 
-    expect($html)->toContain('<option value="install">instalar (install)</option>')
+    expect($html)->toContain('<option value="install">instalar (install) · abre o UAC</option>')
+        ->and($html)->toContain('<option value="status">ver o estado (status)</option>')
         ->and($html)->toContain('<option value="disable">desligar (disable)</option>')
         ->and($html)->not->toMatch('/<option value="([a-z]+)">\1<\/option>/');
+});
+
+// ---------------------------------------------------------------- sensíveis
+
+it('a ação sensível diz que abre o UAC, e a comum não', function () {
+    $html = winHtml(aba: WinTab::AcessoRemoto);
+
+    expect($html)->toContain('Ligar acesso remoto · abre o UAC')
+        ->and($html)->toContain('Abrir a porta no firewall · abre o UAC')
+        ->and($html)->toContain('>Instalar · abre o UAC</button>')
+        ->and($html)->not->toContain('Desligar acesso remoto · abre o UAC')
+        ->and($html)->not->toContain('Fechar a porta · abre o UAC');
+});
+
+it('COM O WORKER LONGO DESLIGADO, a sensível segue clicável e a comum trava', function () {
+    $html = winHtml(aba: WinTab::AcessoRemoto, blocked: 'O PowerShell elevado está desligado.');
+
+    expect($html)->toContain('não dependem dele')
+        ->and($html)->toMatch('/<button type="submit" class="btn btn-sm[^"]*">Ligar acesso remoto · abre o UAC/')
+        ->and($html)->toMatch('/<button type="submit" class="btn btn-sm[^"]*" disabled>Desligar acesso remoto</')
+        ->and(winSecao($html, 'install'))->not->toContain(' disabled')
+        // No select misto, cada opção trava pelo caminho dela.
+        ->and($html)->toContain('<option value="install">instalar (install) · abre o UAC</option>')
+        ->and($html)->toContain('<option value="status" disabled>ver o estado (status)</option>');
+});
+
+it('com o checkout incompleto, a sensível também trava', function () {
+    $motivo = 'Falta o worker.ps1 em src/Win.';
+    $html   = winHtml(aba: WinTab::AcessoRemoto, blocked: $motivo, sensitiveBlocked: $motivo);
+
+    expect($html)->not->toContain('não dependem dele')
+        ->and($html)->toMatch('/" disabled>Ligar acesso remoto · abre o UAC/')
+        ->and(winSecao($html, 'install'))->toContain(' disabled')
+        ->and($html)->toContain('<select id="exp-sub" name="SubAction" disabled>');
 });
