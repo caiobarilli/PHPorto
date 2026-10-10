@@ -58,6 +58,7 @@ final readonly class ConfigView
      *
      * @param bool   $uacOk      se a política do UAC garante um prompt por ação sensível
      * @param string $uacSummary a linha que diz em que pé o UAC está
+     * @param string $tz         fuso das datas da tela (o do Windows, como no resto do app)
      */
     public function __construct(
         public string $provider,
@@ -78,6 +79,7 @@ final readonly class ConfigView
         public ?string $hypervEnabledAt,
         public bool $uacOk,
         public string $uacSummary,
+        public string $tz,
     ) {
     }
 }

@@ -118,3 +118,47 @@ it('o statePath fica em storage/, com o nome do arquivo próprio', function () {
         ->toBe((string) $this->storage . DIRECTORY_SEPARATOR . HypervGate::F_STATE)
         ->and(HypervGate::F_STATE)->toBe('hyperv.json');
 });
+
+it('lê o InstallState e a edição do Windows da saída da conferência', function () {
+    expect(HypervGate::parseCheck("HYPERV=1\r\nEDICAO=Microsoft Windows 11 Pro\r\n"))
+        ->toBe([1, 'Microsoft Windows 11 Pro']);
+});
+
+it('conferência ilegível: estado 0 e edição null', function (string $saida, bool $timeout) {
+    expect(HypervGate::parseCheck($saida, $timeout))->toBe([0, null]);
+})->with([
+    'erro'     => ['HYPERV=erro' . "\nEDICAO=?\n", false],
+    'vazio'    => ['', false],
+    'timeout'  => ["HYPERV=1\nEDICAO=Microsoft Windows 11 Pro\n", true],
+]);
+
+it('edição com caractere fora do esperado não vai para a tela', function () {
+    expect(HypervGate::parseCheck("HYPERV=3\nEDICAO=<script>x</script>\n"))->toBe([3, null]);
+});
+
+it('não instalado no Windows Home: diz que o Home não tem, e não manda instalar', function () {
+    $frase = HypervGate::refusal(3, 'Microsoft Windows 11 Home Single Language');
+
+    expect($frase)->toContain('Microsoft Windows 11 Home Single Language')
+        ->and($frase)->toContain('Pro, Enterprise e Education')
+        ->and($frase)->not->toContain('Ativar ou desativar');
+});
+
+it('não instalado com edição ilegível: frase de sempre mais a nota genérica do Home', function () {
+    $frase = HypervGate::refusal(3, null);
+
+    expect($frase)->toContain('não está instalado neste Windows')
+        ->and($frase)->toContain('No Windows Home o Hyper-V não existe');
+});
+
+it('não instalado num Pro: frase de sempre, sem falar de Home', function () {
+    $frase = HypervGate::refusal(3, 'Microsoft Windows 11 Pro');
+
+    expect($frase)->toContain('não está instalado neste Windows')
+        ->and($frase)->not->toContain('Home');
+});
+
+it('desligado e ilegível não mudam com a edição', function () {
+    expect(HypervGate::refusal(2, 'Microsoft Windows 11 Home'))->toContain('instalado, mas desligado')
+        ->and(HypervGate::refusal(0, 'Microsoft Windows 11 Home'))->toContain('Não foi possível conferir');
+});

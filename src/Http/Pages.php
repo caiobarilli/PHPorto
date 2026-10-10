@@ -152,6 +152,7 @@ final class Pages
             hypervEnabledAt: $this->hyperv->enabledAt(),
             uacOk: $this->uac->blockingReason() === null,
             uacSummary: $this->uac->summary(),
+            tz: $this->config['tz'],
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view));

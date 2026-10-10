@@ -92,6 +92,11 @@ use App\Http\Respond;
     </a>
   </div>
 
+  <?php
+  // Painel ligado com o PowerShell elevado desligado: o botão fica ativo (é
+  // decisão persistente), mas a tela só teria a faixa de bloqueio. Avisa antes.
+  $hypervSemPs = $view->hypervEnabled && !$view->winEnabled;
+?>
   <?php if (!$view->wslEnabled || !$view->winEnabled || !$view->hypervEnabled): ?>
     <ul class="home-notas">
       <?php if (!$view->wslEnabled): ?>
@@ -102,6 +107,8 @@ use App\Http\Respond;
       <?php endif; ?>
       <?php if (!$view->hypervEnabled): ?>
         <li><strong>Hyper-V:</strong> <?= Respond::e($view->hypervReason) ?></li>
+      <?php elseif ($hypervSemPs): ?>
+        <li><strong>Hyper-V:</strong> precisa do PowerShell elevado ligado para listar as máquinas virtuais.</li>
       <?php endif; ?>
     </ul>
   <?php endif; ?>

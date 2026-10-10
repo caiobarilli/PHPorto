@@ -26,4 +26,29 @@ final readonly class HypervVm
         public array $ip,
     ) {
     }
+
+    /**
+     * Os endereços que servem para alguma coisa, na ordem em que servem.
+     *
+     * IPv4 primeiro, porque é o que se digita no RDP e no navegador; depois os
+     * IPv6 que sobram. O link-local (fe80::) sai: não sai da rede local da VM e
+     * só confunde. Lista vazia é "não deu para ler um endereço útil".
+     *
+     * @return list<string>
+     */
+    public function usefulIps(): array
+    {
+        $v4 = [];
+        $v6 = [];
+
+        foreach ($this->ip as $ip) {
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+                $v4[] = $ip;
+            } elseif (stripos($ip, 'fe80:') !== 0) {
+                $v6[] = $ip;
+            }
+        }
+
+        return array_merge($v4, $v6);
+    }
 }

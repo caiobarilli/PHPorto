@@ -146,6 +146,8 @@ use App\Http\Respond;
 
   .meta { color: var(--mut); font-size: 12px; margin-left: auto; font-variant-numeric: tabular-nums; }
   .ok { color: #15803d; } .bad { color: #b91c1c; }
+  .vm-parada { color: var(--mut); }
+  .vm-ip { font: 12px var(--mono); }
 
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   th, td { border: 1px solid var(--line); padding: 8px; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
