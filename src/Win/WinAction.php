@@ -123,14 +123,52 @@ enum WinAction: string
     public const RDP_SUBACTIONS = ['status', 'on', 'off', 'h264-on', 'h264-off'];
 
     /**
-     * O sunshine lê, instala pelo winget, sobe e para o serviço, e abre/fecha a
-     * porta no firewall.
+     * O sunshine lê, instala pelo winget, sobe e para o serviço, abre/fecha a
+     * porta no firewall, grava as credenciais da Web UI e pareia um Moonlight.
      *
-     * O pareamento NÃO está aqui: ele exige um PIN digitado na interface do
-     * próprio Sunshine, com validade curta, e isso é passo humano. Só start e
-     * stop mexem no estado do serviço; ver stateChange().
+     * set-creds e pair são as duas que levam texto da pessoa (usuário, senha,
+     * PIN, nome do dispositivo); as outras seis recusam esses campos. O PIN é
+     * PEDIDO na tela, mas nunca GUARDADO: ver SECRET_PARAMS. Só start e stop
+     * mexem no estado do serviço; ver stateChange().
      */
-    public const SUNSHINE_SUBACTIONS = ['status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close'];
+    public const SUNSHINE_SUBACTIONS = ['status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close', 'set-creds', 'pair'];
+
+    /** As subações do sunshine que levam credencial. As outras recusam os campos dela. */
+    public const SUNSHINE_CRED_SUBACTIONS = ['set-creds', 'pair'];
+
+    /** Os campos de texto que só set-creds e pair aceitam, mais a caixa SetCreds. */
+    public const SUNSHINE_CRED_FIELDS = ['User', 'Password', 'Pin', 'DeviceName', 'SetCreds'];
+
+    /**
+     * Os tetos das credenciais do sunshine, em BYTES (strlen), como o
+     * MAX_PARAM_BYTES. O worker.ps1 repete os mesmos números na allowlist
+     * dele, e o teste de paridade confere.
+     *
+     * A senha mínima de 8 é nossa: o Sunshine não exige mínimo, e é a senha da
+     * tela que controla quem transmite esta máquina. O nome do dispositivo para
+     * em 128 porque é o limite do próprio Sunshine.
+     */
+    public const SUNSHINE_USER_MAX = 64;
+
+    public const SUNSHINE_PASSWORD_MIN = 8;
+
+    public const SUNSHINE_PASSWORD_MAX = 256;
+
+    public const SUNSHINE_DEVICE_MAX = 128;
+
+    /** O nome com que o Moonlight aparece no Sunshine, quando o campo vem vazio. */
+    public const SUNSHINE_DEVICE_DEFAULT = 'notebook';
+
+    /**
+     * Parâmetros que NUNCA aparecem em claro fora do caminho da execução.
+     *
+     * O rótulo do histórico (Pages::describe) troca o valor deles por ***, na
+     * gravação normal e no recolhimento de órfãs. O worker.ps1 faz o mesmo no
+     * win-done-<id>.json com o $SEGREDOS dele. O que sobra em claro é o pedido
+     * em files/ enquanto o UAC está na tela (até ~75 s), apagado em todo
+     * caminho — ver docs/seguranca.md.
+     */
+    public const SECRET_PARAMS = ['Password', 'Pin'];
 
     /** run gera a auditoria; open abre a pasta do log no Explorer. Sem subação, run. */
     public const AUDIT_SUBACTIONS = ['run', 'open'];
@@ -143,7 +181,10 @@ enum WinAction: string
      *
      * São as que abrem a máquina para a rede (rdp on, as portas do firewall),
      * instalam programa ou serviço (install, sunshine install, exporter
-     * install) ou registram tarefa SYSTEM (gpu install). Com o PowerShell elevado longo de pé,
+     * install), registram tarefa SYSTEM (gpu install), trocam a senha de
+     * administração do Sunshine (sunshine set-creds) ou autorizam um
+     * dispositivo novo a ver e controlar a tela (sunshine pair, da mesma classe
+     * do rdp on). Com o PowerShell elevado longo de pé,
      * quem lesse o nonce do marcador rodaria qualquer uma delas sem prompt;
      * por isso o worker longo as RECUSA, e cada uma abre o próprio prompt do
      * Windows (ver OneShot).
@@ -157,7 +198,7 @@ enum WinAction: string
     public const SENSITIVE = [
         'install'  => '*',
         'rdp'      => ['on'],
-        'sunshine' => ['install', 'firewall-open'],
+        'sunshine' => ['install', 'firewall-open', 'set-creds', 'pair'],
         'exporter' => ['install', 'firewall'],
         'gpu'      => ['install'],
     ];
@@ -202,7 +243,7 @@ enum WinAction: string
             self::Gpu       => ['SubAction' => $this->pick($input, 'SubAction', self::GPU_SUBACTIONS, obrigatorio: true)],
             self::Gdid      => ['SubAction' => $this->pick($input, 'SubAction', self::GDID_SUBACTIONS, obrigatorio: true)],
             self::Rdp       => ['SubAction' => $this->pick($input, 'SubAction', self::RDP_SUBACTIONS, obrigatorio: true)],
-            self::Sunshine  => ['SubAction' => $this->pick($input, 'SubAction', self::SUNSHINE_SUBACTIONS, obrigatorio: true)],
+            self::Sunshine  => $this->sunshine($input),
             self::Optimize  => $this->optimize($input),
         };
     }
@@ -252,8 +293,9 @@ enum WinAction: string
      *             H.264/UDP no PendingReboot, valendo só depois de reiniciar.
      *             Duas dimensões, dois escopos, cada subação movendo o seu.
      *   sunshine  'start' sobe o serviço e 'stop' o para, no Applied. install,
-     *             firewall e status não afirmam estado; o pareamento é passo
-     *             humano e nem chega aqui.
+     *             firewall, status, set-creds e pair não afirmam estado: o
+     *             set-creds devolve o serviço a Running, mas quem afirma isso é
+     *             o start.
      *
      * POR QUE O ESTADO NÃO É LIDO DA MÁQUINA, apesar de optimize e gdid
      * guardarem arquivo próprio e o plano de energia ser consultável por
@@ -307,8 +349,7 @@ enum WinAction: string
             },
 
             // Só o estado do serviço vira 'aplicado': start liga, stop esquece.
-            // install, firewall e status não afirmam nada. O pareamento é passo
-            // humano e nem chega aqui.
+            // install, firewall, status, set-creds e pair não afirmam nada.
             self::Sunshine => match ($params['SubAction'] ?? '') {
                 'start' => new WinStateChange(applied: true),
                 'stop'  => new WinStateChange(applied: false),
@@ -591,6 +632,160 @@ enum WinAction: string
         }
 
         return ['Apps' => $juntos];
+    }
+
+    /**
+     * Valida o sunshine: a subação e, em set-creds e pair, as credenciais.
+     *
+     * As seis subações antigas RECUSAM os campos de credencial, em vez de
+     * ignorá-los: parâmetro sobrando nunca chega ao worker, e um PIN digitado
+     * num pedido que não o usa vira erro na tela em vez de ir para o disco.
+     * Pelo mesmo motivo set-creds recusa Pin e DeviceName.
+     *
+     * A SENHA NÃO SOFRE TRIM: espaço nas pontas é senha. O usuário, o PIN e o
+     * nome sofrem. As mensagens citam o NOME do campo, nunca o valor.
+     *
+     * A COMBINAÇÃO é conferida aqui e de novo no Invoke-Sunshine, como o
+     * Invoke-DNS faz com Custom: o worker só confere cada campo sozinho.
+     *
+     * @param array<string, string> $input
+     *
+     * @return array<string, string|bool>
+     */
+    private function sunshine(array $input): array
+    {
+        $sub    = $this->pick($input, 'SubAction', self::SUNSHINE_SUBACTIONS, obrigatorio: true);
+        $params = ['SubAction' => $sub];
+
+        if (!in_array($sub, self::SUNSHINE_CRED_SUBACTIONS, true)) {
+            foreach (self::SUNSHINE_CRED_FIELDS as $campo) {
+                if (trim($input[$campo] ?? '') !== '') {
+                    throw new InvalidArgumentException(sprintf('%s não vale para a subação %s.', $campo, $sub));
+                }
+            }
+
+            return $params;
+        }
+
+        $params['User']     = $this->sunshineUser($input);
+        $params['Password'] = $this->sunshinePassword($input);
+
+        if ($sub === 'set-creds') {
+            foreach (['Pin', 'DeviceName'] as $campo) {
+                if (trim($input[$campo] ?? '') !== '') {
+                    throw new InvalidArgumentException(sprintf(
+                        'Só gravar credenciais não usa %s: apague o campo, ou use Parear com o PIN.',
+                        $campo
+                    ));
+                }
+            }
+
+            return $params;
+        }
+
+        $pin = trim($input['Pin'] ?? '');
+
+        if ($pin === '') {
+            throw new InvalidArgumentException('Preencha Pin.');
+        }
+
+        // Sem /u de propósito: \d com /u casaria dígito de outra escrita, e o
+        // Sunshine só aceita 0-9.
+        if (preg_match('/\A[0-9]{4}\z/', $pin) !== 1) {
+            throw new InvalidArgumentException('Pin deve ter 4 dígitos, de 0 a 9.');
+        }
+
+        $params['Pin']        = $pin;
+        $params['DeviceName'] = $this->sunshineDevice($input);
+
+        if ($this->flag($input, 'SetCreds')) {
+            $params['SetCreds'] = true;
+        }
+
+        return $params;
+    }
+
+    /**
+     * @param array<string, string> $input
+     */
+    private function sunshineUser(array $input): string
+    {
+        $user = trim($input['User'] ?? '');
+
+        if ($user === '') {
+            throw new InvalidArgumentException('Preencha User.');
+        }
+
+        self::semControle('User', $user, self::SUNSHINE_USER_MAX);
+
+        // O cabeçalho Basic separa usuário e senha no PRIMEIRO dois-pontos.
+        if (str_contains($user, ':')) {
+            throw new InvalidArgumentException("User não pode ter ':'.");
+        }
+
+        return $user;
+    }
+
+    /**
+     * @param array<string, string> $input
+     */
+    private function sunshinePassword(array $input): string
+    {
+        $senha = $input['Password'] ?? '';
+
+        if ($senha === '') {
+            throw new InvalidArgumentException('Preencha Password.');
+        }
+
+        self::semControle('Password', $senha, self::SUNSHINE_PASSWORD_MAX);
+
+        if (strlen($senha) < self::SUNSHINE_PASSWORD_MIN) {
+            throw new InvalidArgumentException(sprintf(
+                'Password precisa de pelo menos %d bytes.',
+                self::SUNSHINE_PASSWORD_MIN
+            ));
+        }
+
+        return $senha;
+    }
+
+    /**
+     * @param array<string, string> $input
+     */
+    private function sunshineDevice(array $input): string
+    {
+        $nome = trim($input['DeviceName'] ?? '');
+
+        if ($nome === '') {
+            return self::SUNSHINE_DEVICE_DEFAULT;
+        }
+
+        self::semControle('DeviceName', $nome, self::SUNSHINE_DEVICE_MAX);
+
+        return $nome;
+    }
+
+    /**
+     * Confere UTF-8 válido, teto em bytes e ausência de caractere de controle.
+     *
+     * UTF-8 inválido é recusado aqui porque o pedido é JSON: o json_encode do
+     * OneShot falharia mais adiante com uma frase que não diz qual campo.
+     *
+     * @throws InvalidArgumentException citando o campo, nunca o valor
+     */
+    private static function semControle(string $campo, string $valor, int $teto): void
+    {
+        if (!mb_check_encoding($valor, 'UTF-8')) {
+            throw new InvalidArgumentException(sprintf('%s tem bytes que não são texto UTF-8.', $campo));
+        }
+
+        if (strlen($valor) > $teto) {
+            throw new InvalidArgumentException(sprintf('%s passou do teto de %d bytes.', $campo, $teto));
+        }
+
+        if (preg_match('/[\x00-\x1F\x7F]/', $valor) === 1) {
+            throw new InvalidArgumentException(sprintf('%s não pode ter caractere de controle.', $campo));
+        }
     }
 
     /**

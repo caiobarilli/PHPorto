@@ -250,7 +250,7 @@ pede um prompt de UAC próprio:
 | --- | --- |
 | `install` | todas (o winget instala qualquer coisa do catálogo) |
 | `rdp` | `on` (abre o acesso remoto e a porta no firewall) |
-| `sunshine` | `install`, `firewall-open` |
+| `sunshine` | `install`, `firewall-open`, `set-creds` (troca a senha da Web UI), `pair` (autoriza um dispositivo a ver e controlar a tela) |
 | `exporter` | `install`, `firewall` |
 | `gpu` | `install` (cria uma tarefa agendada como SYSTEM) |
 
@@ -351,6 +351,54 @@ mais o worker longo recusando as sensíveis.
 - **Caminho longo.** O `-Verb RunAs` corta a linha em ~2048 caracteres sem
   avisar. Acima de 1900, o PHP recusa antes de abrir o prompt e pede para mover
   o projeto para um caminho mais curto.
+
+### Sunshine: senha da Web UI e PIN do Moonlight
+
+`sunshine set-creds` grava o usuário e a senha da Web UI do Sunshine, e
+`sunshine pair` pareia um Moonlight pelo PIN (opcionalmente gravando as
+credenciais antes, no mesmo UAC). As duas são sensíveis: a primeira troca a
+credencial de administração do Sunshine, a segunda autoriza um cliente novo a
+ver e controlar o desktop — a mesma classe do `rdp on`. O prompt é a confirmação
+humana; sem ele, uma sessão do PHPorto sequestrada pareava um dispositivo
+estranho em silêncio.
+
+O PHPorto **pede** o PIN, mas **não guarda** senha nem PIN em repouso:
+
+| onde | o que fica |
+| --- | --- |
+| formulário | `POST` no corpo, nunca na URL; senha em `type=password`; os campos voltam vazios (o script do sem-reload limpa senha e PIN) |
+| mensagens de validação | citam o nome do campo, nunca o valor |
+| histórico (`Pages::describe`) | `-Password *** -Pin ***` (`WinAction::SECRET_PARAMS`), também no recolhimento de órfãs |
+| pedido `files/win-oneshot-<id>.json` | **em claro** enquanto o UAC está na tela (até ~75 s); apagado pelo worker ao consumir e pelo `finally` do PHP. Com o UAC fraco o PHP recusa **antes** de gravar o pedido |
+| linha de comando do processo elevado | só caminhos e hashes, como em toda ação sensível |
+| `win-exec-<id>.ps1` (pasta protegida) | os parâmetros em base64 enquanto o filho roda; sai no fim |
+| `win-done-<id>.json` (pasta protegida) | `***` no lugar de `Password` e `Pin` (`$SEGREDOS` do worker) |
+| `win-worker.log` | só ação e id, como sempre |
+| saída da ação | nunca a senha, o PIN ou o cabeçalho `Authorization`; a saída do `sunshine.exe --creds` é descartada |
+
+**A conexão com o Sunshine** vai só para `https://127.0.0.1:47990`, sem
+parâmetro de host, e o certificado do outro lado tem de ter o mesmo SHA-256 do
+`config\credentials\cacert.pem` da instalação. O callback de certificado é da
+requisição, não do processo; nada de "aceitar qualquer certificado". Sem proxy,
+sem redirect automático. A instalação tem de estar sob `Program Files` (a pasta
+sai do caminho do serviço `SunshineService`), senão a ação recusa.
+
+**Riscos aceitos:**
+
+- **A senha na linha de comando do `sunshine.exe --creds`.** É a única interface
+  do Sunshine para trocar a senha sem saber a atual. O processo é de
+  integridade Alta e vive menos de um segundo, mas a auditoria de criação de
+  processo (evento 4688 com linha de comando), o Sysmon e antivírus/EDR podem
+  registrá-la.
+- **Segredo em arquivo legível pelo próprio usuário por pouco tempo**: o pedido
+  durante o prompt e o `win-exec-<id>.ps1` durante a execução. Contra processo
+  do mesmo usuário isso não é fronteira (ele também lê a memória do `php -S`).
+  O que se garante é nada em repouso: banco, log, `win-done` e pedido recusado
+  ficam sem segredo.
+- **A API do Sunshine muda.** Desde a v2026.906 o pareamento exige o
+  `pairing_id` do pedido pendente; a ação detecta a versão pelo `GET /api/pin`
+  (200 com a lista = nova, 404 = antiga). Uma mudança futura quebra com
+  mensagem, não em silêncio.
 
 ## O `.env` não é escrito pela web
 

@@ -46,7 +46,8 @@ desabilitado e nenhuma ação comum roda. As sensíveis, abaixo, não dependem d
 
 Algumas ações pedem **um prompt de UAC a cada execução**, mesmo com o
 PowerShell elevado ligado: instalar apps (`install`), ligar o acesso remoto
-(`rdp on`), instalar o Sunshine e abrir a porta dele no firewall, instalar o
+(`rdp on`), instalar o Sunshine, abrir a porta dele no firewall, gravar a senha
+da Web UI dele e parear um Moonlight, instalar o
 windows_exporter e liberá-lo no firewall, e instalar o exportador da GPU. Na
 tela, o botão ou a opção delas diz **abre o UAC**.
 
@@ -221,6 +222,27 @@ domínios do WNS entram no bloqueio, e apps da Store param de receber aviso.
 ou para o Alto Desempenho quando o Windows não tem o primeiro. **Voltar ao
 Balanceado** devolve o plano padrão do Windows.
 
+### Sunshine (`sunshine`)
+
+Na aba **Acesso Remoto**. Além de ver o estado, instalar, iniciar/parar o
+serviço e abrir/fechar a porta 47990, a seção tem um formulário com usuário,
+senha, PIN e nome do dispositivo:
+
+- **Parear com o PIN** (`pair`) — no Moonlight, adicione este PC; ele mostra um
+  PIN de 4 dígitos. Digite o PIN, o usuário e a senha da Web UI, clique e
+  aceite o UAC. Com **Gravar estas credenciais antes de parear** marcado, o
+  mesmo UAC primeiro troca o usuário e a senha (necessário na primeira vez,
+  quando o Sunshine ainda não tem credenciais). Se mais de um Moonlight estiver
+  esperando PIN, a ação recusa e lista nome e endereço de cada um.
+- **Só gravar credenciais** (`set-creds`) — para o serviço, grava usuário e
+  senha com o próprio `sunshine.exe --creds` e sobe o serviço de volta (mesmo se
+  a gravação falhar). Não usa PIN nem nome.
+
+A senha tem pelo menos 8 bytes; o usuário não pode ter `:`. O histórico mostra
+o usuário, mas `***` no lugar da senha e do PIN. O PIN expira em pouco tempo no
+Moonlight: se o UAC demorar, gere outro. Detalhes em
+[seguranca.md](seguranca.md#sunshine-senha-da-web-ui-e-pin-do-moonlight).
+
 ## A tela Hyper-V
 
 `/hyperv` lista as máquinas virtuais deste computador: nome, situação, memória
@@ -287,7 +309,7 @@ Apagar o histórico do Windows não apaga essa memória. Restaurar de fábrica, 
 
 O histórico do Windows fica no fim da tela, fora das abas. Cada linha guarda a
 linha de comando equivalente, a saída, o código de saída e a duração, com a data
-no fuso de `PHPORTO_TZ`. **Limpar histórico do Windows** apaga só os registros
+no fuso de `PHPORTO_TZ`. Senha e PIN do Sunshine aparecem como `***`. **Limpar histórico do Windows** apaga só os registros
 de tipo `windows`; o do WSL fica.
 
 ## Onde as ações gravam

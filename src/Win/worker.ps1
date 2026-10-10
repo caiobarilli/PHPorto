@@ -157,7 +157,10 @@ $RAIZ_WIN    = $PSScriptRoot
 #
 # 'set'  = conjunto fechado de valores aceitos: os de 'valores', mais os da
 #          lista que 'fonte' nomeia, quando houver
-# 'text' = texto livre, com teto de bytes
+# 'text' = texto livre, com teto de bytes. Opcionais: 'max' (teto proprio, em
+#          bytes, no lugar do $MAX_PARAM_BYTES), 'min' (piso em bytes) e
+#          'padrao' (regex .NET, conferida com -cmatch). Os tres sao em bytes
+#          pelo mesmo motivo do teto: o lado PHP mede com strlen()
 # 'int'  = inteiro numa faixa
 # 'flag' = switch, so entra na chamada quando verdadeiro
 # 'lista' = itens separados por virgula, cada um da lista que 'fonte' nomeia
@@ -221,8 +224,18 @@ $ALLOWLIST = @{
         'SubAction' = @{ tipo = 'set'; valores = @('status', 'on', 'off', 'h264-on', 'h264-off') }
     }
 
+    # set-creds e pair levam texto da pessoa. Cada campo e' conferido sozinho
+    # aqui; a COMBINACAO (pair exige Pin, set-creds recusa) e' conferida no
+    # Invoke-Sunshine, como o Invoke-DNS faz com Custom. Os numeros sao os da
+    # WinAction (SUNSHINE_*), e o teste de paridade confere. Password e Pin
+    # estao em $SEGREDOS: o arquivo de conclusao nunca os grava.
     'sunshine'    = @{
-        'SubAction' = @{ tipo = 'set'; valores = @('status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close') }
+        'SubAction'  = @{ tipo = 'set'; valores = @('status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close', 'set-creds', 'pair') }
+        'User'       = @{ tipo = 'text'; max = 64; padrao = '\A[^:\x00-\x1F\x7F]+\z' }
+        'Password'   = @{ tipo = 'text'; max = 256; min = 8; padrao = '\A[^\x00-\x1F\x7F]+\z' }
+        'Pin'        = @{ tipo = 'text'; max = 4; padrao = '\A[0-9]{4}\z' }
+        'DeviceName' = @{ tipo = 'text'; max = 128; padrao = '\A[^\x00-\x1F\x7F]+\z' }
+        'SetCreds'   = @{ tipo = 'flag' }
     }
 
     # O hyperv so lista, e listar nao tem parametro: allowlist vazia, como
@@ -234,8 +247,9 @@ $ALLOWLIST = @{
 # SENSIVEIS — so com UAC proprio
 # ============================================================
 #
-# As acoes que abrem a maquina para a rede, instalam programa ou registram
-# tarefa SYSTEM. O laco RECUSA estas (Test-Job -Modo Laco): com o worker longo
+# As acoes que abrem a maquina para a rede, instalam programa, registram
+# tarefa SYSTEM, trocam a senha de administracao do Sunshine (set-creds) ou
+# autorizam um dispositivo novo a ver e controlar a tela (pair). O laco RECUSA estas (Test-Job -Modo Laco): com o worker longo
 # de pe, quem lesse o nonce do marcador rodaria qualquer uma delas sem prompt.
 # Elas so rodam no modo de uso unico, que nasce de um prompt de UAC por clique,
 # e o uso unico so roda estas.
@@ -245,9 +259,21 @@ $ALLOWLIST = @{
 $SENSIVEIS = @{
     'install'  = '*'
     'rdp'      = @('on')
-    'sunshine' = @('install', 'firewall-open')
+    'sunshine' = @('install', 'firewall-open', 'set-creds', 'pair')
     'exporter' = @('install', 'firewall')
     'gpu'      = @('install')
+}
+
+# ============================================================
+# SEGREDOS — o que o arquivo de conclusao nunca grava
+# ============================================================
+#
+# Os parametros que o Write-Done troca por '***' antes de serializar. Sem isso
+# a senha e o PIN ficariam no win-done-<id>.json ate o PHP recolher — ou para
+# sempre, se o php -S morrer. O lado PHP repete a lista em
+# WinAction::SECRET_PARAMS, que mascara o historico.
+$SEGREDOS = @{
+    'sunshine' = @('Password', 'Pin')
 }
 
 # ============================================================
@@ -573,10 +599,20 @@ function Test-Job($job, [ValidateSet('Laco', 'UmaVez')] [string]$Modo = 'Laco') 
                     $texto = [string]$valor
                     # BYTES, nao caracteres: o lado PHP compara com strlen(),
                     # e .Length aqui contaria um acento como um.
-                    if ([System.Text.Encoding]::UTF8.GetByteCount($texto) -gt $MAX_PARAM_BYTES) {
+                    $bytes = [System.Text.Encoding]::UTF8.GetByteCount($texto)
+                    $teto  = if ($regra.max) { [int]$regra.max } else { $MAX_PARAM_BYTES }
+                    if ($bytes -gt $teto) {
                         throw "'$nome' passou do teto de bytes"
                     }
+                    if ($regra.min -and $bytes -lt [int]$regra.min) {
+                        throw "'$nome' abaixo do minimo de bytes"
+                    }
                     if ($texto.Contains([char]0)) { throw "'$nome' tem byte nulo" }
+                    # A mensagem cita o NOME, nunca o valor: o campo pode ser
+                    # senha, e esta frase vai para o log e para a tela.
+                    if ($regra.padrao -and $texto -cnotmatch $regra.padrao) {
+                        throw "'$nome' fora do formato"
+                    }
                     $aceitos[$nome] = $texto
                 }
                 'int' {
@@ -770,6 +806,9 @@ function New-InvocationScript($validado, [string]$id) {
     significa "separador de hora da cultura", nao dois-pontos literais. Numa
     cultura que use outro separador o carimbo sairia num formato que o banco
     nao entende.
+
+    SEGREDO SAI COMO '***' (ver $SEGREDOS): o arquivo carrega os parametros
+    para o recolhimento, e o recolhimento so precisa saber QUE havia senha.
 #>
 function Write-Done {
     param(
@@ -788,7 +827,7 @@ function Write-Done {
         ms     = $ms
         nota   = $nota
         acao   = $acao
-        params = if ($null -eq $params) { [ordered]@{} } else { $params }
+        params = Hide-PhportoSegredos $acao $params
         fim    = [DateTime]::UtcNow.ToString(
             'yyyy-MM-dd HH:mm:ss',
             [System.Globalization.CultureInfo]::InvariantCulture
@@ -803,6 +842,24 @@ function Write-Done {
         ($dados | ConvertTo-Json -Compress -Depth 5),
         [System.Text.UTF8Encoding]::new($false)
     )
+}
+
+<#
+    Copia os parametros trocando os de $SEGREDOS por '***'.
+
+    Copia, e nao altera: quem chama ainda pode precisar do valor (o filho em
+    andamento, por exemplo). Sem parametros, devolve objeto vazio.
+#>
+function Hide-PhportoSegredos([string]$acao, $params) {
+    $copia = [ordered]@{}
+    if ($null -eq $params) { return $copia }
+
+    $esconder = if ($SEGREDOS.ContainsKey($acao)) { @($SEGREDOS[$acao]) } else { @() }
+
+    foreach ($nome in @($params.Keys)) {
+        $copia[$nome] = if ($nome -in $esconder) { '***' } else { $params[$nome] }
+    }
+    return $copia
 }
 
 # ============================================================

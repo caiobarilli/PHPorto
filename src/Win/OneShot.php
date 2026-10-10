@@ -109,6 +109,15 @@ final class OneShot
             throw new RuntimeException('A pasta de trabalho não existe: ' . $this->filesDir . '.');
         }
 
+        // A tela já confere antes de chamar; conferir de novo AQUI, antes de
+        // gravar o pedido, é o que garante que com o UAC fraco nada vai para
+        // files/ — e o pedido do sunshine pode levar senha e PIN.
+        $bloqueio = $this->blockingReason();
+
+        if ($bloqueio !== null) {
+            throw new RuntimeException($bloqueio);
+        }
+
         $timeout  = min($timeoutSeconds, self::MAX_TIMEOUT_S);
         $id       = bin2hex(random_bytes(6));
         $pedido   = $this->path(Elevation::ONESHOT_PREFIX . $id . '.json');

@@ -834,6 +834,10 @@ final class Pages
      * seria falsear o registro — cada linha diz o que a ferramenta chamava
      * naquele dia.
      *
+     * SEGREDO SAI COMO ***: os parâmetros de WinAction::SECRET_PARAMS (a senha
+     * e o PIN do sunshine) nunca chegam ao banco. Vale para a gravação normal e
+     * para o recolhimento de órfãs, que passa por aqui também.
+     *
      * @param array<string, string|int|bool> $params
      */
     private static function describe(WinAction $acao, array $params): string
@@ -845,6 +849,12 @@ final class Pages
                 if ($valor) {
                     $partes[] = '-' . $nome;
                 }
+
+                continue;
+            }
+
+            if (in_array($nome, WinAction::SECRET_PARAMS, true)) {
+                $partes[] = '-' . $nome . ' ***';
 
                 continue;
             }
