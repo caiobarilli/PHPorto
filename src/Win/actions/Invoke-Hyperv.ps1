@@ -6,11 +6,14 @@
     try {
         $vms = @(Get-VM -ErrorAction Stop)
     } catch {
-        # Get-VM so chega aqui elevado (o worker recusa subir sem elevacao). A
-        # falha que sobra e' o Hyper-V desligado no Windows depois que o painel
-        # ja tinha sido habilitado: hyperv=$false, e a faixa da tela diz isso.
+        # Get-VM so chega aqui elevado (o worker recusa subir sem elevacao). O
+        # que falhou nao e' sempre "Hyper-V desligado": o servico vmms parado,
+        # o modulo quebrado ou um erro WMI caem no mesmo catch. Por isso a
+        # saida leva um motivo fechado, e a tela so manda reiniciar quando o
+        # recurso esta mesmo desligado.
         Write-Output (ConvertTo-Json -Compress -Depth 3 ([ordered]@{
             hyperv = $false
+            motivo = (Get-PhportoHypervMotivo)
             erro   = [string]$_.Exception.Message
             vms    = @()
         }))
@@ -58,4 +61,24 @@
         hyperv = $true
         vms    = @($lista.ToArray())
     }))
+}
+
+function Get-PhportoHypervMotivo {
+    # So leitura, e cada sonda pode falhar sozinha: na duvida o motivo e'
+    # 'erro', que a tela mostra com a mensagem, sem mandar reiniciar nada.
+    try {
+        $f = Get-CimInstance -ClassName Win32_OptionalFeature -Filter "Name='Microsoft-Hyper-V'" -ErrorAction Stop
+        if ($null -eq $f -or [int]$f.InstallState -ne 1) { return 'recurso-desligado' }
+    } catch {
+        return 'erro'
+    }
+
+    try {
+        $s = Get-Service -Name 'vmms' -ErrorAction Stop
+        if ([string]$s.Status -ne 'Running') { return 'servico-parado' }
+    } catch {
+        return 'erro'
+    }
+
+    return 'erro'
 }

@@ -116,6 +116,9 @@ use App\Http\Respond;
   .alert { border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px; padding: 10px 13px; margin-bottom: 14px; font-size: 13px; background: var(--panel); }
   .alert-block { border-left-color: #b91c1c; }
   .alert-note  { border-left-color: #262626; }
+  .alert p { margin: 8px 0 0; }
+  .alert details { margin-top: 8px; } .alert summary { color: var(--mut); cursor: pointer; font-size: 12px; }
+  .alert details pre { margin: 6px 0 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; max-height: 220px; overflow: auto; }
 
   textarea, input[type=text] {
     width: 100%;

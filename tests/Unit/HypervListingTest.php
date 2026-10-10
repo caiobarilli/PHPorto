@@ -38,12 +38,44 @@ it('lê o hospedeiro ligado, as VMs e os campos de cada uma', function () {
         ->and($win->ip)->toBe([]);
 });
 
-it('hospedeiro desligado no Windows: hypervOn falso, sem VMs, sem problema', function () {
-    $listing = HypervListing::fromOutput('{"hyperv":false,"erro":"Hyper-V is not enabled","vms":[]}');
+it('hospedeiro fora: lê o motivo fechado e a mensagem, sem VMs e sem problema', function (string $motivo) {
+    $listing = HypervListing::fromOutput('{"hyperv":false,"motivo":"' . $motivo . '","erro":"Hyper-V is not enabled","vms":[]}');
 
     expect($listing->hypervOn)->toBeFalse()
         ->and($listing->vms)->toBe([])
-        ->and($listing->problem)->toBeNull();
+        ->and($listing->problem)->toBeNull()
+        ->and($listing->reason)->toBe($motivo)
+        ->and($listing->error)->toBe('Hyper-V is not enabled');
+})->with([
+    HypervListing::REASON_FEATURE_OFF,
+    HypervListing::REASON_SERVICE_STOPPED,
+    HypervListing::REASON_ERROR,
+]);
+
+it('motivo ausente ou desconhecido cai em "erro", NUNCA em recurso desligado', function (string $json) {
+    $listing = HypervListing::fromOutput($json);
+
+    expect($listing->hypervOn)->toBeFalse()
+        ->and($listing->reason)->toBe(HypervListing::REASON_ERROR);
+})->with([
+    'sem motivo'     => '{"hyperv":false,"erro":"x","vms":[]}',
+    'desconhecido'   => '{"hyperv":false,"motivo":"reinicie","vms":[]}',
+    'tipo errado'    => '{"hyperv":false,"motivo":1,"vms":[]}',
+]);
+
+it('erro vazio ou de tipo errado vira null, não texto em branco', function (string $json) {
+    expect(HypervListing::fromOutput($json)->error)->toBeNull();
+})->with([
+    '{"hyperv":false,"motivo":"erro","erro":"   ","vms":[]}',
+    '{"hyperv":false,"motivo":"erro","erro":42,"vms":[]}',
+    '{"hyperv":false,"motivo":"erro","vms":[]}',
+]);
+
+it('hospedeiro ligado não carrega motivo nem erro', function () {
+    $listing = HypervListing::fromOutput('{"hyperv":true,"motivo":"erro","erro":"x","vms":[]}');
+
+    expect($listing->reason)->toBeNull()
+        ->and($listing->error)->toBeNull();
 });
 
 it('hospedeiro ligado sem nenhuma VM: lista vazia, sem problema', function () {

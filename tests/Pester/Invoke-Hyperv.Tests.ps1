@@ -140,12 +140,60 @@ Describe "Invoke-Hyperv - no VMs" {
 # ==============================================================
 Describe "Invoke-Hyperv - host off" {
 
-    It "reports host off when Get-VM throws" {
+    It "reports host off when Get-VM throws, with the message" {
         Mock Get-VM { throw 'Hyper-V is not enabled' }
+        Mock Get-CimInstance { [PSCustomObject]@{ InstallState = 2 } }
 
         $obj = Invoke-Hyperv | ConvertFrom-Json
 
         $obj.hyperv       | Should -BeFalse
+        $obj.erro         | Should -Be 'Hyper-V is not enabled'
         @($obj.vms).Count | Should -Be 0
+    }
+
+    It "motivo is recurso-desligado when the feature is not enabled" {
+        Mock Get-VM { throw 'boom' }
+        Mock Get-CimInstance { [PSCustomObject]@{ InstallState = 2 } }
+        Mock Get-Service { throw 'should not be asked' }
+
+        (Invoke-Hyperv | ConvertFrom-Json).motivo | Should -Be 'recurso-desligado'
+        Should -Invoke -CommandName Get-Service -Times 0
+    }
+
+    It "motivo is recurso-desligado when the feature is absent" {
+        Mock Get-VM { throw 'boom' }
+        Mock Get-CimInstance { $null }
+
+        (Invoke-Hyperv | ConvertFrom-Json).motivo | Should -Be 'recurso-desligado'
+    }
+
+    It "motivo is servico-parado when the feature is on and vmms is stopped" {
+        Mock Get-VM { throw 'boom' }
+        Mock Get-CimInstance { [PSCustomObject]@{ InstallState = 1 } }
+        Mock Get-Service { [PSCustomObject]@{ Name = 'vmms'; Status = 'Stopped' } }
+
+        (Invoke-Hyperv | ConvertFrom-Json).motivo | Should -Be 'servico-parado'
+    }
+
+    It "motivo is erro when the feature is on and vmms is running" {
+        Mock Get-VM { throw 'WMI went away' }
+        Mock Get-CimInstance { [PSCustomObject]@{ InstallState = 1 } }
+        Mock Get-Service { [PSCustomObject]@{ Name = 'vmms'; Status = 'Running' } }
+
+        $obj = Invoke-Hyperv | ConvertFrom-Json
+        $obj.motivo | Should -Be 'erro'
+        $obj.erro   | Should -Be 'WMI went away'
+    }
+
+    It "motivo is erro when a probe itself fails (never guesses 'restart')" {
+        Mock Get-VM { throw 'boom' }
+        Mock Get-CimInstance { throw 'CIM down' }
+
+        (Invoke-Hyperv | ConvertFrom-Json).motivo | Should -Be 'erro'
+    }
+
+    It "the probes stay read only: no service is started" {
+        $text = Get-Content -Path $Script:Acao -Raw
+        $text | Should -Not -Match 'Start-Service|Set-Service|Restart-Service|Enable-WindowsOptionalFeature'
     }
 }

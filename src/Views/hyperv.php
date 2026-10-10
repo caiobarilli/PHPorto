@@ -5,15 +5,18 @@ declare(strict_types=1);
 /**
  * A tela /hyperv: a faixa do hospedeiro e a tabela de máquinas virtuais.
  *
- * A FAIXA DECIDE SE HÁ TABELA. Bloqueio (PowerShell elevado desligado), saída
- * fora do formato, ou Hyper-V desligado no Windows: em qualquer um a faixa é a
- * tela inteira e a tabela não aparece. Só com o hospedeiro ligado vem a lista —
+ * A FAIXA DECIDE SE HÁ TABELA. Bloqueio (PowerShell elevado desligado),
+ * leitura cancelada no teto, saída fora do formato, ou hospedeiro fora — com o
+ * motivo real: recurso desligado, serviço parado ou outro erro —: em qualquer
+ * um a faixa é a tela inteira e a tabela não aparece. Só o recurso desligado
+ * manda reiniciar; os outros não pedem uma ação cara sem motivo. Só com o hospedeiro ligado vem a lista —
  * ou, sem nenhuma VM, uma frase no lugar dela.
  *
  * @var \App\Http\HypervView $view
  */
 
 use App\Http\Respond;
+use App\Win\HypervListing;
 
 /** Os estados do Get-VM em português; o desconhecido cai na grafia original. */
 $estados = [
@@ -72,19 +75,45 @@ $listing = $view->listing;
   </div>
 
   <?php if ($view->blocked !== null): ?>
-    <div class="alert alert-block">
-      <strong>Não deu para listar as máquinas virtuais.</strong>
+    <div class="alert alert-block" id="hyperv-faixa">
+      <strong>Para ver as máquinas virtuais, o PHPorto precisa do PowerShell elevado ligado.</strong>
       <?= Respond::e($view->blocked) ?>
+      <p><a class="btn btn-sm" href="/config#form-ps">Abrir configuração</a></p>
+    </div>
+  <?php elseif ($view->timedOut): ?>
+    <div class="alert alert-block" id="hyperv-faixa">
+      <strong>A leitura demorou demais e foi cancelada.</strong>
+      Tente atualizar em instantes.
+      <p><a class="btn btn-sm" href="/hyperv">Atualizar</a></p>
     </div>
   <?php elseif ($listing === null): ?>
-    <div class="alert alert-block">A leitura das máquinas virtuais não voltou.</div>
+    <div class="alert alert-block" id="hyperv-faixa">A leitura das máquinas virtuais não voltou.</div>
   <?php elseif ($listing->problem !== null): ?>
-    <div class="alert alert-block"><?= Respond::e($listing->problem) ?></div>
-  <?php elseif ($listing->hypervOn === false): ?>
-    <div class="alert alert-block">
+    <div class="alert alert-block" id="hyperv-faixa"><?= Respond::e($listing->problem) ?></div>
+  <?php elseif ($listing->hypervOn === false && $listing->reason === HypervListing::REASON_FEATURE_OFF): ?>
+    <div class="alert alert-block" id="hyperv-faixa">
       <strong>O Hyper-V não está ligado no Windows.</strong>
       Ligá-lo é uma mudança no próprio Windows e exige reiniciar o computador — faça pelo
       "Ativar ou desativar recursos do Windows" e reinicie.
+    </div>
+  <?php elseif ($listing->hypervOn === false && $listing->reason === HypervListing::REASON_SERVICE_STOPPED): ?>
+    <div class="alert alert-block" id="hyperv-faixa">
+      <strong>O serviço de máquinas virtuais do Windows está parado.</strong>
+      Reiniciar o computador costuma resolver; se não, abra <em>Serviços</em> e inicie
+      "Gerenciamento de Máquina Virtual do Hyper-V". O PHPorto não inicia o serviço por você.
+      <p><a class="btn btn-sm" href="/hyperv">Atualizar</a></p>
+    </div>
+  <?php elseif ($listing->hypervOn === false): ?>
+    <div class="alert alert-block" id="hyperv-faixa">
+      <strong>Não deu para ler as máquinas virtuais.</strong>
+      O Hyper-V está ligado no Windows, mas a leitura falhou.
+      <?php if ($listing->error !== null): ?>
+        <details>
+          <summary>detalhes técnicos</summary>
+          <pre><?= Respond::e($listing->error) ?></pre>
+        </details>
+      <?php endif; ?>
+      <p><a class="btn btn-sm" href="/hyperv">Atualizar</a></p>
     </div>
   <?php else:
       $vms     = $listing->vms;
@@ -96,6 +125,7 @@ $listing = $view->listing;
       <?= $total ?> <?= $total === 1 ? 'máquina virtual' : 'máquinas virtuais' ?> &middot;
       <?= $rodando ?> rodando &middot;
       lido em <?= Respond::e(Respond::dateTime($view->readAtUtc, $view->tz)) ?>
+      &middot; <a href="/hyperv" id="hyperv-atualizar">Atualizar</a>
     </p>
 
     <?php if ($vms === []): ?>

@@ -13,30 +13,75 @@ use App\Win\HypervListing;
  * formato e Hyper-V desligado no Windows são faixa de tela inteira, sem tabela.
  * Só o hospedeiro ligado traz a lista — ou uma frase quando não há VM.
  */
-function hypervHtml(?string $blocked = null, ?HypervListing $listing = null): string
+function hypervHtml(?string $blocked = null, ?HypervListing $listing = null, bool $timedOut = false): string
 {
     return Respond::render('hyperv.php', new HypervView(
         tz: 'America/Sao_Paulo',
         blocked: $blocked,
         listing: $listing,
         readAtUtc: '2026-09-28T12:00:00+00:00',
+        timedOut: $timedOut,
     ));
 }
 
-it('bloqueado: a faixa é a tela inteira, sem tabela', function () {
+it('bloqueado: a faixa é a tela inteira, sem tabela, com a saída para a configuração', function () {
     $html = hypervHtml(blocked: 'O PowerShell elevado está desligado.');
 
-    expect($html)->toContain('Não deu para listar as máquinas virtuais.')
+    expect($html)->toContain('o PHPorto precisa do PowerShell elevado ligado')
         ->and($html)->toContain('O PowerShell elevado está desligado.')
+        ->and($html)->toContain('<a class="btn btn-sm" href="/config#form-ps">Abrir configuração</a>')
         ->and($html)->not->toContain('<table>');
 });
 
-it('Hyper-V desligado no Windows: faixa de tela inteira, sem tabela', function () {
-    $html = hypervHtml(listing: HypervListing::fromOutput('{"hyperv":false,"vms":[]}'));
+it('leitura cancelada no teto: diz que demorou e oferece Atualizar, sem mandar reiniciar', function () {
+    $html = hypervHtml(timedOut: true);
+
+    expect($html)->toContain('A leitura demorou demais e foi cancelada.')
+        ->and($html)->toContain('href="/hyperv">Atualizar</a>')
+        ->and($html)->not->toContain('reiniciar o computador')
+        ->and($html)->not->toContain('<table>');
+});
+
+it('recurso desligado no Windows: só AQUI a tela manda reiniciar', function () {
+    $html = hypervHtml(listing: HypervListing::fromOutput('{"hyperv":false,"motivo":"recurso-desligado","vms":[]}'));
 
     expect($html)->toContain('O Hyper-V não está ligado no Windows.')
         ->and($html)->toContain('reiniciar o computador')
         ->and($html)->not->toContain('<table>');
+});
+
+it('serviço vmms parado: aponta o serviço e não fala em recurso desligado', function () {
+    $html = hypervHtml(listing: HypervListing::fromOutput('{"hyperv":false,"motivo":"servico-parado","vms":[]}'));
+
+    expect($html)->toContain('O serviço de máquinas virtuais do Windows está parado.')
+        ->and($html)->toContain('Gerenciamento de Máquina Virtual do Hyper-V')
+        ->and($html)->not->toContain('O Hyper-V não está ligado no Windows.')
+        ->and($html)->not->toContain('<table>');
+});
+
+it('outro erro: frase amigável e a mensagem crua recolhida e escapada', function () {
+    $html = hypervHtml(listing: HypervListing::fromOutput('{"hyperv":false,"motivo":"erro","erro":"WMI <falhou>","vms":[]}'));
+
+    expect($html)->toContain('Não deu para ler as máquinas virtuais.')
+        ->and($html)->toContain('<summary>detalhes técnicos</summary>')
+        ->and($html)->toContain('WMI &lt;falhou&gt;')
+        ->and($html)->not->toContain('<details open')
+        ->and($html)->not->toContain('reiniciar o computador')
+        ->and($html)->not->toContain('<table>');
+});
+
+it('saída do worker antigo, sem motivo: NÃO manda reiniciar', function () {
+    $html = hypervHtml(listing: HypervListing::fromOutput('{"hyperv":false,"erro":"x","vms":[]}'));
+
+    expect($html)->toContain('Não deu para ler as máquinas virtuais.')
+        ->and($html)->not->toContain('reiniciar o computador');
+});
+
+it('hospedeiro ligado: o Atualizar é um GET simples ao lado do "lido em"', function () {
+    $html = hypervHtml(listing: HypervListing::fromOutput('{"hyperv":true,"vms":[]}'));
+
+    expect($html)->toContain('<a href="/hyperv" id="hyperv-atualizar">Atualizar</a>')
+        ->and($html)->not->toContain('<form');
 });
 
 it('saída fora do formato: mostra o problema, sem tabela', function () {
