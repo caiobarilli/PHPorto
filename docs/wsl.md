@@ -25,7 +25,12 @@ Windows. Se o `wsl.exe` não responder, a tela não diz nada, em vez de chutar.
 
 ## Entrada e saída
 
-O campo de entrada aceita um comando de shell, de uma ou várias linhas. Ele roda
+A tela é um console: a saída em cima e o prompt `$` embaixo. O campo do prompt
+parece uma linha; **Enter** envia e **Shift+Enter** quebra a linha. Não é um
+terminal interativo: cada envio é um comando que roda até o fim e devolve a
+saída.
+
+O campo aceita um comando de shell, de uma ou várias linhas. Ele roda
 no bash da distro, a partir de `PHPORTO_WSL_ROOT`, com stdout e stderr juntos e
 na ordem real.
 
@@ -39,6 +44,11 @@ arquivo é um cabeçalho da ferramenta (`exec 2>&1` e o `cd` para
 `PHPORTO_WSL_ROOT`). Por isso as mensagens de erro do bash citam a linha **+1**
 em relação ao que foi digitado: um erro na primeira linha aparece como
 `cmd.sh: line 2`.
+
+O console usa a fonte JetBrainsMono Nerd Font instalada no Windows; sem ela, cai
+para Consolas e depois `ui-monospace`. A fonte não vem de CDN nem de arquivo
+estático: a PHPorto só a nomeia no CSS embutido em `layout.php`, e o navegador
+usa a que estiver instalada.
 
 ## Anexos
 
@@ -54,9 +64,15 @@ sentidos:
 O `~` no começo de um caminho vira o home do usuário do WSL. Os caminhos viajam
 por variável de ambiente, não interpolados no script.
 
-O botão **Inverter origem e destino** troca os dois campos, para devolver um
-arquivo pelo mesmo caminho por onde ele foi. Ele roda só no navegador: não envia
-o formulário e não gasta o token de uso único.
+Os dois campos começam vazios. O botão **Inverter** troca os dois, para
+devolver um arquivo pelo mesmo caminho por onde ele foi. O botão **Preencher**
+põe na origem o perfil do Windows visto do WSL (`USERPROFILE`, de
+`C:\Users\voce` para `/mnt/c/Users/voce`) e no destino o `PHPORTO_WSL_ROOT`;
+o que não estiver definido fica como está. Os dois rodam só no navegador: não
+enviam o formulário e não gastam o token de uso único.
+
+Não há zona de soltar arquivo: o navegador não entrega o caminho do arquivo no
+Windows, e o anexo trabalha com caminhos, não com upload.
 
 O histórico registra o anexo com o comando efetivo e os dois caminhos.
 

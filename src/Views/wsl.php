@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * A tela /wsl: entrada, saída, anexos e a tabela de registros.
+ * A tela /wsl: o console (saída em cima, prompt embaixo), anexos e registros.
  *
  * O estado "executando" aparece no PRIMEIRO clique, com contador de segundos e
  * o aviso do custo de acordar a VM. Sem isso, os ~4,5 s do primeiro comando do
@@ -80,34 +80,27 @@ $logs = (string) json_encode(
     <div class="alert alert-note" data-aviso><?= Respond::e($view->notice) ?></div>
   <?php endif; ?>
 
-  <section>
-    <h2>Entrada</h2>
-    <form method="post" action="/wsl" id="form-cmd" data-sem-reload>
+  <div class="term" aria-label="Console WSL">
+    <div class="term-bar">
+      <span><strong>wsl</strong> &middot; <?= Respond::e($view->distro) ?><?= $view->root !== '' ? ' &middot; ' . Respond::e($view->root) : '' ?></span>
+      <div class="term-btns">
+        <button type="button" class="term-btn" id="btn-copiar">Copiar</button>
+        <button type="button" class="term-btn" id="btn-copiar-json">Copiar JSON</button>
+      </div>
+    </div>
+    <pre class="term-scroll" id="output"><?= Respond::e($view->result->output ?? '') ?></pre>
+    <form method="post" action="/wsl" id="form-cmd" class="term-prompt" data-sem-reload>
       <input type="hidden" name="acao" value="comando">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <textarea id="input" name="cmd" spellcheck="false" autocomplete="off"
-                placeholder="comando de shell&#10;roda dentro do WSL, a partir de PHPORTO_WSL_ROOT"></textarea>
-      <div class="row">
-        <button type="button" class="btn btn-sm btn-ghost" id="btn-limpar-campo">Limpar campo</button>
-        <button type="submit" class="btn btn-sm" id="btn-enviar">Enviar</button>
-        <span class="meta" id="estado-cmd"></span>
-      </div>
+      <span class="term-ps" aria-hidden="true">$</span>
+      <textarea id="input" name="cmd" rows="1" spellcheck="false" autocomplete="off" aria-label="comando"
+                placeholder="comando de shell — roda no WSL, a partir de PHPORTO_WSL_ROOT"></textarea>
+      <button type="submit" class="term-go" id="btn-enviar">Enviar</button>
     </form>
-    <p class="dica">
-      Comando de até <?= number_format($view->maxCommandBytes, 0, ',', '.') ?> bytes. A saída é cortada em
-      <?= number_format($view->maxOutputBytes, 0, ',', '.') ?> bytes por execução, e o corte aparece na
-      própria saída — para guardar tudo, redirecione para arquivo no comando (<code>… &gt; saida.txt</code>).
-    </p>
-  </section>
-
-  <section>
-    <h2>Saída<?= $view->result !== null ? ' — última execução' : '' ?></h2>
-    <textarea id="output" disabled><?= Respond::e($view->result->output ?? '') ?></textarea>
-    <div class="row">
-      <button type="button" class="btn btn-sm btn-ghost" id="btn-copiar">Copiar</button>
-      <button type="button" class="btn btn-sm btn-ghost" id="btn-copiar-json">Copiar como JSON</button>
+    <div class="term-meta">
+      <span>Enter envia, Shift+Enter quebra a linha. Não é PTY. <span id="estado-cmd"></span></span>
       <?php if ($view->result !== null): ?>
-        <span class="meta">
+        <span>
           <?= $view->result->kind->value === 'anexo' ? 'anexo &middot; ' : '' ?>
           <?= $view->result->timedOut ? 'timeout &middot; ' : '' ?>
           exit
@@ -117,34 +110,38 @@ $logs = (string) json_encode(
         </span>
       <?php endif; ?>
     </div>
-  </section>
+  </div>
+  <p class="dica term-dica">
+    Comando de até <?= number_format($view->maxCommandBytes, 0, ',', '.') ?> bytes. A saída é cortada em
+    <?= number_format($view->maxOutputBytes, 0, ',', '.') ?> bytes por execução, e o corte aparece na
+    própria saída — para guardar tudo, redirecione para arquivo no comando (<code>… &gt; saida.txt</code>).
+  </p>
 
-  <section>
+  <section class="anexos">
     <h2>Anexos</h2>
     <form method="post" action="/wsl" id="form-anexo" data-sem-reload>
       <input type="hidden" name="acao" value="anexo">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <div class="campo">
-        <label for="origem">Origem</label>
-        <input type="text" id="origem" name="origem" spellcheck="false" autocomplete="off"
-               placeholder="/mnt/c/Users/voce/pasta/arquivo.csv">
-      </div>
-      <div class="campo">
-        <label for="destino">Destino</label>
-        <input type="text" id="destino" name="destino" spellcheck="false" autocomplete="off"
-               placeholder="~/pasta/arquivo.csv">
+      <div class="anexo-caminhos">
+        <div class="campo">
+          <label for="origem">Origem</label>
+          <input type="text" id="origem" name="origem" value="" spellcheck="false" autocomplete="off" placeholder="/mnt/c/…">
+        </div>
+        <div class="campo">
+          <label for="destino">Destino</label>
+          <input type="text" id="destino" name="destino" value="" spellcheck="false" autocomplete="off" placeholder="~/…">
+        </div>
       </div>
       <div class="row">
-        <button type="submit" class="btn btn-sm" id="btn-anexo">Enviar</button>
-        <button type="button" class="btn btn-sm btn-ghost" id="btn-inverter">Inverter origem e destino</button>
+        <button type="submit" class="btn btn-sm btn-claro" id="btn-anexo">Enviar</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-inverter" title="Inverter origem e destino">Inverter</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="btn-preencher"
+                data-origem="<?= Respond::e($view->windowsRoot) ?>" data-destino="<?= Respond::e($view->root) ?>">Preencher</button>
         <span class="meta" id="estado-anexo"></span>
       </div>
     </form>
     <p class="dica">
-      Os <strong>dois</strong> caminhos são vistos de dentro do WSL — é isso que faz o card servir nos dois sentidos.<br>
-      Do Windows para a distro: <code>/mnt/c/...</code> &rarr; <code>/home/voce/...</code><br>
-      Da distro para o Windows: <code>/home/voce/...</code> &rarr; <code>/mnt/c/...</code><br>
-      Cada caminho aceita até <?= number_format($view->maxPathBytes, 0, ',', '.') ?> bytes.
+      Os dois caminhos são vistos de dentro do WSL. Cada caminho aceita até <?= number_format($view->maxPathBytes, 0, ',', '.') ?> bytes.
     </p>
   </section>
 
@@ -250,7 +247,7 @@ $logs = (string) json_encode(
     estado = document.getElementById(estado);
     var output = document.getElementById('output');
     var t0 = Date.now();
-    if (output) { output.value = 'executando...\n'; }
+    if (output) { output.textContent = 'executando...\n'; }
     clearInterval(relogio);
     relogio = setInterval(function () {
       var s = ((Date.now() - t0) / 1000).toFixed(1);
@@ -258,7 +255,29 @@ $logs = (string) json_encode(
     }, 100);
   });
 
-  document.addEventListener('phporto:trocou', function () { clearInterval(relogio); });
+  var veioDoConsole = false;
+  document.addEventListener('submit', function (ev) { veioDoConsole = ev.target.id === 'form-cmd'; });
+
+  document.addEventListener('phporto:trocou', function () {
+    clearInterval(relogio);
+    if (veioDoConsole) { document.getElementById('input').focus(); }
+  });
+
+  // O campo parece uma linha: Enter envia pelo botão, Shift+Enter quebra a
+  // linha e o campo cresce até um teto, sem virar outra caixa.
+  document.addEventListener('keydown', function (ev) {
+    if (ev.target.id !== 'input' || ev.key !== 'Enter' || ev.shiftKey || ev.isComposing) { return; }
+    ev.preventDefault();
+    var botao = document.getElementById('btn-enviar');
+    if (botao.disabled) { return; }
+    if (botao.form.requestSubmit) { botao.form.requestSubmit(botao); } else { botao.click(); }
+  });
+
+  document.addEventListener('input', function (ev) {
+    if (ev.target.id !== 'input') { return; }
+    ev.target.style.height = 'auto';
+    ev.target.style.height = Math.min(ev.target.scrollHeight, 160) + 'px';
+  });
 
   var ACOES = {
     'btn-inverter': function () {
@@ -268,12 +287,13 @@ $logs = (string) json_encode(
       origem.value  = destino.value;
       destino.value = antes;
     },
-    'btn-limpar-campo': function () {
-      var input = document.getElementById('input');
-      input.value = '';
-      input.focus();
+    'btn-preencher': function (b) {
+      var origem  = b.getAttribute('data-origem') || '';
+      var destino = b.getAttribute('data-destino') || '';
+      if (origem !== '') { document.getElementById('origem').value = origem; }
+      if (destino !== '') { document.getElementById('destino').value = destino; }
     },
-    'btn-copiar': function (b) { copy(document.getElementById('output').value); flash(b); },
+    'btn-copiar': function (b) { copy(document.getElementById('output').textContent); flash(b); },
     'btn-copiar-json': function (b) { var l = logs(); copy(JSON.stringify(l.length ? l[0] : null, null, 2)); flash(b); },
     'btn-json': function (b) { copy(JSON.stringify(logs(), null, 2)); flash(b); },
     // Destrutivo e sem desfazer: confirma antes.

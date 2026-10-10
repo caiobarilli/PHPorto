@@ -976,6 +976,7 @@ final class Pages
             maxPathBytes: InputLimit::MAX_PATH_BYTES,
             // Só com a distro usável: distro ausente não está "dormindo".
             awake: $blocked === null ? $this->distroChecker->isRunning() : null,
+            windowsRoot: WslView::mntPath($this->config['wsl']['windows_home']),
         );
 
         Respond::html('PHPorto — WSL', Respond::render('wsl.php', $view));

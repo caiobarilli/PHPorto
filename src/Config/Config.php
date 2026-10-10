@@ -22,7 +22,7 @@ namespace App\Config;
  *     mongo: array{uri: string, database: string, collection: string},
  *     mysql: array{host: string, port: string, database: string, user: string, password: string, table: string},
  *     sqlite: array{path: string, table: string},
- *     wsl: array{root: string, distro: string, timeout: int},
+ *     wsl: array{root: string, distro: string, timeout: int, windows_home: string},
  *     winutil: array{timeout: int},
  *     tz: string,
  *     dashboard_enabled: bool,
@@ -80,6 +80,9 @@ final class Config
                 'root'    => self::env('PHPORTO_WSL_ROOT', ''),
                 'distro'  => self::env('PHPORTO_DISTRO', 'Debian'),
                 'timeout' => self::timeout(),
+                // O perfil do Windows de quem roda o servidor. Vem do sistema,
+                // não do .env, e só preenche a origem do card de anexos.
+                'windows_home' => self::system('USERPROFILE'),
             ],
             // A chave mantém o nome winutil porque a variável de ambiente
             // mantém: PHPORTO_WINUTIL_TIMEOUT continua sendo o nome no .env de
@@ -208,6 +211,13 @@ final class Config
         }
 
         return $default;
+    }
+
+    private static function system(string $key): string
+    {
+        $value = getenv($key);
+
+        return is_string($value) ? $value : '';
     }
 
     private static function env(string $key, string $default = ''): string

@@ -61,7 +61,7 @@ use App\Wsl\Distro;
  *         mongo: array{uri: string, database: string, collection: string},
  *         mysql: array{host: string, port: string, database: string, user: string, password: string, table: string},
  *         sqlite: array{path: string, table: string},
- *         wsl: array{root: string, distro: string, timeout: int},
+ *         wsl: array{root: string, distro: string, timeout: int, windows_home: string},
  *         winutil: array{timeout: int},
  *         tz: string,
  *         dashboard_enabled: bool,

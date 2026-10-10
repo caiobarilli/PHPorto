@@ -28,6 +28,18 @@ use App\Http\Respond;
     --btn:   #262626;
     --mono:  ui-monospace, Consolas, "Courier New", monospace;
     --sans:  "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    --mono-console: "JetBrainsMono Nerd Font", Consolas, ui-monospace, monospace;
+    --oh-bg:          #282C34;
+    --oh-fg:          #DCDFE4;
+    --oh-black:       #282C34;
+    --oh-red:         #E06C75;
+    --oh-green:       #98C379;
+    --oh-yellow:      #E5C07B;
+    --oh-blue:        #61AFEF;
+    --oh-purple:      #C678DD;
+    --oh-cyan:        #56B6C2;
+    --oh-brightblack: #5A6374;
+    --oh-cursor:      #FFFFFF;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -183,6 +195,53 @@ use App\Http\Respond;
   .grupo legend { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); padding: 0 6px; }
   .grupo.cuidado { border-color: #d97706; background: #fffbeb; }
   .grupo.cuidado legend { color: #b45309; font-weight: 600; }
+
+  /* ---- Console da /wsl -------------------------------------------------
+     One Half Dark só aqui, dentro de .term; o resto da PHPorto segue branco.
+     Os dois tons sem token (barra e bordas) saem misturados dos --oh-*. */
+  .term {
+    --term-bar:  color-mix(in srgb, var(--oh-black) 85%, #000);
+    --term-line: color-mix(in srgb, var(--oh-brightblack) 45%, var(--oh-bg));
+    background: var(--oh-bg); color: var(--oh-fg);
+    border-radius: 10px; overflow: hidden; margin-bottom: 0;
+    font: 13px/1.45 var(--mono-console);
+  }
+  .term-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 8px 12px; background: var(--term-bar); color: var(--oh-brightblack);
+    font: 12px/1.4 var(--sans);
+  }
+  .term-bar strong { color: var(--oh-fg); font-weight: 500; }
+  .term-btns { display: flex; gap: 6px; }
+  .term-btn {
+    background: transparent; color: var(--oh-fg); border: 1px solid var(--term-line);
+    border-radius: 6px; padding: 4px 9px; font: 500 12px/1 var(--sans); cursor: pointer;
+  }
+  .term-btn:hover { background: var(--term-line); }
+  .term-scroll {
+    margin: 0; min-height: 280px; max-height: 420px; overflow: auto;
+    padding: 12px 14px 8px; font: inherit; color: inherit;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .term-prompt { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--term-line); }
+  .term-ps { color: var(--oh-green); flex: none; line-height: 1.4; padding-top: 6px; }
+  .term-prompt textarea {
+    flex: 1; min-width: 0; height: auto; max-height: 160px; padding: 6px 0; resize: none; overflow-y: auto;
+    background: transparent; border: 0; border-radius: 0; outline: none;
+    color: var(--oh-fg); caret-color: var(--oh-cursor); font: 13px/1.4 var(--mono-console);
+  }
+  .term-prompt textarea::placeholder { color: var(--oh-brightblack); }
+  .term-go, .btn-claro { background: #fff; color: #1b1f24; }
+  .term-go { border: 0; border-radius: 6px; padding: 6px 12px; font: 600 12px/1 var(--sans); cursor: pointer; flex: none; margin-top: 2px; }
+  .btn-claro { border: 1px solid var(--line); font-weight: 600; }
+  .btn-claro:hover { background: var(--panel); }
+  .term-meta { display: flex; justify-content: space-between; gap: 12px; padding: 0 14px 10px; color: var(--oh-brightblack); font: 11px/1.4 var(--sans); }
+  .term-meta .ok { color: var(--oh-green); } .term-meta .bad { color: var(--oh-red); }
+  .term-meta strong { font-weight: 600; }
+  .term-dica { margin-bottom: 22px; }
+  .anexo-caminhos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .anexo-caminhos .campo { display: block; margin: 0; }
+  .anexo-caminhos .campo label { display: block; width: auto; margin-bottom: 6px; }
 
   /* ---- Interruptor da /config -------------------------------------------
      Um checkbox de verdade por baixo: o rótulo continua clicável, o teclado
