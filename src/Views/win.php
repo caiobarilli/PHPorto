@@ -574,17 +574,56 @@ foreach ($view->tweaks as $tw) {
         <?= $botao('sunshine', 'SubAction', 'firewall-open', 'Abrir a porta no firewall', true) ?>
         <?= $botao('sunshine', 'SubAction', 'firewall-close', 'Fechar a porta', true) ?>
       </div>
+      <form method="post" data-sem-reload id="sun-parear" autocomplete="off">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="sunshine">
+        <div class="campo">
+          <label for="sun-user">Usuário</label>
+          <input type="text" id="sun-user" name="User" autocomplete="username"
+                 maxlength="<?= \App\Win\WinAction::SUNSHINE_USER_MAX ?>"<?= $disSens ?>>
+        </div>
+        <div class="campo">
+          <label for="sun-senha">Senha</label>
+          <input type="password" id="sun-senha" name="Password" autocomplete="new-password"
+                 maxlength="<?= \App\Win\WinAction::SUNSHINE_PASSWORD_MAX ?>"<?= $disSens ?>>
+        </div>
+        <div class="campo">
+          <label for="sun-pin">PIN</label>
+          <input type="text" id="sun-pin" name="Pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4"
+                 autocomplete="off" data-segredo placeholder="0000"<?= $disSens ?>>
+        </div>
+        <div class="campo">
+          <label for="sun-nome">Nome</label>
+          <input type="text" id="sun-nome" name="DeviceName"
+                 maxlength="<?= \App\Win\WinAction::SUNSHINE_DEVICE_MAX ?>"
+                 placeholder="<?= Respond::e(\App\Win\WinAction::SUNSHINE_DEVICE_DEFAULT) ?>"<?= $disSens ?>>
+        </div>
+        <label class="caixa">
+          <input type="checkbox" name="SetCreds" value="1"<?= $disSens ?>>
+          <span>Gravar estas credenciais antes de parear</span>
+        </label>
+        <div class="row">
+          <button type="submit" class="btn btn-sm" name="SubAction" value="pair" data-uac<?= $disSens ?>>Parear com o PIN<?= Respond::e($avisoUac) ?></button>
+          <button type="submit" class="btn btn-sm btn-ghost" name="SubAction" value="set-creds" data-uac<?= $disSens ?>>Só gravar credenciais<?= Respond::e($avisoUac) ?></button>
+        </div>
+      </form>
       <div class="alert alert-note">
-        Depois de instalar e iniciar o serviço, o pareamento é feito em
-        <a href="https://localhost:47990" target="_blank" rel="noopener">https://localhost:47990</a>,
-        digitando um PIN que aparece lá. <strong>O PHPorto não faz esse passo</strong>: não pede o PIN e
-        não guarda o PIN em lugar nenhum.
+        <strong>Para parear:</strong> no Moonlight, adicione este PC; ele mostra um PIN de 4 dígitos. Digite
+        aqui o PIN e o usuário e a senha da Web UI do Sunshine (a senha tem pelo menos
+        <?= \App\Win\WinAction::SUNSHINE_PASSWORD_MIN ?> caracteres), e clique em <strong>Parear com o PIN</strong>.
+        O nome é como o dispositivo aparece no Sunshine; vazio, fica
+        <code><?= Respond::e(\App\Win\WinAction::SUNSHINE_DEVICE_DEFAULT) ?></code>.
+        Na primeira vez, marque <strong>Gravar estas credenciais</strong> para criar o usuário e a senha.
+        O PHPorto <strong>não guarda</strong> a senha nem o PIN: o histórico mostra <code>***</code> no lugar
+        deles. A Web UI continua em
+        <a href="https://localhost:47990" target="_blank" rel="noopener">https://localhost:47990</a>.
       </div>
       <p class="dica">
         <strong>Instalar</strong> baixa o Sunshine pelo winget. <strong>Iniciar</strong> e
         <strong>Parar</strong> ligam e desligam o serviço, valendo na hora. <strong>Abrir a porta</strong>
         libera a porta 47990 no firewall do Windows para outro dispositivo alcançar esta máquina;
-        <strong>Fechar</strong> desfaz. Comece por <strong>Ver o estado</strong>, que só lê.
+        <strong>Fechar</strong> desfaz. <strong>Só gravar credenciais</strong> troca o usuário e a senha
+        da Web UI, reiniciando o serviço. Comece por <strong>Ver o estado</strong>, que só lê.
       </p>
     </section>
   </div>

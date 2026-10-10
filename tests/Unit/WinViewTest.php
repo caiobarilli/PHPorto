@@ -271,7 +271,7 @@ it('o que o botão de reverter H.264/UDP manda passa pela validação e reverte 
         ->and($mud?->scope)->toBe(App\Domain\WinStateScope::PendingReboot);
 });
 
-it('sunshine oferece instalar, iniciar/parar, firewall e o link de pareamento com PIN', function () {
+it('sunshine oferece instalar, iniciar/parar, firewall e o link da Web UI', function () {
     $s = winSecao(winHtml(aba: WinTab::AcessoRemoto), 'sunshine');
 
     expect($s)->toContain('value="install"')
@@ -279,7 +279,49 @@ it('sunshine oferece instalar, iniciar/parar, firewall e o link de pareamento co
         ->and($s)->toContain('value="firewall-close"')
         ->and($s)->toMatch('~name="SubAction" value="start"><button type="submit" class="btn btn-sm">Iniciar serviço~')
         ->and($s)->toContain('https://localhost:47990')
-        ->and($s)->toContain('não guarda o PIN');
+        ->and($s)->not->toContain('O PHPorto não faz esse passo');
+});
+
+/** O formulário de credenciais e pareamento do sunshine. */
+function sunForm(string $secao): string
+{
+    $ini = (int) strpos($secao, '<form method="post" data-sem-reload id="sun-parear"');
+
+    return substr($secao, $ini, (int) strpos($secao, '</form>', $ini) - $ini);
+}
+
+it('sunshine tem o formulário de pareamento: POST, senha em type=password, sem eco de valor', function () {
+    $f = sunForm(winSecao(winHtml(aba: WinTab::AcessoRemoto), 'sunshine'));
+
+    expect($f)->toContain('method="post"')
+        ->and($f)->toContain('name="_csrf" value="t"')
+        ->and($f)->toContain('<input type="hidden" name="acao" value="sunshine">')
+        ->and($f)->toMatch('~<input type="password" id="sun-senha" name="Password" autocomplete="new-password"~')
+        ->and($f)->toMatch('~name="Pin" inputmode="numeric" pattern="\[0-9\]\{4\}" maxlength="4"\s+autocomplete="off" data-segredo~')
+        ->and($f)->toContain('name="User" autocomplete="username"')
+        ->and($f)->toContain('placeholder="notebook"')
+        ->and($f)->toContain('<input type="checkbox" name="SetCreds" value="1">')
+        // Nenhum campo de texto do formulário nasce com valor.
+        ->and(preg_match('~name="(User|Password|Pin|DeviceName)"[^>]*\svalue=~', $f))->toBe(0)
+        ->and($f)->not->toContain('method="get"');
+});
+
+it('os dois botões do sunshine dizem que abrem o UAC e mandam a subação certa', function () {
+    $f = sunForm(winSecao(winHtml(aba: WinTab::AcessoRemoto), 'sunshine'));
+
+    expect($f)->toContain('<button type="submit" class="btn btn-sm" name="SubAction" value="pair" data-uac>Parear com o PIN · abre o UAC</button>')
+        ->and($f)->toContain('<button type="submit" class="btn btn-sm btn-ghost" name="SubAction" value="set-creds" data-uac>Só gravar credenciais · abre o UAC</button>');
+});
+
+it('com o caminho sensível travado, o formulário do sunshine nasce desabilitado', function () {
+    $f = sunForm(winSecao(winHtml(aba: WinTab::AcessoRemoto, sensitiveBlocked: 'UAC silencioso'), 'sunshine'));
+
+    expect(substr_count($f, ' disabled'))->toBe(7);
+});
+
+it('o sem-reload limpa senha e PIN depois da resposta', function () {
+    // O PIN é type=text (numérico); quem o limpa é o data-segredo.
+    expect((string) file_get_contents(dirname(__DIR__, 2) . '/src/Views/layout.php'))->toContain("document.querySelectorAll('input[type=password], [data-segredo]').forEach(function (i) { i.value = ''; });");
 });
 
 it('sunshine com o serviço no ar: o principal vira Parar', function () {
