@@ -12,7 +12,7 @@ use App\Http\WslView;
  *
  * @param list<Execution> $rows
  */
-function wslHtml(array $rows, ?bool $awake = null): string
+function wslHtml(array $rows, ?bool $awake = null, string $windowsRoot = ''): string
 {
     return Respond::render('wsl.php', new WslView(
         rows: $rows,
@@ -30,6 +30,7 @@ function wslHtml(array $rows, ?bool $awake = null): string
         maxCommandBytes: 65536,
         maxPathBytes: 4096,
         awake: $awake,
+        windowsRoot: $windowsRoot,
     ));
 }
 
@@ -51,7 +52,53 @@ it('o JSON que o botão de copiar entrega continua com o UTC gravado', function 
 });
 
 it('o card de anexos tem o botão de inverter, que não envia o formulário', function () {
-    expect(wslHtml([]))->toContain('<button type="button" class="btn btn-sm btn-ghost" id="btn-inverter">Inverter origem e destino</button>');
+    expect(wslHtml([]))->toContain('<button type="button" class="btn btn-sm btn-ghost" id="btn-inverter" title="Inverter origem e destino">Inverter</button>');
+});
+
+it('os caminhos do anexo começam vazios, sem link nem texto de sentido', function () {
+    $html = wslHtml([], null, '/mnt/c/Users/x');
+
+    expect($html)->toContain('id="origem" name="origem" value=""')
+        ->and($html)->toContain('id="destino" name="destino" value=""')
+        ->and($html)->not->toContain('&rarr;')
+        ->and($html)->not->toContain('Do Windows para a distro');
+});
+
+it('Preencher leva o perfil do Windows na origem e a raiz no destino, sem enviar', function () {
+    $html = wslHtml([], null, '/mnt/c/Users/x');
+
+    expect($html)->toMatch('~<button type="button"[^>]*id="btn-preencher"\s+data-origem="/mnt/c/Users/x" data-destino="/home/x">Preencher</button>~');
+});
+
+it('o perfil do Windows vira caminho /mnt/<letra> do WSL', function (string $windows, string $wsl) {
+    expect(WslView::mntPath($windows))->toBe($wsl);
+})->with([
+    'perfil'          => ['C:\\Users\\x', '/mnt/c/Users/x'],
+    'barra no fim'    => ['C:\\Users\\x\\', '/mnt/c/Users/x'],
+    'outra letra'     => ['D:\\dados', '/mnt/d/dados'],
+    'barra normal'    => ['C:/Users/x', '/mnt/c/Users/x'],
+    'raiz do disco'   => ['C:\\', '/mnt/c'],
+    'vazio'           => ['', ''],
+    'rede'            => ['\\\\srv\\perfil', ''],
+    'sem letra'       => ['/home/x', ''],
+]);
+
+it('o console: saída em #output fora de textarea, prompt $ com o campo de uma linha e o Enviar', function () {
+    $html = wslHtml([new Execution('ls', "a\nb", 0, 10, ExecutionKind::Comando, false, '2026-09-09 02:54:17')]);
+
+    expect($html)->toContain('<pre class="term-scroll" id="output">a' . "\n" . 'b</pre>')
+        ->and($html)->toContain('<form method="post" action="/wsl" id="form-cmd" class="term-prompt" data-sem-reload>')
+        ->and($html)->toContain('<textarea id="input" name="cmd" rows="1"')
+        ->and($html)->toContain('<button type="submit" class="term-go" id="btn-enviar">Enviar</button>')
+        ->and($html)->toContain('<span id="estado-cmd"></span>')
+        ->and($html)->not->toContain('btn-limpar-campo');
+});
+
+it('Enter envia pelo botão com requestSubmit, e Shift+Enter fica para quebrar a linha', function () {
+    $html = wslHtml([]);
+
+    expect($html)->toContain("ev.key !== 'Enter' || ev.shiftKey")
+        ->and($html)->toContain('botao.form.requestSubmit(botao)');
 });
 
 it('o indicador diz acordada, dormindo, ou se cala quando não se sabe', function () {

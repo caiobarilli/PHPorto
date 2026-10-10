@@ -26,6 +26,7 @@ final readonly class WslView
      * @param int             $maxCommandBytes teto do texto de um comando
      * @param int             $maxPathBytes    teto de cada caminho de anexo
      * @param ?bool           $awake           VM de pé (true), dormindo (false), ou não se sabe (null)
+     * @param string          $windowsRoot     perfil do Windows visto do WSL (/mnt/c/...), ou vazio
      */
     public function __construct(
         public array $rows,
@@ -43,6 +44,18 @@ final readonly class WslView
         public int $maxCommandBytes,
         public int $maxPathBytes,
         public ?bool $awake = null,
+        public string $windowsRoot = '',
     ) {
+    }
+
+    public static function mntPath(string $windowsPath): string
+    {
+        if (preg_match('~^([A-Za-z]):(?:[\\\\/](.*))?$~', $windowsPath, $m) !== 1) {
+            return '';
+        }
+
+        $resto = rtrim(str_replace('\\', '/', $m[2] ?? ''), '/');
+
+        return '/mnt/' . strtolower($m[1]) . ($resto === '' ? '' : '/' . $resto);
     }
 }
