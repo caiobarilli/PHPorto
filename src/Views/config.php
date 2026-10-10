@@ -23,7 +23,7 @@ use App\Http\Respond;
   <p class="sub">A configuração vive no <code>.env</code> e continua sendo lida de lá. Esta tela alterna apenas as chaves abaixo, gravando em <code>storage/flags.json</code> — o <code>.env</code> nunca é reescrito.</p>
 
   <?php if ($view->notice !== null): ?>
-    <div class="alert alert-note"><?= Respond::e($view->notice) ?></div>
+    <div class="alert alert-note" data-aviso><?= Respond::e($view->notice) ?></div>
   <?php endif; ?>
 
   <section>
@@ -43,7 +43,7 @@ use App\Http\Respond;
   <section>
     <h2>API HTTP</h2>
 
-    <form method="post" id="form-api">
+    <form method="post" id="form-api" data-sem-reload data-ligada="<?= $view->apiEnabled ? '1' : '0' ?>">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="acao" value="api">
 
@@ -74,7 +74,7 @@ use App\Http\Respond;
       <div class="alert alert-block"><?= Respond::e($view->win->blocked) ?></div>
     <?php endif; ?>
 
-    <form method="post" id="form-ps">
+    <form method="post" id="form-ps" data-sem-reload data-ligado="<?= $view->win->on ? '1' : '0' ?>">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="acao" value="powershell">
 
@@ -86,11 +86,12 @@ use App\Http\Respond;
           <span class="trilho"></span>
           <span class="rotulo" id="ps-rotulo"><?= $view->win->on ? 'Ligado' : 'Desligado' ?></span>
         </label>
-        <button type="submit" class="btn btn-sm" id="btn-salvar-ps"
+        <?php /* Desligado, salvar só pode ligar: e ligar espera o UAC. */ ?>
+        <button type="submit" class="btn btn-sm" id="btn-salvar-ps"<?= $view->win->on ? '' : ' data-uac' ?>
                 <?= $view->win->canTry() ? '' : 'disabled' ?>>Salvar</button>
 
         <?php if ($view->winRetry): ?>
-          <button type="submit" class="btn btn-sm btn-ghost" name="ps_enabled" value="1" id="btn-retentar">
+          <button type="submit" class="btn btn-sm btn-ghost" name="ps_enabled" value="1" id="btn-retentar" data-uac>
             Tentar novamente
           </button>
         <?php endif; ?>
@@ -129,7 +130,7 @@ use App\Http\Respond;
   <section>
     <h2>Windows — Painel do Hyper-V</h2>
 
-    <form method="post" id="form-hyperv">
+    <form method="post" id="form-hyperv" data-sem-reload>
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="acao" value="hyperv">
 
@@ -165,7 +166,7 @@ use App\Http\Respond;
   <section>
     <h2>Restaurar configurações de fábrica</h2>
 
-    <form method="post" id="form-fabrica">
+    <form method="post" id="form-fabrica" data-sem-reload>
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="acao" value="fabrica">
 
@@ -251,89 +252,70 @@ use App\Http\Respond;
 </dialog>
 
 <script>
+/*
+ * Os formulários desta tela vão pelo script comum do layout, sem reload: o
+ * miolo é trocado depois de cada ação, então tudo aqui é por delegação no
+ * document, e o estado ("já estava ligada?") vem dos atributos data-* do
+ * formulário, que chegam frescos em cada troca.
+ */
 (function () {
   'use strict';
 
-  // Cancelar em qualquer modal fecha o modal, e só isso: nada é enviado.
-  document.querySelectorAll('dialog [data-fechar]').forEach(function (b) {
-    b.addEventListener('click', function () { b.closest('dialog').close(); });
+  var ROTULOS = {
+    'api-toggle':    ['api-rotulo', 'Ligada', 'Desligada'],
+    'ps-toggle':     ['ps-rotulo', 'Ligado', 'Desligado'],
+    'hyperv-toggle': ['hyperv-rotulo', 'Ligado', 'Desligado']
+  };
+
+  document.addEventListener('change', function (ev) {
+    var r = ROTULOS[ev.target.id];
+    if (r) { document.getElementById(r[0]).textContent = ev.target.checked ? r[1] : r[2]; }
   });
 
-  var formApi   = document.getElementById('form-api');
-  var toggle    = document.getElementById('api-toggle');
-  var rotulo    = document.getElementById('api-rotulo');
-  var modalApi  = document.getElementById('modal-api');
-  var ligadaAgora = toggle.checked;
-
-  toggle.addEventListener('change', function () {
-    rotulo.textContent = toggle.checked ? 'Ligada' : 'Desligada';
-  });
-
-  // Só LIGAR pergunta. Desligar reduz superfície: confirmar seria cerimônia
-  // sem risco do outro lado.
-  formApi.addEventListener('submit', function (ev) {
-    if (toggle.checked && !ligadaAgora) {
-      ev.preventDefault();
-      modalApi.showModal();
-    }
-  });
-
-  // submit() do elemento não dispara o handler acima — sai direto, sem laço.
-  document.getElementById('btn-confirmar-api').addEventListener('click', function () {
-    modalApi.close();
-    formApi.submit();
-  });
-
-  document.getElementById('btn-fabrica').addEventListener('click', function () {
-    document.getElementById('modal-fabrica').showModal();
-  });
-
-  // ---- Interruptor do PowerShell -----------------------------------------
-  // Mesmo padrão do da API: só LIGAR pergunta, porque desligar reduz
-  // superfície. A diferença é o que está do outro lado — aqui ligar abre um
-  // processo elevado, então o aviso diz isso com essas palavras.
-  var formPs   = document.getElementById('form-ps');
-  var psToggle = document.getElementById('ps-toggle');
-  var psRotulo = document.getElementById('ps-rotulo');
-  var modalPs  = document.getElementById('modal-ps');
-  var psLigado = psToggle.checked;
-  var psForcar = false;
-
-  psToggle.addEventListener('change', function () {
-    psRotulo.textContent = psToggle.checked ? 'Ligado' : 'Desligado';
-  });
-
-  formPs.addEventListener('submit', function (ev) {
-    // O "tentar novamente" envia ps_enabled=1 pelo próprio botão, com o
-    // interruptor ainda desligado — e ele não passa pelo modal, porque quem
-    // clica nele já leu o aviso na tentativa anterior.
-    if (psForcar) { return; }
-
-    if (psToggle.checked && !psLigado) {
-      ev.preventDefault();
-      modalPs.showModal();
-    }
-  });
-
-  document.getElementById('btn-confirmar-ps').addEventListener('click', function () {
-    modalPs.close();
-    formPs.submit();
-  });
-
-  var btnRetentar = document.getElementById('btn-retentar');
-  if (btnRetentar) {
-    btnRetentar.addEventListener('click', function () { psForcar = true; });
+  function enviar(form) {
+    form.setAttribute('data-confirmado', '');
+    if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }
   }
 
-  // ---- Interruptor do Hyper-V --------------------------------------------
-  // Só rótulo: ligar não pergunta em modal porque a própria ação já confere o
-  // recurso e recusa com um aviso quando não dá — a confirmação viria antes de
-  // saber se é possível, e seria cerimônia sem informação.
-  var hvToggle = document.getElementById('hyperv-toggle');
-  var hvRotulo = document.getElementById('hyperv-rotulo');
+  document.addEventListener('click', function (ev) {
+    if (ev.target.closest('#btn-fabrica')) { document.getElementById('modal-fabrica').showModal(); }
 
-  hvToggle.addEventListener('change', function () {
-    hvRotulo.textContent = hvToggle.checked ? 'Ligado' : 'Desligado';
+    // O "tentar novamente" envia ps_enabled=1 pelo próprio botão, com o
+    // interruptor ainda desligado — e não passa pelo modal, porque quem
+    // clica nele já leu o aviso na tentativa anterior.
+    if (ev.target.closest('#btn-retentar')) { document.getElementById('form-ps').setAttribute('data-confirmado', ''); }
+
+    if (ev.target.closest('#btn-confirmar-api')) {
+      document.getElementById('modal-api').close();
+      enviar(document.getElementById('form-api'));
+    }
+
+    if (ev.target.closest('#btn-confirmar-ps')) {
+      document.getElementById('modal-ps').close();
+      enviar(document.getElementById('form-ps'));
+    }
+  });
+
+  // Só LIGAR pergunta, na API e no PowerShell: desligar reduz superfície, e
+  // confirmar seria cerimônia sem risco do outro lado. Ligar o PowerShell
+  // abre um processo elevado, e o modal dele diz isso com essas palavras. O
+  // Hyper-V não pergunta: a própria ação confere o recurso e recusa com aviso.
+  document.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    if (form.hasAttribute('data-confirmado')) { form.removeAttribute('data-confirmado'); return; }
+
+    var modal = null;
+    if (form.id === 'form-api' && document.getElementById('api-toggle').checked && form.getAttribute('data-ligada') !== '1') {
+      modal = 'modal-api';
+    }
+    if (form.id === 'form-ps' && document.getElementById('ps-toggle').checked && form.getAttribute('data-ligado') !== '1') {
+      modal = 'modal-ps';
+    }
+
+    if (modal) {
+      ev.preventDefault();
+      document.getElementById(modal).showModal();
+    }
   });
 })();
 </script>
