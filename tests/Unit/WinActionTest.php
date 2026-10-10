@@ -412,14 +412,17 @@ it('sunshine exige subação', function () {
     WinAction::Sunshine->validate([]);
 })->throws(InvalidArgumentException::class);
 
-it('sunshine aceita as seis subações, na grafia da lista', function (string $sub) {
+it('sunshine aceita as seis subações sem credencial, na grafia da lista', function (string $sub) {
     expect(WinAction::Sunshine->validate(['SubAction' => $sub]))->toBe(['SubAction' => $sub]);
 })->with(['status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close']);
 
-it('sunshine recusa subação que não existe, o pareamento inclusive', function (string $sub) {
-    // O pareamento é passo humano, com PIN, e não é uma subação da ferramenta.
+it('sunshine tem oito subações: as seis de antes, set-creds e pair', function () {
+    expect(WinAction::SUNSHINE_SUBACTIONS)->toBe(['status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close', 'set-creds', 'pair']);
+});
+
+it('sunshine recusa subação que não existe', function (string $sub) {
     WinAction::Sunshine->validate(['SubAction' => $sub]);
-})->with(['pair', 'pin', 'uninstall'])->throws(InvalidArgumentException::class, 'Valor inválido para SubAction.');
+})->with(['pin', 'uninstall', 'setup'])->throws(InvalidArgumentException::class, 'Valor inválido para SubAction.');
 
 it('sunshine devolve a grafia da LISTA, não a que veio no POST', function () {
     expect(WinAction::Sunshine->validate(['SubAction' => 'FIREWALL-OPEN']))->toBe(['SubAction' => 'firewall-open']);
@@ -432,9 +435,169 @@ it('sunshine: só start e stop movem o estado do serviço, no Applied', function
         ->and(WinAction::Sunshine->stateChange(['SubAction' => 'stop'])?->scope)->toBe(\App\Domain\WinStateScope::Applied);
 });
 
-it('sunshine: install, firewall e status não afirmam nada sobre estado', function (string $sub) {
+it('sunshine: install, firewall, status, set-creds e pair não afirmam nada sobre estado', function (string $sub) {
     expect(WinAction::Sunshine->stateChange(['SubAction' => $sub]))->toBeNull();
-})->with(['status', 'install', 'firewall-open', 'firewall-close']);
+})->with(['status', 'install', 'firewall-open', 'firewall-close', 'set-creds', 'pair']);
+
+// ------------------------------------------------- sunshine: credenciais e PIN
+
+/** Um POST válido do pair, com o que se quiser trocar. */
+function sunPair(array $troca = []): array
+{
+    return array_merge(['SubAction' => 'pair', 'User' => 'admin', 'Password' => 'segredo123', 'Pin' => '1234'], $troca);
+}
+
+/** Um POST válido do set-creds, com o que se quiser trocar. */
+function sunCreds(array $troca = []): array
+{
+    return array_merge(['SubAction' => 'set-creds', 'User' => 'admin', 'Password' => 'segredo123'], $troca);
+}
+
+it('set-creds devolve só subação, usuário e senha', function () {
+    expect(WinAction::Sunshine->validate(sunCreds()))
+        ->toBe(['SubAction' => 'set-creds', 'User' => 'admin', 'Password' => 'segredo123']);
+});
+
+it('set-creds exige User e Password', function (array $falta, string $msg) {
+    expect(fn () => WinAction::Sunshine->validate(sunCreds($falta)))->toThrow(InvalidArgumentException::class, $msg);
+})->with([
+    'sem User'     => [['User' => ''], 'Preencha User.'],
+    'User só espaço' => [['User' => '   '], 'Preencha User.'],
+    'sem Password' => [['Password' => ''], 'Preencha Password.'],
+]);
+
+it('set-creds RECUSA Pin e DeviceName preenchidos, em vez de ignorar', function (string $campo) {
+    expect(fn () => WinAction::Sunshine->validate(sunCreds([$campo => $campo === 'Pin' ? '1234' : 'tv'])))
+        ->toThrow(InvalidArgumentException::class, 'Só gravar credenciais não usa ' . $campo);
+})->with(['Pin', 'DeviceName']);
+
+it('set-creds não leva a caixa SetCreds adiante', function () {
+    expect(WinAction::Sunshine->validate(sunCreds(['SetCreds' => '1'])))->not->toHaveKey('SetCreds');
+});
+
+it('a senha NÃO sofre trim: espaço nas pontas é senha', function () {
+    expect(WinAction::Sunshine->validate(sunCreds(['Password' => ' abc12345 ']))['Password'])->toBe(' abc12345 ');
+});
+
+it('o usuário sofre trim', function () {
+    expect(WinAction::Sunshine->validate(sunCreds(['User' => '  admin  ']))['User'])->toBe('admin');
+});
+
+it('senha com menos de 8 bytes é recusada; acento conta 2', function () {
+    expect(fn () => WinAction::Sunshine->validate(sunCreds(['Password' => '1234567'])))
+        ->toThrow(InvalidArgumentException::class, 'Password precisa de pelo menos 8 bytes.');
+
+    // Quatro letras acentuadas = 8 bytes: passa.
+    expect(WinAction::Sunshine->validate(sunCreds(['Password' => 'ãéíõ']))['Password'])->toBe('ãéíõ');
+});
+
+it('os tetos são em BYTES', function (string $campo, int $teto, string $sub) {
+    $base  = $sub === 'pair' ? sunPair() : sunCreds();
+    $exato = str_repeat('a', $teto);
+    $acima = str_repeat('a', $teto - 1) . 'é';
+
+    expect(WinAction::Sunshine->validate(array_merge($base, [$campo => $exato]))[$campo])->toBe($exato);
+    expect(fn () => WinAction::Sunshine->validate(array_merge($base, [$campo => $acima])))
+        ->toThrow(InvalidArgumentException::class, $campo . ' passou do teto de ' . $teto . ' bytes.');
+})->with([
+    'User 64'        => ['User', WinAction::SUNSHINE_USER_MAX, 'set-creds'],
+    'Password 256'   => ['Password', WinAction::SUNSHINE_PASSWORD_MAX, 'set-creds'],
+    'DeviceName 128' => ['DeviceName', WinAction::SUNSHINE_DEVICE_MAX, 'pair'],
+]);
+
+it('User com dois-pontos é recusado: o Basic parte no primeiro', function () {
+    expect(fn () => WinAction::Sunshine->validate(sunCreds(['User' => 'ad:min'])))
+        ->toThrow(InvalidArgumentException::class, "User não pode ter ':'.");
+});
+
+it('a senha PODE ter dois-pontos, aspas e barra', function () {
+    $senha = 'a:b"c\\d\'e f';
+
+    expect(WinAction::Sunshine->validate(sunCreds(['Password' => $senha]))['Password'])->toBe($senha);
+});
+
+it('caractere de controle e NUL são recusados nos quatro campos', function (string $campo, string $ruim) {
+    $base = $campo === 'Pin' || $campo === 'DeviceName' ? sunPair() : sunCreds();
+
+    expect(fn () => WinAction::Sunshine->validate(array_merge($base, [$campo => $ruim])))
+        ->toThrow(InvalidArgumentException::class);
+})->with([
+    'User NUL'          => ['User', "ad\0min"],
+    'User TAB'          => ['User', "ad\tmin"],
+    'Password NUL'      => ['Password', "segredo\0123"],
+    'Password LF'       => ['Password', "segredo\n123"],
+    'Password DEL'      => ['Password', "segredo\x7F123"],
+    'Pin NUL'           => ['Pin', "12\0" . '4'],
+    'DeviceName ESC'    => ['DeviceName', "tv\x1Bsala"],
+]);
+
+it('a mensagem de erro cita o campo, nunca o valor', function () {
+    try {
+        WinAction::Sunshine->validate(sunCreds(['Password' => "Xyzzy\x01Plugh99"]));
+    } catch (InvalidArgumentException $e) {
+        expect($e->getMessage())->toContain('Password')
+            ->and($e->getMessage())->not->toContain('Xyzzy')
+            ->and($e->getMessage())->not->toContain('Plugh');
+
+        return;
+    }
+
+    throw new RuntimeException('deveria ter recusado');
+});
+
+it('UTF-8 inválido é recusado aqui, e não no json_encode do pedido', function () {
+    expect(fn () => WinAction::Sunshine->validate(sunCreds(['Password' => "segredo\xC3\x28123"])))
+        ->toThrow(InvalidArgumentException::class, 'Password tem bytes que não são texto UTF-8.');
+});
+
+it('pair devolve subação, credenciais, PIN e o nome padrão', function () {
+    expect(WinAction::Sunshine->validate(sunPair()))->toBe([
+        'SubAction'  => 'pair',
+        'User'       => 'admin',
+        'Password'   => 'segredo123',
+        'Pin'        => '1234',
+        'DeviceName' => 'notebook',
+    ]);
+});
+
+it('pair leva o nome digitado, aparado', function () {
+    expect(WinAction::Sunshine->validate(sunPair(['DeviceName' => '  TV da sala ']))['DeviceName'])->toBe('TV da sala');
+});
+
+it('pair exige o PIN', function () {
+    expect(fn () => WinAction::Sunshine->validate(sunPair(['Pin' => ''])))
+        ->toThrow(InvalidArgumentException::class, 'Preencha Pin.');
+});
+
+it('pair exige PIN de exatamente 4 dígitos ASCII', function (string $pin) {
+    expect(fn () => WinAction::Sunshine->validate(sunPair(['Pin' => $pin])))
+        ->toThrow(InvalidArgumentException::class, 'Pin deve ter 4 dígitos');
+})->with(['123', '12345', '12a4', '١٢٣٤', '１２３４', '12 4']);
+
+it('pair aceita PIN com zero à esquerda, como texto', function () {
+    expect(WinAction::Sunshine->validate(sunPair(['Pin' => '0007']))['Pin'])->toBe('0007');
+});
+
+it('pair só liga SetCreds com "1"', function () {
+    expect(WinAction::Sunshine->validate(sunPair(['SetCreds' => '1']))['SetCreds'])->toBeTrue()
+        ->and(WinAction::Sunshine->validate(sunPair(['SetCreds' => 'on'])))->not->toHaveKey('SetCreds')
+        ->and(WinAction::Sunshine->validate(sunPair()))->not->toHaveKey('SetCreds');
+});
+
+it('pair exige User e Password também', function () {
+    expect(fn () => WinAction::Sunshine->validate(sunPair(['User' => ''])))->toThrow(InvalidArgumentException::class, 'Preencha User.')
+        ->and(fn () => WinAction::Sunshine->validate(sunPair(['Password' => ''])))->toThrow(InvalidArgumentException::class, 'Preencha Password.');
+});
+
+it('as seis subações antigas RECUSAM os campos de credencial', function (string $sub, string $campo) {
+    expect(fn () => WinAction::Sunshine->validate(['SubAction' => $sub, $campo => '1234']))
+        ->toThrow(InvalidArgumentException::class, $campo . ' não vale para a subação ' . $sub . '.');
+})->with(['status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close'])
+  ->with(['User', 'Password', 'Pin', 'DeviceName', 'SetCreds']);
+
+it('Password e Pin são os segredos', function () {
+    expect(WinAction::SECRET_PARAMS)->toBe(['Password', 'Pin']);
+});
 
 // ---------------------------------------------------------------- hyperv
 
@@ -507,6 +670,9 @@ it('a ação sensível é reconhecida pelo SubAction validado', function (WinAct
     'sunshine firewall-open'   => [WinAction::Sunshine, ['SubAction' => 'firewall-open'], true],
     'sunshine firewall-close'  => [WinAction::Sunshine, ['SubAction' => 'firewall-close'], false],
     'sunshine start'           => [WinAction::Sunshine, ['SubAction' => 'start'], false],
+    'sunshine status'          => [WinAction::Sunshine, ['SubAction' => 'status'], false],
+    'sunshine set-creds'       => [WinAction::Sunshine, ['SubAction' => 'set-creds', 'User' => 'a', 'Password' => 'segredo123'], true],
+    'sunshine pair'            => [WinAction::Sunshine, ['SubAction' => 'pair', 'Pin' => '1234'], true],
     'exporter install'         => [WinAction::Exporter, ['SubAction' => 'install'], true],
     'exporter firewall'        => [WinAction::Exporter, ['SubAction' => 'firewall'], true],
     'exporter metrics'         => [WinAction::Exporter, ['SubAction' => 'metrics'], false],
@@ -568,4 +734,80 @@ it('toda subação sensível existe na lista de subações da ação', function 
             expect($listas[$acao])->toContain($sub);
         }
     }
+});
+
+it('a allowlist do sunshine no worker tem os mesmos campos, subações e tetos que a WinAction', function () {
+    // A paridade de ações não enxerga campo: um campo novo só do lado PHP seria
+    // recusado pelo worker depois do UAC aceito, e um teto diferente aceitaria
+    // aqui o que lá é recusado.
+    $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+
+    expect(preg_match("/^    'sunshine'\\s*=\\s*@\\{\\r?\\n(.*?)\\r?\\n    \\}/ms", $worker, $bloco))->toBe(1);
+    preg_match_all("/^\\s+'([A-Za-z]+)'\\s*=\\s*@\\{(.*)\\}\\s*$/m", $bloco[1], $linhas, PREG_SET_ORDER);
+
+    $campos = [];
+    foreach ($linhas as [, $nome, $regra]) {
+        $campos[$nome] = $regra;
+    }
+
+    expect(array_keys($campos))->toBe(['SubAction', ...WinAction::SUNSHINE_CRED_FIELDS]);
+
+    expect(preg_match('/valores\s*=\s*@\(([^)]*)\)/', $campos['SubAction'], $valores))->toBe(1);
+    preg_match_all("/'([a-z-]+)'/", $valores[1], $subs);
+    expect($subs[1])->toBe(WinAction::SUNSHINE_SUBACTIONS);
+
+    $teto = static function (string $regra, string $chave): ?int {
+        return preg_match('/\b' . $chave . '\s*=\s*(\d+)/', $regra, $m) === 1 ? (int) $m[1] : null;
+    };
+
+    expect($teto($campos['User'], 'max'))->toBe(WinAction::SUNSHINE_USER_MAX)
+        ->and($teto($campos['Password'], 'max'))->toBe(WinAction::SUNSHINE_PASSWORD_MAX)
+        ->and($teto($campos['Password'], 'min'))->toBe(WinAction::SUNSHINE_PASSWORD_MIN)
+        ->and($teto($campos['Pin'], 'max'))->toBe(4)
+        ->and($teto($campos['DeviceName'], 'max'))->toBe(WinAction::SUNSHINE_DEVICE_MAX)
+        ->and($campos['SetCreds'])->toContain("tipo = 'flag'");
+});
+
+it('os segredos do worker ($SEGREDOS) são os mesmos da WinAction', function () {
+    $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+
+    expect(preg_match("/\\\$SEGREDOS\\s*=\\s*@\\{(.*?)\\r?\\n\\}/s", $worker, $bloco))->toBe(1);
+    expect(preg_match("/'sunshine'\\s*=\\s*@\\(([^)]*)\\)/", $bloco[1], $linha))->toBe(1);
+    preg_match_all("/'([A-Za-z]+)'/", $linha[1], $nomes);
+
+    expect($nomes[1])->toBe(WinAction::SECRET_PARAMS);
+});
+
+// ------------------------------------------------- histórico: segredo sai como ***
+
+/** O rótulo do histórico, pelo método privado do Pages. */
+function rotulo(WinAction $acao, array $params): string
+{
+    return (string) (new ReflectionMethod(App\Http\Pages::class, 'describe'))->invoke(null, $acao, $params);
+}
+
+it('o histórico mostra o usuário e esconde senha e PIN', function () {
+    $params = WinAction::Sunshine->validate(sunPair(['Password' => 'Xyzzy segredo', 'Pin' => '4821', 'SetCreds' => '1']));
+
+    expect(rotulo(WinAction::Sunshine, $params))
+        ->toBe('sunshine -SubAction pair -User admin -Password *** -Pin *** -DeviceName notebook -SetCreds');
+});
+
+it('o histórico do set-creds não leva a senha', function () {
+    $r = rotulo(WinAction::Sunshine, WinAction::Sunshine->validate(sunCreds(['Password' => 'Plugh12345'])));
+
+    expect($r)->toBe('sunshine -SubAction set-creds -User admin -Password ***')
+        ->and($r)->not->toContain('Plugh');
+});
+
+it('a órfã recolhida com *** do worker continua ***', function () {
+    // O win-done já chega mascarado pelo $SEGREDOS do worker; o describe não
+    // pode "desmascarar" nem duplicar.
+    expect(rotulo(WinAction::Sunshine, ['SubAction' => 'pair', 'User' => 'admin', 'Password' => '***', 'Pin' => '***']))
+        ->toBe('sunshine -SubAction pair -User admin -Password *** -Pin ***');
+});
+
+it('as outras ações continuam com o rótulo de antes', function () {
+    expect(rotulo(WinAction::Dns, ['Provider' => 'Custom', 'PrimaryDNS' => '1.1.1.1']))->toBe('dns -Provider Custom -PrimaryDNS 1.1.1.1')
+        ->and(rotulo(WinAction::Optimize, ['Kill' => 'a b', 'Undo' => true]))->toBe('optimize -Kill "a b" -Undo');
 });

@@ -42,13 +42,14 @@ BeforeAll {
             param($n)
             $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
             $n.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
-            $n.Left.VariablePath.UserPath -in @('ALLOWLIST', 'SENSIVEIS', 'MAX_PARAM_BYTES', 'SID_ADMINS', 'SID_SYSTEM', 'SID_DONO')
+            $n.Left.VariablePath.UserPath -in @('ALLOWLIST', 'SENSIVEIS', 'SEGREDOS', 'MAX_PARAM_BYTES', 'SID_ADMINS', 'SID_SYSTEM', 'SID_DONO')
         },
         $false
     ) | ForEach-Object { Invoke-Expression $_.Extent.Text }
 
     $global:ALLOWLIST       = $ALLOWLIST
     $global:SENSIVEIS       = $SENSIVEIS
+    $global:SEGREDOS        = $SEGREDOS
     $global:MAX_PARAM_BYTES = $MAX_PARAM_BYTES
     $global:SID_ADMINS      = $SID_ADMINS
     $global:SID_SYSTEM      = $SID_SYSTEM
@@ -282,6 +283,33 @@ Describe 'worker - o arquivo de conclusao' {
         $j.exit | Should -Be 126
     }
 
+    It 'senha e PIN do sunshine saem como ***, e o resto como veio' {
+        Write-Done 'teste07' 0 1 '' 'sunshine' ([ordered]@{ SubAction = 'pair'; User = 'admin'; Password = 'Xyzzy12345'; Pin = '4821'; DeviceName = 'notebook'; SetCreds = $true })
+
+        $bruto = Get-Content (Join-Path $Script:Trabalho 'win-done-teste07.json') -Raw
+        $j = $bruto | ConvertFrom-Json
+
+        $j.params.Password   | Should -Be '***'
+        $j.params.Pin        | Should -Be '***'
+        $j.params.User       | Should -Be 'admin'
+        $j.params.DeviceName | Should -Be 'notebook'
+        $j.params.SetCreds   | Should -BeTrue
+        $bruto | Should -Not -Match 'Xyzzy12345'
+        $bruto | Should -Not -Match '4821'
+    }
+
+    It 'a mascara nao altera o hashtable de quem chamou' {
+        $params = [ordered]@{ SubAction = 'set-creds'; User = 'admin'; Password = 'Xyzzy12345' }
+        Write-Done 'teste08' 0 1 '' 'sunshine' $params
+        $params['Password'] | Should -Be 'Xyzzy12345'
+    }
+
+    It 'outra acao com um parametro chamado Pin nao seria mascarada por engano' {
+        # A lista e' por acao: so o que $SEGREDOS declara sai como ***.
+        (Hide-PhportoSegredos 'gdid' ([ordered]@{ SubAction = 'status' }))['SubAction'] | Should -Be 'status'
+        (Hide-PhportoSegredos 'sunshine' $null).Count | Should -Be 0
+    }
+
     It 'o JSON sai sem BOM — com BOM o json_decode do PHP devolve null' {
         Write-Done 'teste06' 0 1 '' 'audit' $null
 
@@ -322,7 +350,7 @@ Describe 'worker - a allowlist do lado elevado' {
         )
     }
 
-    It 'aceita sunshine com <_>' -ForEach @('status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close') {
+    It 'aceita sunshine com <_>' -ForEach @('status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close', 'set-creds', 'pair') {
         $job = [PSCustomObject]@{
             nonce  = $global:Nonce
             acao   = 'sunshine'
@@ -335,14 +363,71 @@ Describe 'worker - a allowlist do lado elevado' {
         (Test-Job $job -Modo $modo).params['SubAction'] | Should -Be $_
     }
 
-    It 'recusa uma subacao que o sunshine nao tem (pareamento inclusive)' {
+    It 'recusa uma subacao que o sunshine nao tem' {
         $job = [PSCustomObject]@{
             nonce  = $global:Nonce
             acao   = 'sunshine'
-            params = [PSCustomObject]@{ SubAction = 'pair' }
+            params = [PSCustomObject]@{ SubAction = 'pin' }
         }
 
         { Test-Job $job } | Should -Throw -ExpectedMessage "valor fora do conjunto em 'SubAction'"
+    }
+
+    It 'sunshine pair passa no uso unico com os cinco campos, a senha intacta' {
+        $job = [PSCustomObject]@{
+            acao   = 'sunshine'
+            params = [PSCustomObject]@{ SubAction = 'pair'; User = 'admin'; Password = ' a:b"c\d 9 '; Pin = '0482'; DeviceName = 'TV da sala'; SetCreds = $true }
+        }
+
+        $ok = Test-Job $job -Modo UmaVez
+        $ok.params['Password']   | Should -BeExactly ' a:b"c\d 9 '
+        $ok.params['Pin']        | Should -BeExactly '0482'
+        $ok.params['DeviceName'] | Should -BeExactly 'TV da sala'
+        $ok.params['SetCreds']   | Should -BeTrue
+    }
+
+    It 'sunshine recusa <Campo> invalido, e a frase cita so o nome' -ForEach @(
+        @{ Campo = 'Pin';        Valor = '123' }
+        @{ Campo = 'Pin';        Valor = '12a4' }
+        @{ Campo = 'Pin';        Valor = ([string][char]0x0661 * 4) }
+        @{ Campo = 'User';       Valor = 'ad:min' }
+        @{ Campo = 'User';       Valor = "ad`tmin" }
+        @{ Campo = 'Password';   Valor = "Xyzzy`n12345" }
+        @{ Campo = 'DeviceName'; Valor = "tv`u{1B}sala" }
+    ) {
+        $p = [ordered]@{ SubAction = 'pair'; User = 'admin'; Password = 'Xyzzy12345'; Pin = '4821' }
+        $p[$Campo] = $Valor
+        $job = [PSCustomObject]@{ acao = 'sunshine'; params = [PSCustomObject]$p }
+
+        # O digito arabe (2 bytes cada) estoura o teto de 4 antes do padrao;
+        # os dois recusam, e as duas frases citam so o nome.
+        { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "'$Campo' *"
+    }
+
+    It 'sunshine recusa senha abaixo de 8 bytes, e conta bytes: quatro acentos passam' {
+        $curta = [PSCustomObject]@{ acao = 'sunshine'; params = [PSCustomObject]@{ SubAction = 'set-creds'; User = 'admin'; Password = '1234567' } }
+        { Test-Job $curta -Modo UmaVez } | Should -Throw -ExpectedMessage "'Password' abaixo do minimo de bytes"
+
+        $acentos = [PSCustomObject]@{ acao = 'sunshine'; params = [PSCustomObject]@{ SubAction = 'set-creds'; User = 'admin'; Password = "$([char]0xE3)$([char]0xE9)$([char]0xED)$([char]0xF5)" } }
+        (Test-Job $acentos -Modo UmaVez).params['Password'].Length | Should -Be 4
+    }
+
+    It 'sunshine aplica o teto proprio de <Campo> (<Teto> bytes), e nao o geral' -ForEach @(
+        @{ Campo = 'User';       Teto = 64 }
+        @{ Campo = 'Password';   Teto = 256 }
+        @{ Campo = 'DeviceName'; Teto = 128 }
+    ) {
+        $p = [ordered]@{ SubAction = 'pair'; User = 'admin'; Password = 'Xyzzy12345'; Pin = '4821' }
+        $p[$Campo] = 'a' * $Teto
+        (Test-Job ([PSCustomObject]@{ acao = 'sunshine'; params = [PSCustomObject]$p }) -Modo UmaVez).params[$Campo].Length | Should -Be $Teto
+
+        $p[$Campo] = ('a' * ($Teto - 1)) + [char]0xE9
+        { Test-Job ([PSCustomObject]@{ acao = 'sunshine'; params = [PSCustomObject]$p }) -Modo UmaVez } | Should -Throw -ExpectedMessage "'$Campo' passou do teto de bytes"
+    }
+
+    It 'a frase de recusa nunca leva o valor do campo' {
+        $job = [PSCustomObject]@{ acao = 'sunshine'; params = [PSCustomObject]@{ SubAction = 'pair'; User = 'admin'; Password = "Xyzzy`n12345"; Pin = '4821' } }
+        try { Test-Job $job -Modo UmaVez; throw 'deveria recusar' } catch { $_.Exception.Message | Should -Not -Match 'Xyzzy' }
     }
 
     It 'aceita rdp com <_>' -ForEach @('status', 'on', 'off', 'h264-on', 'h264-off') {
@@ -1272,6 +1357,9 @@ Describe 'worker - acoes sensiveis' {
         @{ Acao = 'sunshine'; Sub = 'install';        Esperado = $true }
         @{ Acao = 'sunshine'; Sub = 'firewall-open';  Esperado = $true }
         @{ Acao = 'sunshine'; Sub = 'firewall-close'; Esperado = $false }
+        @{ Acao = 'sunshine'; Sub = 'set-creds';      Esperado = $true }
+        @{ Acao = 'sunshine'; Sub = 'pair';           Esperado = $true }
+        @{ Acao = 'sunshine'; Sub = 'status';         Esperado = $false }
         @{ Acao = 'exporter'; Sub = 'install';        Esperado = $true }
         @{ Acao = 'exporter'; Sub = 'firewall';       Esperado = $true }
         @{ Acao = 'exporter'; Sub = 'metrics';        Esperado = $false }
@@ -1290,6 +1378,8 @@ Describe 'worker - acoes sensiveis' {
         @{ Acao = 'rdp';      Sub = 'on' }
         @{ Acao = 'sunshine'; Sub = 'firewall-open' }
         @{ Acao = 'sunshine'; Sub = 'install' }
+        @{ Acao = 'sunshine'; Sub = 'set-creds' }
+        @{ Acao = 'sunshine'; Sub = 'pair' }
         @{ Acao = 'exporter'; Sub = 'install' }
         @{ Acao = 'exporter'; Sub = 'firewall' }
         @{ Acao = 'gpu';      Sub = 'install' }

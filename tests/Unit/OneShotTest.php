@@ -318,6 +318,42 @@ it('CAMINHO LONGO DEMAIS é recusado antes de abrir o prompt', function () {
         ->and(glob($longo . DIRECTORY_SEPARATOR . Elevation::ONESHOT_PREFIX . '*') ?: [])->toBe([]);
 });
 
+it('UAC FRACO: recusa ANTES de gravar o pedido, e a senha nunca chega a files/', function () {
+    $chamado = false;
+    $lancador = static function () use (&$chamado): PsResult {
+        $chamado = true;
+
+        return new PsResult('', 0, false, 0);
+    };
+
+    $params = WinAction::Sunshine->validate([
+        'SubAction' => 'pair', 'User' => 'admin', 'Password' => 'Xyzzy12345', 'Pin' => '4821',
+    ]);
+
+    expect(fn () => usoUnico($this, $lancador, cpba: 0)->dispatch(WinAction::Sunshine, $params, 600))
+        ->toThrow(RuntimeException::class, 'ConsentPromptBehaviorAdmin = 0');
+
+    expect($chamado)->toBeFalse()
+        ->and(sobras($this))->toBe([]);
+});
+
+it('sunshine pair RECUSADO NO PROMPT: o pedido com a senha não fica no disco', function () {
+    $params = WinAction::Sunshine->validate([
+        'SubAction' => 'pair', 'User' => 'admin', 'Password' => 'Xyzzy12345', 'Pin' => '4821',
+    ]);
+
+    expect(fn () => usoUnico($this, lancadorQue($this, "CANCELADO\r\n", 2))
+        ->dispatch(WinAction::Sunshine, $params, 600))
+        ->toThrow(RuntimeException::class, 'Você recusou o UAC; nada foi executado');
+
+    // Enquanto o prompt estava na tela, o pedido levava a senha (risco aceito,
+    // até ~75 s); depois, nada sobra.
+    expect((string) $this->visto['pedido'])->toContain('Xyzzy12345')
+        ->and((string) $this->visto['stub'])->not->toContain('Xyzzy12345')
+        ->and((string) $this->visto['stub'])->not->toContain('4821')
+        ->and(sobras($this))->toBe([]);
+});
+
 it('ação comum não passa pelo uso único', function () {
     usoUnico($this, lancadorQue($this, "PID=1\n"))->dispatch(WinAction::Rdp, ['SubAction' => 'off'], 600);
 })->throws(RuntimeException::class, 'Só ação sensível');
