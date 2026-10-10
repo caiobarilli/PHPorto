@@ -40,6 +40,11 @@ arquivo é um cabeçalho da ferramenta (`exec 2>&1` e o `cd` para
 em relação ao que foi digitado: um erro na primeira linha aparece como
 `cmd.sh: line 2`.
 
+O console usa a fonte JetBrainsMono Nerd Font instalada no Windows; sem ela, cai
+para Consolas e depois `ui-monospace`. A fonte não vem de CDN nem de arquivo
+estático: a PHPorto só a nomeia no CSS embutido em `layout.php`, e o navegador
+usa a que estiver instalada.
+
 ## Anexos
 
 O card de anexos copia um arquivo com `cp -v`. Os **dois** caminhos, origem e

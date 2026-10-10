@@ -28,6 +28,18 @@ use App\Http\Respond;
     --btn:   #262626;
     --mono:  ui-monospace, Consolas, "Courier New", monospace;
     --sans:  "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    --mono-console: "JetBrainsMono Nerd Font", Consolas, ui-monospace, monospace;
+    --oh-bg:          #282C34;
+    --oh-fg:          #DCDFE4;
+    --oh-black:       #282C34;
+    --oh-red:         #E06C75;
+    --oh-green:       #98C379;
+    --oh-yellow:      #E5C07B;
+    --oh-blue:        #61AFEF;
+    --oh-purple:      #C678DD;
+    --oh-cyan:        #56B6C2;
+    --oh-brightblack: #5A6374;
+    --oh-cursor:      #FFFFFF;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
