@@ -91,6 +91,12 @@ final class Csrf
      */
     public static function consume(): bool
     {
+        $site = $_SERVER['HTTP_SEC_FETCH_SITE'] ?? null;
+
+        if (!self::sameSite(is_string($site) ? $site : null)) {
+            return false;
+        }
+
         self::start();
 
         $expected = $_SESSION[self::KEY] ?? null;
@@ -108,5 +114,19 @@ final class Csrf
         unset($_SESSION[self::KEY]);
 
         return true;
+    }
+
+    /**
+     * Segunda camada, antes do token: o cabeçalho Sec-Fetch-Site, que o
+     * navegador escreve e a página não consegue forjar.
+     *
+     * POST vindo de outro site é recusado mesmo antes de olhar o token. Sem o
+     * cabeçalho (navegador antigo, ou cliente fora do navegador) passa: quem
+     * tranca continua sendo o token, e isto só fecha mais cedo. "none" é a
+     * navegação que a própria pessoa digitou ou abriu de favorito.
+     */
+    public static function sameSite(?string $header): bool
+    {
+        return $header === null || in_array(strtolower(trim($header)), ['same-origin', 'none'], true);
     }
 }

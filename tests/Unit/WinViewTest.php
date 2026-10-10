@@ -242,7 +242,7 @@ it('rdp sem estado: oferece Ligar, Ativar o vídeo H.264/UDP, e Ver o estado', f
     $s = winSecao(winHtml(aba: WinTab::AcessoRemoto), 'rdp');
 
     expect($s)->toContain('value="status"')
-        ->and($s)->toMatch('~name="SubAction" value="on"><button type="submit" class="btn btn-sm">Ligar acesso remoto~')
+        ->and($s)->toMatch('~name="SubAction" value="on"><button type="submit" class="btn btn-sm" data-uac>Ligar acesso remoto~')
         ->and($s)->toMatch('~name="SubAction" value="h264-on"><button type="submit" class="btn btn-sm btn-ghost">Ativar vídeo H.264/UDP~')
         ->and($s)->not->toContain('alert alert-note');
 });
@@ -251,7 +251,7 @@ it('rdp ligado: o principal do acesso vira Desligar', function () {
     $s = winSecao(winHtml(acoes: ['rdp'], aba: WinTab::AcessoRemoto), 'rdp');
 
     expect($s)->toMatch('~name="SubAction" value="off"><button type="submit" class="btn btn-sm">Desligar acesso remoto~')
-        ->and($s)->toMatch('~name="SubAction" value="on"><button type="submit" class="btn btn-sm btn-ghost">Ligar acesso remoto~');
+        ->and($s)->toMatch('~name="SubAction" value="on"><button type="submit" class="btn btn-sm btn-ghost" data-uac>Ligar acesso remoto~');
 });
 
 it('rdp com H.264/UDP pendente: mostra o aviso de reinício e o botão de reverter', function () {
@@ -314,7 +314,7 @@ it('A NUMERAÇÃO [1] A [13] SUMIU da tela', function () {
 it('subação aparece em português, com o valor da ação ao lado e no envio', function () {
     $html = winHtml(aba: WinTab::Servicos);
 
-    expect($html)->toContain('<option value="install">instalar (install) · abre o UAC</option>')
+    expect($html)->toContain('<option value="install" data-uac>instalar (install) · abre o UAC</option>')
         ->and($html)->toContain('<option value="status">ver o estado (status)</option>')
         ->and($html)->toContain('<option value="disable">desligar (disable)</option>')
         ->and($html)->not->toMatch('/<option value="([a-z]+)">\1<\/option>/');
@@ -336,11 +336,11 @@ it('COM O WORKER LONGO DESLIGADO, a sensível segue clicável e a comum trava', 
     $html = winHtml(aba: WinTab::AcessoRemoto, blocked: 'O PowerShell elevado está desligado.');
 
     expect($html)->toContain('não dependem dele')
-        ->and($html)->toMatch('/<button type="submit" class="btn btn-sm[^"]*">Ligar acesso remoto · abre o UAC/')
+        ->and($html)->toMatch('/<button type="submit" class="btn btn-sm[^"]*" data-uac>Ligar acesso remoto · abre o UAC/')
         ->and($html)->toMatch('/<button type="submit" class="btn btn-sm[^"]*" disabled>Desligar acesso remoto</')
         ->and(winSecao($html, 'install'))->not->toContain(' disabled')
         // No select misto, cada opção trava pelo caminho dela.
-        ->and($html)->toContain('<option value="install">instalar (install) · abre o UAC</option>')
+        ->and($html)->toContain('<option value="install" data-uac>instalar (install) · abre o UAC</option>')
         ->and($html)->toContain('<option value="status" disabled>ver o estado (status)</option>');
 });
 
@@ -349,7 +349,43 @@ it('com o checkout incompleto, a sensível também trava', function () {
     $html   = winHtml(aba: WinTab::AcessoRemoto, blocked: $motivo, sensitiveBlocked: $motivo);
 
     expect($html)->not->toContain('não dependem dele')
-        ->and($html)->toMatch('/" disabled>Ligar acesso remoto · abre o UAC/')
+        ->and($html)->toMatch('/" data-uac disabled>Ligar acesso remoto · abre o UAC/')
         ->and(winSecao($html, 'install'))->toContain(' disabled')
         ->and($html)->toContain('<select id="exp-sub" name="SubAction" disabled>');
+});
+
+// ---- Sem reload (fase 1) ----------------------------------------------------
+
+it('sem reload: todo formulário POST da /win é marcado, e o aviso também', function () {
+    $html = winHtml();
+
+    preg_match_all('/<form method="post"[^>]*>/', $html, $m);
+
+    expect($m[0])->not->toBeEmpty();
+    foreach ($m[0] as $form) {
+        expect($form)->toContain('data-sem-reload');
+    }
+});
+
+it('sem reload: os aplicados vêm num atributo do form-tweaks, escapado, e não cozidos no script', function () {
+    $html = winHtml(aplicados: ['A', 'x"<b>']);
+
+    expect($html)->toContain('id="form-tweaks" data-aplicados="[&quot;A&quot;,&quot;x\&quot;&lt;b&gt;&quot;]"')
+        ->and($html)->not->toContain('APLICADOS');
+});
+
+it('sem reload: só a ação sensível leva data-uac, e só o aviso da ação leva data-aviso', function () {
+    $html = winHtml(aba: WinTab::AcessoRemoto);
+
+    expect($html)->toContain('data-uac>Ligar acesso remoto · abre o UAC')
+        ->and($html)->toContain('data-uac>Instalar · abre o UAC')
+        ->and($html)->toMatch('/class="btn btn-sm[^"]*">Desligar acesso remoto</')
+        ->and(substr_count($html, 'data-aviso'))->toBe(0);
+});
+
+it('sem reload: a confirmação do optimize usa requestSubmit, com submit() só de recaída', function () {
+    $html = winHtml();
+
+    expect($html)->toContain('if (formOpt.requestSubmit) { formOpt.requestSubmit(); } else { formOpt.submit(); }')
+        ->and(substr_count($html, '.submit()'))->toBe(1);
 });

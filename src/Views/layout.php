@@ -225,9 +225,173 @@ use App\Http\Respond;
   .modal-opcao input { margin: 2px 0 0; flex: none; }
   .modal-opcao span { color: var(--mut); display: block; margin-top: 3px; font-size: 12px; }
   .modal-acoes { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 20px 20px; }
+
+  /* ---- Aviso no rodapé ----------------------------------------------------
+     Depois de uma ação sem reload a página fica onde estava, e o aviso do topo
+     pode estar fora da vista. A faixa repete o aviso embaixo, e o aria-live
+     faz o leitor de tela anunciar. */
+  .aviso-rodape {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    width: min(720px, calc(100% - 32px)); display: flex; gap: 12px; align-items: flex-start;
+    border: 1px solid var(--line); border-left: 3px solid #262626; border-radius: 8px;
+    padding: 10px 13px; background: var(--bg); font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.14);
+  }
+  .aviso-rodape[hidden] { display: none; }
+  .aviso-rodape span { flex: 1; }
+  .aviso-rodape button { border: 0; background: none; color: var(--mut); font-size: 16px; line-height: 1; cursor: pointer; }
 </style>
 </head>
 <body>
-<?= $view->content ?>
+<main id="conteudo"><?= $view->content ?></main>
+
+<div class="aviso-rodape" id="aviso-rodape" role="status" aria-live="polite" hidden>
+  <span id="aviso-rodape-texto"></span>
+  <button type="button" id="aviso-rodape-fechar" aria-label="Fechar aviso">&times;</button>
+</div>
+
+<script>
+/*
+ * Ações sem reload ("PRG por fetch"). O servidor não muda: o formulário
+ * marcado com data-sem-reload manda o MESMO POST, recebe o MESMO 303, e quem
+ * segue o 303 é este script. O HTML que volta já traz o aviso, o token novo,
+ * os painéis e o histórico, desenhados pelo PHP — daqui só se troca o miolo
+ * (o .wrap dentro do #conteudo). Os <dialog> e os <script> das telas ficam
+ * fora do .wrap e não são trocados; as telas ligam os eventos por delegação
+ * e ouvem "phporto:trocou" para repintar o que for preciso.
+ *
+ * Sem fetch/DOMParser (navegador muito velho), não faz nada: o envio nativo
+ * segue igual a antes. Em erro de rede NUNCA reenvia o POST: faz um GET da
+ * tela para conferir o que aconteceu.
+ */
+(function () {
+  'use strict';
+
+  // Cancelar em qualquer modal fecha o modal, e só isso: nada é enviado.
+  // O último botão clicado fica guardado para o navegador sem ev.submitter.
+  var ultimoBotao = null;
+  document.addEventListener('click', function (ev) {
+    var fechar = ev.target.closest('dialog [data-fechar]');
+    if (fechar) { fechar.closest('dialog').close(); }
+    ultimoBotao = ev.target.closest('button, input[type=submit]');
+  });
+
+  if (!window.fetch || !window.DOMParser || !window.URLSearchParams || !window.FormData) { return; }
+
+  var CAMPO = <?= json_encode(\App\Http\Csrf::fieldName(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+  var aviso = document.getElementById('aviso-rodape');
+  var avisoTexto = document.getElementById('aviso-rodape-texto');
+  var ocupado = false;
+
+  document.getElementById('aviso-rodape-fechar').addEventListener('click', function () { aviso.hidden = true; });
+
+  function mostrarAviso(texto) {
+    avisoTexto.textContent = texto;
+    aviso.hidden = texto === '';
+  }
+
+  function miolo(raiz) { return raiz.querySelector('#conteudo .wrap'); }
+
+  // Na falha, a página é recarregada por GET, nunca pelo POST: não se sabe se
+  // a ação rodou, e o histórico é quem conta.
+  function conferir() {
+    mostrarAviso('Não deu para saber se a ação terminou. Recarregando a página para conferir…');
+    location.replace(location.pathname + location.search);
+  }
+
+  // Um envio por vez: o token é um só por página, e um segundo envio seria
+  // recusado de qualquer jeito. O botão clicado conta o tempo.
+  function travar(form, botao) {
+    document.querySelectorAll('#conteudo button:not([type=button]), #conteudo input[type=submit]').forEach(function (b) { b.disabled = true; });
+    if (!botao || botao.tagName !== 'BUTTON') { botao = form.querySelector('button:not([type=button])'); }
+    if (!botao) { return null; }
+
+    var uac = botao.hasAttribute('data-uac') || form.querySelector('option[data-uac]:checked') !== null;
+    var texto = uac ? 'aguardando o UAC… ' : 'executando… ';
+    var t0 = Date.now();
+    botao.textContent = texto + '0 s';
+
+    return setInterval(function () {
+      botao.textContent = texto + Math.round((Date.now() - t0) / 1000) + ' s';
+    }, 1000);
+  }
+
+  function trocar(html, url, foco) {
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    var novo = miolo(doc);
+    var atual = miolo(document);
+    if (!novo || !atual) { throw new Error('sem miolo'); }
+
+    var y = window.scrollY;
+    atual.replaceWith(document.adoptNode(novo));
+    window.scrollTo(0, y);
+    document.title = doc.title;
+    history.replaceState(null, '', url);
+
+    // O token velho foi queimado: todo campo de token da página, inclusive os
+    // de dentro de <dialog> fora do miolo, recebe o novo.
+    var token = novo.querySelector('input[name="' + CAMPO + '"]');
+    if (token) {
+      document.querySelectorAll('input[name="' + CAMPO + '"]').forEach(function (i) { i.value = token.value; });
+    }
+
+    // Segredo não fica em campo depois da resposta, mesmo fora do miolo.
+    document.querySelectorAll('input[type=password], [data-segredo]').forEach(function (i) { i.value = ''; });
+
+    var nota = novo.querySelector('[data-aviso]');
+    mostrarAviso(nota ? nota.textContent.replace(/\s+/g, ' ').trim() : '');
+
+    var alvo = foco && document.getElementById(foco);
+    if (alvo) {
+      var focavel = alvo.matches('button, input, select, textarea') ? alvo : alvo.querySelector('button:not([disabled]), input:not([type=hidden]):not([disabled])');
+      if (focavel) { focavel.focus({ preventScroll: true }); }
+    }
+
+    document.dispatchEvent(new CustomEvent('phporto:trocou'));
+  }
+
+  // Ouve no document, então vale também para formulários que acabaram de ser
+  // trocados. As telas que confirmam em modal cancelam o submit antes
+  // (preventDefault) e chamam requestSubmit() depois da confirmação.
+  document.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    if (ev.defaultPrevented || !form.hasAttribute('data-sem-reload') || form.method.toLowerCase() !== 'post') { return; }
+    ev.preventDefault();
+    if (ocupado) { return; }
+    ocupado = true;
+
+    var botao = ev.submitter || (ultimoBotao && ultimoBotao.form === form && ultimoBotao.type === 'submit' ? ultimoBotao : null);
+    var dados = new FormData(form);
+    // O valor do botão que enviou (o "Tentar novamente" manda ps_enabled=1 por ele).
+    if (botao && botao.name) { dados.append(botao.name, botao.value); }
+
+    document.querySelectorAll('dialog[open]').forEach(function (d) { d.close(); });
+
+    var foco = (botao && botao.id) || form.id || (form.closest('[id]:not(#conteudo)') || {}).id || '';
+    aviso.hidden = true;
+    var relogio = travar(form, botao);
+
+    fetch(form.action, {
+      method: 'POST',
+      body: new URLSearchParams(dados),
+      credentials: 'same-origin',
+      mode: 'same-origin',
+      redirect: 'follow',
+      headers: { 'X-PHPorto-Sem-Reload': '1' }
+    }).then(function (r) {
+      var html = (r.headers.get('Content-Type') || '').indexOf('text/html') === 0;
+      // 401, 404 de superfície desligada, 429, outra origem: navegação normal
+      // por GET, e o navegador faz o que faria sem este script.
+      if (!r.ok || !html || new URL(r.url).origin !== location.origin) {
+        location.assign(r.url || location.href);
+        return null;
+      }
+      return r.text().then(function (texto) { trocar(texto, r.url, foco); });
+    }).then(function () {
+      clearInterval(relogio);
+      ocupado = false;
+    }).catch(conferir);
+  });
+})();
+</script>
 </body>
 </html>

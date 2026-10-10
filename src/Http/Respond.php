@@ -65,6 +65,8 @@ final class Respond
         header('Content-Type: text/html; charset=utf-8');
         header('X-Content-Type-Options: nosniff');
         header('Referrer-Policy: no-referrer');
+        // A página carrega o token CSRF: não vai para cache nenhum.
+        header('Cache-Control: no-store');
 
         $view = new LayoutView($title, $content);
         echo self::render('layout.php', $view);

@@ -61,7 +61,7 @@ $avisoUac  = ' · abre o UAC';
 $opcao = static function (string $valor, string $acao = '') use ($subRotulos, $sensivel, $dis, $disSens, $avisoUac): string {
     $sens = $acao !== '' && $sensivel($acao, 'SubAction', $valor);
 
-    return '<option value="' . Respond::e($valor) . '"' . ($sens ? $disSens : $dis) . '>'
+    return '<option value="' . Respond::e($valor) . '"' . ($sens ? ' data-uac' . $disSens : $dis) . '>'
         . Respond::e(($subRotulos[$valor] ?? $valor) . ' (' . $valor . ')' . ($sens ? $avisoUac : '')) . '</option>';
 };
 
@@ -74,11 +74,11 @@ $opcao = static function (string $valor, string $acao = '') use ($subRotulos, $s
 $botao = static function (string $acao, string $campo, string $valor, string $rotulo, bool $secundario) use ($view, $dis, $disSens, $sensivel, $avisoUac): string {
     $sens = $sensivel($acao, $campo, $valor);
 
-    return '<form method="post">'
+    return '<form method="post" data-sem-reload>'
         . '<input type="hidden" name="' . Respond::e($view->csrfField) . '" value="' . Respond::e($view->csrfToken) . '">'
         . '<input type="hidden" name="acao" value="' . Respond::e($acao) . '">'
         . '<input type="hidden" name="' . Respond::e($campo) . '" value="' . Respond::e($valor) . '">'
-        . '<button type="submit" class="btn btn-sm' . ($secundario ? ' btn-ghost' : '') . '"' . ($sens ? $disSens : $dis) . '>'
+        . '<button type="submit" class="btn btn-sm' . ($secundario ? ' btn-ghost' : '') . '"' . ($sens ? ' data-uac' . $disSens : $dis) . '>'
         . Respond::e($rotulo . ($sens ? $avisoUac : '')) . '</button></form>';
 };
 
@@ -115,7 +115,7 @@ foreach ($view->tweaks as $tw) {
   </p>
 
   <?php if ($view->notice !== null): ?>
-    <div class="alert alert-note"><?= Respond::e($view->notice) ?></div>
+    <div class="alert alert-note" data-aviso><?= Respond::e($view->notice) ?></div>
   <?php endif; ?>
 
   <?php if ($travado): ?>
@@ -174,13 +174,13 @@ foreach ($view->tweaks as $tw) {
     <section id="acao-audit">
       <?= $secao('Auditoria', 'Gera o log completo do sistema em C:\log\DD.MM.AAAA — oito blocos.') ?>
       <div class="row">
-        <form method="post">
+        <form method="post" data-sem-reload>
           <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
           <input type="hidden" name="acao" value="audit">
           <input type="hidden" name="SubAction" value="run">
           <button type="submit" class="btn btn-sm"<?= $dis ?>>Gerar auditoria</button>
         </form>
-        <form method="post">
+        <form method="post" data-sem-reload>
           <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
           <input type="hidden" name="acao" value="audit">
           <input type="hidden" name="SubAction" value="open">
@@ -194,7 +194,7 @@ foreach ($view->tweaks as $tw) {
     </section>
     <section id="acao-memory">
       <?= $secao('Memória', 'Limpa a RAM com o WinMemoryCleaner, baixado na primeira execução.') ?>
-      <form method="post">
+      <form method="post" data-sem-reload>
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="memory">
         <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Limpar RAM</button></div>
@@ -202,7 +202,7 @@ foreach ($view->tweaks as $tw) {
     </section>
     <section id="acao-processes">
       <?= $secao('Processos', 'Lista os 30 processos que mais consomem RAM.') ?>
-      <form method="post">
+      <form method="post" data-sem-reload>
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="processes">
         <div class="row"><button type="submit" class="btn btn-sm"<?= $dis ?>>Listar processos</button></div>
@@ -223,7 +223,7 @@ foreach ($view->tweaks as $tw) {
       <?php if ($view->tweaksProblem !== null): ?>
         <p class="bad"><?= Respond::e($view->tweaksProblem) ?></p>
       <?php else: ?>
-        <form method="post" id="form-tweaks">
+        <form method="post" data-sem-reload id="form-tweaks" data-aplicados="<?= Respond::e((string) json_encode($view->tweaksApplied)) ?>">
           <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
           <input type="hidden" name="acao" value="tweaks">
           <div class="row">
@@ -277,7 +277,7 @@ foreach ($view->tweaks as $tw) {
       <?php if ($view->debloatProblem !== null): ?>
         <p class="bad"><?= Respond::e($view->debloatProblem) ?></p>
       <?php else: ?>
-        <form method="post">
+        <form method="post" data-sem-reload>
           <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
           <input type="hidden" name="acao" value="debloat">
           <input type="hidden" name="PackagesForm" value="1">
@@ -302,7 +302,7 @@ foreach ($view->tweaks as $tw) {
       <?php if ($view->dnsProblem !== null): ?>
         <p class="bad"><?= Respond::e($view->dnsProblem) ?></p>
       <?php else: ?>
-        <form method="post" id="form-dns">
+        <form method="post" data-sem-reload id="form-dns">
           <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
           <input type="hidden" name="acao" value="dns">
           <div class="colunas-4">
@@ -338,7 +338,7 @@ foreach ($view->tweaks as $tw) {
     </section>
     <section id="acao-network">
       <?= $secao('Captura de rede', 'Captura pacotes com o TShark e gera relatório em runtime/Reports, na pasta do projeto.') ?>
-      <form method="post">
+      <form method="post" data-sem-reload>
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="network">
         <div class="campo">
@@ -364,14 +364,14 @@ foreach ($view->tweaks as $tw) {
   <?= $painel(WinTab::Aplicativos) ?>
     <section id="acao-install">
       <?= $secao('Instalar apps', 'Instala apps pelo winget, por ID, separados por vírgula. As caixas abaixo somam os principais ao campo.') ?>
-      <form method="post">
+      <form method="post" data-sem-reload>
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="install">
         <div class="campo">
           <label for="ins-apps">Apps</label>
           <input type="text" id="ins-apps" name="Apps"
                  placeholder="Mozilla.Firefox,Notepad++.Notepad++"<?= $disSens ?>>
-          <button type="submit" class="btn btn-campo"<?= $disSens ?>>Instalar<?= Respond::e($avisoUac) ?></button>
+          <button type="submit" class="btn btn-campo" data-uac<?= $disSens ?>>Instalar<?= Respond::e($avisoUac) ?></button>
         </div>
         <div class="colunas-4">
           <?php foreach (\App\Win\WinAction::INSTALL_SUGGESTIONS as $id => $nome): ?>
@@ -398,7 +398,7 @@ foreach ($view->tweaks as $tw) {
   <?= $painel(WinTab::Servicos) ?>
     <section id="acao-exporter">
       <?= $secao('Métricas do Windows', 'Instala e controla o windows_exporter, para o Prometheus, na porta 9182.') ?>
-      <form method="post">
+      <form method="post" data-sem-reload>
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="exporter">
         <div class="campo">
@@ -414,7 +414,7 @@ foreach ($view->tweaks as $tw) {
     </section>
     <section id="acao-gpu">
       <?= $secao('Métricas da GPU', 'Instala e controla o nvidia_gpu_exporter, para o Prometheus.') ?>
-      <form method="post">
+      <form method="post" data-sem-reload>
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="gpu">
         <div class="campo">
@@ -435,7 +435,7 @@ foreach ($view->tweaks as $tw) {
       <?php if ($optAplicado): ?>
         <div class="row"><?= $botao('optimize', 'Undo', '1', 'Reverter', false) ?></div>
       <?php endif; ?>
-      <form method="post" id="form-optimize">
+      <form method="post" data-sem-reload id="form-optimize">
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="optimize">
         <div class="campo">
@@ -473,7 +473,7 @@ foreach ($view->tweaks as $tw) {
       <?php if ($gdidAplicado): ?>
         <div class="row"><?= $botao('gdid', 'SubAction', 'enable', 'Reverter', false) ?></div>
       <?php endif; ?>
-      <form method="post">
+      <form method="post" data-sem-reload>
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="gdid">
         <div class="campo">
@@ -629,7 +629,7 @@ foreach ($view->tweaks as $tw) {
       </table>
     <?php endif; ?>
 
-    <form method="post" style="margin-top:14px">
+    <form method="post" data-sem-reload style="margin-top:14px">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="acao" value="limpar">
       <div class="row">
@@ -704,32 +704,27 @@ foreach ($view->tweaks as $tw) {
 </dialog>
 
 <script>
+/*
+ * Os formulários desta tela vão pelo script comum do layout, sem reload: o
+ * miolo é trocado depois de cada ação, então tudo aqui é por delegação no
+ * document, e o que a tela já aplicou vem do data-aplicados, fresco a cada
+ * troca. A trava contra duplo envio também é do script comum.
+ */
 (function () {
   'use strict';
 
-  document.querySelectorAll('dialog [data-fechar]').forEach(function (b) {
-    b.addEventListener('click', function () { b.closest('dialog').close(); });
-  });
-
   // ---- DNS: os campos de IP só aparecem no DNS próprio -------------------
   // Sem JavaScript eles ficam sempre à vista, e o DNS próprio continua usável.
-  var dnsForm   = document.getElementById('form-dns');
-  var dnsCustom = document.getElementById('dns-custom');
-
   function pintarDns() {
+    var dnsForm = document.getElementById('form-dns');
+    if (!dnsForm) { return; }
     var marcado = dnsForm.querySelector('input[name="Provider"]:checked');
-    dnsCustom.hidden = !marcado || marcado.value.toLowerCase() !== 'custom';
-  }
-
-  if (dnsForm) {
-    dnsForm.querySelectorAll('input[name="Provider"]').forEach(function (r) { r.addEventListener('change', pintarDns); });
-    pintarDns();
+    document.getElementById('dns-custom').hidden = !marcado || marcado.value.toLowerCase() !== 'custom';
   }
 
   // ---- Tweaks: o preset marca as caixas, e a seleção diz o nome ---------
   var PRESETS = <?= json_encode((object) $view->tweakPresets, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
   var ROTULOS = <?= json_encode($presetRotulos, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-  var formTw  = document.getElementById('form-tweaks');
 
   function nomeDaSelecao(marcadas) {
     if (marcadas.length === 0) { return 'nenhuma'; }
@@ -742,103 +737,88 @@ foreach ($view->tweaks as $tw) {
     return 'custom';
   }
 
-  // ---- Tweaks: o botão só diz Reverter quando todas as marcadas estão aplicadas
-  var APLICADOS = <?= json_encode($view->tweaksApplied, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+  // O botão só diz Reverter quando todas as marcadas estão aplicadas.
+  function pintarTw(formTw) {
+    var aplicados = JSON.parse(formTw.getAttribute('data-aplicados') || '[]');
+    var marcadas = [];
+    formTw.querySelectorAll('input[name="Items[]"]').forEach(function (c) { if (c.checked) { marcadas.push(c.value); } });
+    var nome = nomeDaSelecao(marcadas);
+    document.getElementById('tw-match').textContent = ROTULOS[nome] || nome;
 
-  if (formTw) {
-    var caixasTw = formTw.querySelectorAll('input[name="Items[]"]');
-    var rotuloTw = document.getElementById('tw-match');
-    var autoUndo = document.getElementById('tw-auto-undo');
-    var undoTw   = document.getElementById('tw-undo');
-    var botaoTw  = document.getElementById('tw-botao');
-
-    var pintarTw = function () {
-      var marcadas = [];
-      caixasTw.forEach(function (c) { if (c.checked) { marcadas.push(c.value); } });
-      var nome = nomeDaSelecao(marcadas);
-      rotuloTw.textContent = ROTULOS[nome] || nome;
-
-      var reverte = marcadas.length > 0 && marcadas.every(function (k) { return APLICADOS.indexOf(k) !== -1; });
-      autoUndo.disabled = !reverte;
-      botaoTw.textContent = reverte || undoTw.checked ? 'Reverter' : 'Aplicar';
-    };
-
-    caixasTw.forEach(function (c) { c.addEventListener('change', pintarTw); });
-    undoTw.addEventListener('change', pintarTw);
-
-    formTw.querySelectorAll('[data-preset]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var chaves = PRESETS[b.getAttribute('data-preset')] || [];
-        caixasTw.forEach(function (c) { c.checked = chaves.indexOf(c.value) !== -1; });
-        pintarTw();
-      });
-    });
+    var reverte = marcadas.length > 0 && marcadas.every(function (k) { return aplicados.indexOf(k) !== -1; });
+    document.getElementById('tw-auto-undo').disabled = !reverte;
+    document.getElementById('tw-botao').textContent = reverte || document.getElementById('tw-undo').checked ? 'Reverter' : 'Aplicar';
   }
+
+  document.addEventListener('change', function (ev) {
+    if (ev.target.closest('#form-dns') && ev.target.name === 'Provider') { pintarDns(); }
+
+    var formTw = ev.target.closest('#form-tweaks');
+    if (formTw && (ev.target.name === 'Items[]' || ev.target.id === 'tw-undo')) { pintarTw(formTw); }
+  });
+
+  document.addEventListener('click', function (ev) {
+    var preset = ev.target.closest('#form-tweaks [data-preset]');
+    if (preset) {
+      var formTw = preset.closest('form');
+      var chaves = PRESETS[preset.getAttribute('data-preset')] || [];
+      formTw.querySelectorAll('input[name="Items[]"]').forEach(function (c) { c.checked = chaves.indexOf(c.value) !== -1; });
+      pintarTw(formTw);
+    }
+  });
+
+  pintarDns();
+  document.addEventListener('phporto:trocou', pintarDns);
 
   // ---- Optimize: cada preset tem o seu aviso -----------------------------
-  var formOpt = document.getElementById('form-optimize');
-  var optPre  = document.getElementById('opt-preset');
-  var forcar  = false;
+  document.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    if (form.id !== 'form-optimize') { return; }
+    if (form.hasAttribute('data-confirmado')) { form.removeAttribute('data-confirmado'); return; }
 
-  if (formOpt) {
-    formOpt.addEventListener('submit', function (ev) {
-      if (forcar) { return; }
+    var preset = document.getElementById('opt-preset').value;
+    var modal = null;
+    if (preset === 'ssh') { modal = document.getElementById('modal-ssh'); }
+    if (preset === 'kill-rdp') { modal = document.getElementById('modal-killrdp'); }
 
-      var modal = null;
-      if (optPre.value === 'ssh') { modal = document.getElementById('modal-ssh'); }
-      if (optPre.value === 'kill-rdp') { modal = document.getElementById('modal-killrdp'); }
+    // -Undo é o botão de socorro: restaurar não precisa de aviso.
+    if (modal && !document.getElementById('opt-undo').checked) {
+      ev.preventDefault();
+      modal.showModal();
+    }
+  });
 
-      // -Undo é o botão de socorro: restaurar não precisa de aviso.
-      if (modal && !document.getElementById('opt-undo').checked) {
-        ev.preventDefault();
-        modal.showModal();
-      }
-    });
+  document.addEventListener('click', function (ev) {
+    var confirmar = ev.target.closest('[data-confirmar-optimize]');
+    if (!confirmar) { return; }
 
-    document.querySelectorAll('[data-confirmar-optimize]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        b.closest('dialog').close();
-        forcar = true;
-        formOpt.submit();
-      });
-    });
-  }
+    confirmar.closest('dialog').close();
+    var formOpt = document.getElementById('form-optimize');
+    formOpt.setAttribute('data-confirmado', '');
+    if (formOpt.requestSubmit) { formOpt.requestSubmit(); } else { formOpt.submit(); }
+  });
 
   // ---- Abas: troca o painel sem recarregar -------------------------------
   // SEGUNDA CAMADA, PARA CONFORTO: sem JavaScript, o link /win?aba=<nome>#abas
   // recarrega a página já posicionada no menu. Aqui o clique só mostra o painel
   // e troca a URL com replaceState, porque os formulários postam para a URL da
   // página e o 303 volta para a aba que ela carrega.
-  var abas = document.getElementById('abas');
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('#abas a[data-aba]');
+    if (!link || !window.history || !history.replaceState) { return; }
+    if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) { return; }
 
-  if (abas && window.history && history.replaceState) {
-    abas.addEventListener('click', function (ev) {
-      var link = ev.target.closest('a[data-aba]');
-      if (!link || ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) { return; }
+    var painel = document.getElementById('painel-' + link.getAttribute('data-aba'));
+    if (!painel) { return; }
 
-      var painel = document.getElementById('painel-' + link.getAttribute('data-aba'));
-      if (!painel) { return; }
-
-      ev.preventDefault();
-      document.querySelectorAll('.painel').forEach(function (p) { p.hidden = p !== painel; });
-      abas.querySelectorAll('a[data-aba]').forEach(function (a) {
-        var atual = a === link;
-        a.classList.toggle('ativa', atual);
-        if (atual) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
-      });
-      history.replaceState(null, '', link.getAttribute('href'));
+    ev.preventDefault();
+    document.querySelectorAll('.painel').forEach(function (p) { p.hidden = p !== painel; });
+    link.parentNode.querySelectorAll('a[data-aba]').forEach(function (a) {
+      var atual = a === link;
+      a.classList.toggle('ativa', atual);
+      if (atual) { a.setAttribute('aria-current', 'page'); } else { a.removeAttribute('aria-current'); }
     });
-  }
-
-  // ---- Segunda barreira contra duplo envio -------------------------------
-  // CONFORTO, NÃO PROTEÇÃO: a garantia de "uma intenção, uma execução" é o
-  // token de uso único no servidor. Isto só evita o segundo clique ansioso
-  // numa ação que pode levar minutos sem dar sinal.
-  document.querySelectorAll('form').forEach(function (f) {
-    f.addEventListener('submit', function () {
-      var b = f.querySelector('button[type=submit]');
-      if (b) { b.disabled = true; b.textContent = 'executando…'; }
-    });
+    history.replaceState(null, '', link.getAttribute('href'));
   });
 })();
 </script>
