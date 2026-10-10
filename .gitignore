@@ -16,6 +16,10 @@
 # desligada, e não a decisão que alguém tomou em outro computador.
 /storage/flags.json
 
+# A decisão de ligar o painel do Hyper-V. Mesmo critério do flags.json: é o
+# dono DESTA máquina que decide, e um clone deve nascer com o painel desligado.
+/storage/hyperv.json
+
 # O marcador do PowerShell elevado. É o estado mais local que existe aqui: dois
 # PIDs de processos desta execução desta máquina. Versionar não seria só ruído
 # — quem clonasse receberia um marcador apontando para PIDs que na máquina dele

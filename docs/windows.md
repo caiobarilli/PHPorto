@@ -221,6 +221,35 @@ domínios do WNS entram no bloqueio, e apps da Store param de receber aviso.
 ou para o Alto Desempenho quando o Windows não tem o primeiro. **Voltar ao
 Balanceado** devolve o plano padrão do Windows.
 
+## A tela Hyper-V
+
+`/hyperv` lista as máquinas virtuais deste computador: nome, situação, memória
+em uso, há quanto tempo está ligada e o endereço IP. **Só lê**: não liga, não
+desliga, não cria nem apaga VM, e abrir a tela não grava no histórico.
+
+Ela só existe com o **Painel do Hyper-V** ligado em `/config`. Ligar confere,
+sem elevação, se o recurso Hyper-V está ligado no Windows; se não estiver, o
+painel não liga e a frase diz o que falta (no Windows Home o Hyper-V não
+existe, e a frase diz isso). O estado fica em `storage/hyperv.json`, fora do
+Git, e sobrevive a reiniciar.
+
+A leitura pede o **PowerShell elevado** ligado, porque o `Get-VM` exige
+Administrador. Ela roda ao abrir a tela e a cada **Atualizar**, com teto de
+60 s; passou disso, é cancelada.
+
+O que cada faixa quer dizer:
+
+| faixa | o que fazer |
+|---|---|
+| precisa do PowerShell elevado ligado | **Abrir configuração** e ligar o PowerShell elevado |
+| a leitura demorou demais | **Atualizar** em instantes |
+| o Hyper-V não está ligado no Windows | ligar em "Ativar ou desativar recursos do Windows" e reiniciar |
+| o serviço de máquinas virtuais está parado | reiniciar o computador, ou iniciar "Gerenciamento de Máquina Virtual do Hyper-V" em *Serviços* |
+| não deu para ler as máquinas virtuais | abrir **detalhes técnicos** para ver a mensagem do Windows |
+
+O IP mostra o IPv4 primeiro, com o botão **copiar**. Endereços `fe80::` ficam
+de fora; outros IPv6 aparecem em **mais endereços**.
+
 ## Reversíveis e não reversíveis
 
 | ação | como se desfaz |

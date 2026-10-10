@@ -77,7 +77,7 @@ final class HypervGate
      */
     public function enable(): ?string
     {
-        $estado = $this->featureState();
+        [$estado, $edicao] = $this->featureState();
 
         if ($estado === self::STATE_ENABLED) {
             return $this->write()
@@ -86,16 +86,68 @@ final class HypervGate
                     . '. Verifique a permissão de escrita da pasta storage/.';
         }
 
+        return self::refusal($estado, $edicao);
+    }
+
+    /**
+     * A frase da recusa, dado o InstallState e a edição do Windows lida.
+     *
+     * A EDIÇÃO SÓ PESA NO "NÃO INSTALADO": no Windows Home o recurso não
+     * existe, e "não está instalado" sozinho manda a pessoa procurar uma caixa
+     * que o "Ativar ou desativar recursos" dela não tem. Edição ilegível leva a
+     * frase genérica; edição lida e que não é Home não leva nada.
+     */
+    public static function refusal(int $estado, ?string $edicao): string
+    {
         return match ($estado) {
             self::STATE_DISABLED => 'O Hyper-V está instalado, mas desligado no Windows. Ligá-lo é uma '
                 . 'mudança no próprio Windows e exige reiniciar o computador — faça pelo "Ativar ou '
                 . 'desativar recursos do Windows" e reinicie. O PHPorto não liga o recurso por você.',
             0 => 'Não foi possível conferir o estado do Hyper-V no Windows. Nada foi habilitado — '
                 . 'na dúvida, o painel fica desligado.',
-            default => 'O Hyper-V não está instalado neste Windows. Instalar o recurso é uma mudança '
-                . 'grande, que exige reiniciar o computador — faça pelo "Ativar ou desativar recursos '
-                . 'do Windows" e reinicie. O PHPorto não instala o recurso por você.',
+            default => self::notInstalled($edicao),
         };
+    }
+
+    private static function notInstalled(?string $edicao): string
+    {
+        if ($edicao !== null && preg_match('/\bHome\b/i', $edicao) === 1) {
+            return 'Este computador tem o ' . $edicao . ', e no Windows Home o Hyper-V não existe: '
+                . 'ele vem no Pro, Enterprise e Education. Não há o que ligar aqui.';
+        }
+
+        $frase = 'O Hyper-V não está instalado neste Windows. Instalar o recurso é uma mudança '
+            . 'grande, que exige reiniciar o computador — faça pelo "Ativar ou desativar recursos '
+            . 'do Windows" e reinicie. O PHPorto não instala o recurso por você.';
+
+        return $edicao === null
+            ? $frase . ' No Windows Home o Hyper-V não existe; ele vem no Pro, Enterprise e Education.'
+            : $frase;
+    }
+
+    /**
+     * Lê a saída da conferência: o InstallState (0 quando ilegível) e a
+     * edição do Windows (null quando ilegível).
+     *
+     * A edição vem do Caption do Win32_OperatingSystem e é texto de fora: só
+     * passa o que parece nome de produto, e cortado, porque vai para a tela.
+     *
+     * @return array{0: int, 1: ?string}
+     */
+    public static function parseCheck(string $output, bool $timedOut = false): array
+    {
+        if ($timedOut) {
+            return [0, null];
+        }
+
+        $estado = preg_match('/HYPERV=(\d+)/', $output, $m) === 1 ? (int) $m[1] : 0;
+        $edicao = null;
+
+        if (preg_match('/^EDICAO=([A-Za-z0-9 ._()-]{3,100})\s*$/m', $output, $e) === 1) {
+            $edicao = trim($e[1]);
+        }
+
+        return [$estado, $edicao];
     }
 
     /**
@@ -122,36 +174,34 @@ final class HypervGate
     }
 
     /**
-     * O InstallState do recurso, ou 0 quando a conferência não voltou legível.
+     * O InstallState do recurso e a edição do Windows (ver parseCheck()).
      *
-     * Roda um powershell.exe COMUM, não elevado: o Win32_OptionalFeature pelo
-     * CIM lê o estado sem Administrador. A saída é uma linha `HYPERV=<n>`, e
-     * qualquer coisa fora disso — timeout, erro, saída inesperada — vira 0, que
-     * o enable() trata como "não deu para conferir" e recusa.
+     * Roda um powershell.exe COMUM, não elevado: o Win32_OptionalFeature e o
+     * Win32_OperatingSystem pelo CIM leem sem Administrador. Qualquer coisa
+     * fora do esperado — timeout, erro, saída inesperada — vira estado 0, que o
+     * enable() trata como "não deu para conferir" e recusa.
+     *
+     * @return array{0: int, 1: ?string}
      */
-    private function featureState(): int
+    private function featureState(): array
     {
         $script = $this->path($this->filesDir, 'hyperv-check.ps1');
 
         try {
             PsScriptBuilder::write($script, $this->checkBody());
         } catch (Throwable) {
-            return 0;
+            return [0, null];
         }
 
         try {
             $r = (new PsRunner($this->filesDir))->run($script, self::CHECK_TIMEOUT_S);
         } catch (Throwable) {
-            return 0;
+            return [0, null];
         } finally {
             @unlink($script);
         }
 
-        if ($r->timedOut || preg_match('/HYPERV=(\d+)/', $r->output, $m) !== 1) {
-            return 0;
-        }
-
-        return (int) $m[1];
+        return self::parseCheck($r->output, $r->timedOut);
     }
 
     private function checkBody(): string
@@ -165,6 +215,11 @@ final class HypervGate
                 if (\$null -eq \$f) { 'HYPERV=3' } else { 'HYPERV=' + [string][int]\$f.InstallState }
             } catch {
                 'HYPERV=erro'
+            }
+            try {
+                'EDICAO=' + [string](Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop).Caption
+            } catch {
+                'EDICAO=?'
             }
             PS;
     }

@@ -145,21 +145,24 @@ use App\Http\Respond;
       </div>
 
       <p class="nota-estado">
-        Libera a tela <strong>/hyperv</strong>, que lista as máquinas virtuais. Ligar
-        <strong>confere antes</strong> se o Hyper-V está presente e ligado no Windows — se
-        não estiver, o painel não liga e a tela diz o que falta.
+        Mostra a tela Hyper-V com as máquinas virtuais deste computador. Só leitura.
         <br>
         <?php if ($view->hypervEnabled): ?>
           Ligado<?php if ($view->hypervEnabledAt !== null && $view->hypervEnabledAt !== ''): ?>
-            desde <strong><?= Respond::e($view->hypervEnabledAt) ?></strong> (UTC)<?php endif; ?>.
+            desde <strong><?= Respond::e(Respond::dateTime($view->hypervEnabledAt, $view->tz)) ?></strong><?php endif; ?>.
         <?php else: ?>
           Desligado.
         <?php endif; ?>
-        <br>
-        Ao contrário do PowerShell elevado, este estado <strong>sobrevive a reiniciar</strong> o
-        servidor e o Windows: é decisão sua, não prova de privilégio, e por isso mora em
-        <code>storage/hyperv.json</code>, e não no marcador de elevação.
       </p>
+
+      <details class="nota-estado">
+        <summary>Como funciona</summary>
+        Ligar <strong>confere antes</strong> se o Hyper-V está presente e ligado no Windows — se
+        não estiver, o painel não liga e a tela diz o que falta. Ao contrário do PowerShell
+        elevado, este estado <strong>sobrevive a reiniciar</strong> o servidor e o Windows: é
+        decisão sua, não prova de privilégio, e por isso mora em <code>storage/hyperv.json</code>,
+        e não no marcador de elevação.
+      </details>
     </form>
   </section>
 

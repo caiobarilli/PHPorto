@@ -52,6 +52,16 @@ final class Pages
     private const COLD_START_S = 5;
 
     /**
+     * Teto da leitura do /hyperv, separado do das ações longas.
+     *
+     * É consulta, e roda no GET: o php -S atende uma requisição por vez, então
+     * um Get-VM pendurado com o teto das ações (600 s por padrão) deixava a
+     * tela em branco e as outras abas esperando. Fixo no piso que o .env já
+     * aceita para as ações; estourou, o JobChannel manda cancelar e a tela diz.
+     */
+    private const HYPERV_READ_TIMEOUT_S = Config::MIN_WINUTIL_TIMEOUT;
+
+    /**
      * @param AppConfig                            $config
      * @param Closure(): ExecutionLogService       $makeService
      */
@@ -142,6 +152,7 @@ final class Pages
             hypervEnabledAt: $this->hyperv->enabledAt(),
             uacOk: $this->uac->blockingReason() === null,
             uacSummary: $this->uac->summary(),
+            tz: $this->config['tz'],
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view));
@@ -871,9 +882,9 @@ final class Pages
      * porque confirmar a existência é o que uma decisão desligada não deve
      * fazer.
      *
-     * SEM POST e SEM BOTÃO: a tela só mostra. A leitura roda no GET, porque não
-     * há o que clicar — e roda pelo worker elevado, porque o Get-VM exige
-     * Administrador (medido). Não grava no histórico: abrir a tela é consulta,
+     * SEM POST: a tela só mostra. A leitura roda no GET — o "Atualizar" é só
+     * outro GET — e roda pelo worker elevado, porque o Get-VM exige
+     * Administrador (medido), com teto próprio de HYPERV_READ_TIMEOUT_S. Não grava no histórico: abrir a tela é consulta,
      * não execução a registrar, e uma linha por carregamento de página poluiria
      * o log das ações que a pessoa de fato pediu.
      */
@@ -883,8 +894,9 @@ final class Pages
             Respond::notFound();
         }
 
-        $blocked = $this->winBlockingReason();
-        $listing = null;
+        $blocked  = $this->winBlockingReason();
+        $listing  = null;
+        $timedOut = false;
 
         if ($blocked === null) {
             $nonce = $this->elevation->nonce();
@@ -893,9 +905,16 @@ final class Pages
                 $blocked = 'O PowerShell elevado não está mais de pé. Ligue de novo na configuração.';
             } else {
                 try {
-                    $run     = (new JobChannel($this->filesDir))
-                        ->dispatch(WinAction::Hyperv, [], $nonce, $this->config['winutil']['timeout']);
-                    $listing = HypervListing::fromOutput($run->output);
+                    $run = (new JobChannel($this->filesDir))
+                        ->dispatch(WinAction::Hyperv, [], $nonce, self::HYPERV_READ_TIMEOUT_S);
+
+                    // Cancelada no teto: a saída parcial não é listagem, e
+                    // tentar ler dela trocaria "demorou" por "formato inesperado".
+                    if ($run->timedOut) {
+                        $timedOut = true;
+                    } else {
+                        $listing = HypervListing::fromOutput($run->output);
+                    }
                 } catch (RuntimeException $e) {
                     $blocked = $e->getMessage();
                 }
@@ -907,6 +926,7 @@ final class Pages
             blocked: $blocked,
             listing: $listing,
             readAtUtc: gmdate(DATE_ATOM),
+            timedOut: $timedOut,
         );
 
         Respond::html('PHPorto — Hyper-V', Respond::render('hyperv.php', $view));

@@ -15,9 +15,23 @@ namespace App\Win;
  * O JSON pode vir sujo: o canal do worker prefixa notas de timeout ou de recusa
  * à saída. Por isso recorta do primeiro `{` ao último `}` antes de decodificar,
  * e o que não casar com a forma esperada vira problema, não exceção.
+ *
+ * COM O HOSPEDEIRO FORA, O MOTIVO É FECHADO: recurso desligado, serviço parado
+ * ou outro erro. Motivo ausente ou desconhecido cai em "erro", e não em
+ * "recurso desligado" — mandar reiniciar o computador sem saber é o conselho
+ * errado mais caro que a tela pode dar.
  */
 final class HypervListing
 {
+    /** O recurso Microsoft-Hyper-V não está ligado no Windows. */
+    public const REASON_FEATURE_OFF = 'recurso-desligado';
+
+    /** O serviço vmms (Gerenciamento de Máquina Virtual) não está rodando. */
+    public const REASON_SERVICE_STOPPED = 'servico-parado';
+
+    /** Qualquer outra falha do Get-VM; a mensagem vem em $error. */
+    public const REASON_ERROR = 'erro';
+
     /**
      * @param list<HypervVm> $vms
      */
@@ -25,6 +39,8 @@ final class HypervListing
         public readonly ?bool $hypervOn,
         public readonly array $vms,
         public readonly ?string $problem,
+        public readonly ?string $reason = null,
+        public readonly ?string $error = null,
     ) {
     }
 
@@ -47,7 +63,18 @@ final class HypervListing
         $hypervOn = (bool) $dados['hyperv'];
 
         if (!$hypervOn) {
-            return new self(false, [], null);
+            $motivo = $dados['motivo'] ?? null;
+            $erro   = $dados['erro'] ?? null;
+
+            return new self(
+                false,
+                [],
+                null,
+                in_array($motivo, [self::REASON_FEATURE_OFF, self::REASON_SERVICE_STOPPED], true)
+                    ? $motivo
+                    : self::REASON_ERROR,
+                is_string($erro) && trim($erro) !== '' ? trim($erro) : null,
+            );
         }
 
         $vms      = [];

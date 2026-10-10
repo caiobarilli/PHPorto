@@ -18,6 +18,10 @@ use App\Win\HypervListing;
  * Ela carrega o próprio problema quando a saída do worker não veio no formato
  * esperado, e é a view que decide, entre bloqueio, problema, hospedeiro
  * desligado e a lista, o que a faixa diz.
+ *
+ * $timedOut é a leitura que estourou o teto próprio do /hyperv e foi
+ * cancelada: não é bloqueio (não há o que ligar) nem problema de formato, e a
+ * tela pede só para atualizar.
  */
 final readonly class HypervView
 {
@@ -26,6 +30,7 @@ final readonly class HypervView
         public ?string $blocked,
         public ?HypervListing $listing,
         public string $readAtUtc,
+        public bool $timedOut = false,
     ) {
     }
 }
