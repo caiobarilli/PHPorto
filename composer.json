@@ -53,6 +53,7 @@
     "require-dev": {
         "pestphp/pest": "^3",
         "phpstan/phpstan": "^2.2",
-        "friendsofphp/php-cs-fixer": "^3.95"
+        "friendsofphp/php-cs-fixer": "^3.95",
+        "heyosseus/sloppy": "^1.6"
     }
 }
