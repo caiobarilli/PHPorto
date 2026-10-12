@@ -49,14 +49,6 @@ final class JobChannel
      */
     public const ID_PATTERN = '/^[0-9a-f]{12}$/D';
 
-    /** @var array<string, true>|null */
-    private ?array $preexisting = null;
-
-    private ?string $expectedAcao = null;
-
-    /** @var list<string> */
-    private array $cleanupFailures = [];
-
     public function __construct(
         private readonly string $filesDir,
     ) {
@@ -83,14 +75,7 @@ final class JobChannel
             );
         }
 
-        // A pasta protegida NÃO é varrida aqui. Varrer apagaria a órfã da /win
-        // que ainda não virou linha no banco, e na pasta real o @unlink nem
-        // apagava: o par velho ficava, e a /hyperv lia o win-done de processes
-        // como se fosse o dela. O que impede a ação seguinte de devolver a
-        // conclusão anterior é esta lista: o collect() sem id ignora estes ids
-        // e só aceita conclusão desta ação.
-        $this->preexisting  = $this->doneIds();
-        $this->expectedAcao = $acao->value;
+        $this->cleanupArtifacts();
 
         // A ordem de cancelar é apagada AQUI, e só aqui: uma ordem esquecida
         // de uma ação anterior cancelaria esta no primeiro tique do worker,
@@ -136,8 +121,7 @@ final class JobChannel
      * quem gera o id é o PHP, então ele sabe exatamente qual `win-done` é o
      * seu, e qualquer outro é ignorado. A ordem de cancelar, nesse caso, também
      * é a daquele id ($cancelOrder), para não colidir com o worker longo.
-     * Sem $id, vale a primeira conclusão que não existia no send() e cuja
-     * ação é a mandada. Sem send() antes nesta instância, a primeira válida.
+     * Sem $id, o comportamento é o de sempre: a primeira conclusão válida.
      */
     public function collect(
         int $timeoutSeconds,
@@ -182,7 +166,7 @@ final class JobChannel
             if ($done === null) {
                 // Nem a conclusão do cancelamento voltou. A ação pode ter
                 // ficado de pé do outro lado, e dizer isso é o mínimo.
-                $this->forgetSend();
+                $this->cleanupArtifacts();
 
                 return new PsResult(
                     output: sprintf(
@@ -214,18 +198,7 @@ final class JobChannel
                 . "[phporto] A allowlist do PowerShell elevado recusou esta ação.\n";
         }
 
-        // Só o par desta leitura sai. Se o disco recusar, a saída diz: um par
-        // que fica é uma linha que o recolhimento de órfãs vai ver depois.
-        $falhas = $this->discardPair($done['id']);
-
-        if ($falhas !== []) {
-            $saida = self::withNewline($saida) . sprintf(
-                "[phporto] Não foi possível apagar %s da pasta protegida; o par ficou no disco.\n",
-                implode(', ', $falhas)
-            );
-        }
-
-        $this->forgetSend();
+        $this->cleanupArtifacts();
 
         return new PsResult(
             output: $saida,
@@ -370,21 +343,9 @@ final class JobChannel
         foreach (glob($this->resultPath('win-done-*.json')) ?: [] as $arquivo) {
             $done = self::parseDone($arquivo);
 
-            if ($done === null || isset($this->preexisting[$done['id']])) {
-                continue;
+            if ($done !== null) {
+                return $done;
             }
-
-            // A recusa sai sem ação (o worker não inventa nome para o que não
-            // validou). Como só conta conclusão nova, ela é a desta ordem.
-            if (
-                $this->expectedAcao !== null
-                && $done['acao'] !== $this->expectedAcao
-                && !($done['acao'] === '' && $done['nota'] === 'recusado')
-            ) {
-                continue;
-            }
-
-            return $done;
         }
 
         return null;
@@ -470,69 +431,28 @@ final class JobChannel
     }
 
     /**
-     * @return array<string, true>
+     * Some com os arquivos de uma ação: saída, conclusão e auxiliares.
+     *
+     * A limpeza é ANTES de mandar e DEPOIS de coletar: um arquivo de
+     * conclusão esquecido faria a ação seguinte devolver na hora o resultado
+     * da anterior — e a pessoa leria a saída errada acreditando nela.
+     *
+     * NÃO TOCA NA ORDEM DE CANCELAR, e essa separação corrigiu um defeito
+     * grave: a versão anterior apagava a ordem no fim do caminho de timeout,
+     * logo depois de escrevê-la. O worker só lê as ordens no próprio tique de
+     * 500 ms, então apagá-la significava que a ação NÃO era cancelada e o
+     * processo filho seguia rodando com privilégio de Administrador — com a
+     * tela dizendo que havia cancelado. Quem apaga a ordem é o worker, ao
+     * obedecê-la; o único outro lugar é o send(), para não cancelar a ação
+     * seguinte com uma ordem velha.
      */
-    private function doneIds(): array
+    private function cleanupArtifacts(): void
     {
-        clearstatcache();
-
-        $ids = [];
-
-        foreach (glob($this->resultPath('win-done-*.json')) ?: [] as $arquivo) {
-            $id = substr(basename($arquivo), strlen('win-done-'), -strlen('.json'));
-
-            if (self::validId($id)) {
-                $ids[$id] = true;
+        foreach (['win-done-*.json', 'win-out-*.txt', 'win-err-*.txt', 'win-exit-*.txt'] as $padrao) {
+            foreach (glob($this->resultPath($padrao)) ?: [] as $arquivo) {
+                @unlink($arquivo);
             }
         }
-
-        return $ids;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function discardPair(string $id): array
-    {
-        $falhas = [];
-
-        foreach (['win-done-' . $id . '.json', 'win-out-' . $id . '.txt'] as $nome) {
-            $caminho = $this->resultPath($nome);
-
-            if (is_file($caminho) && !self::tryUnlink($caminho)) {
-                $falhas[] = $nome;
-            }
-        }
-
-        $this->cleanupFailures = $falhas;
-
-        return $falhas;
-    }
-
-    /**
-     * @return list<string>
-     */
-    public function cleanupFailures(): array
-    {
-        return $this->cleanupFailures;
-    }
-
-    private static function tryUnlink(string $caminho): bool
-    {
-        // Sem @: o aviso do PHP vira o retorno, e quem chama diz o que ficou.
-        set_error_handler(static fn (): bool => true);
-
-        try {
-            return unlink($caminho);
-        } finally {
-            restore_error_handler();
-        }
-    }
-
-    private function forgetSend(): void
-    {
-        $this->preexisting  = null;
-        $this->expectedAcao = null;
     }
 
     public static function validId(string $id): bool
