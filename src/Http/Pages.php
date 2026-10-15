@@ -208,11 +208,7 @@ final class Pages
 
         if ($action === 'fabrica') {
             $apagarBanco = ($_POST['apagar_banco'] ?? '') === '1';
-            $partes      = [];
-
-            $partes[] = Flags::reset()
-                ? 'configurações voltaram ao .env'
-                : 'FALHA ao apagar ' . Flags::path();
+            $partes      = self::factoryResetParts(Flags::reset(), $this->hyperv);
 
             if ($apagarBanco) {
                 $partes[] = $this->dropSqliteFile();
@@ -268,6 +264,21 @@ final class Pages
 
         $this->flash($erro);
         Respond::redirect('/config');
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function factoryResetParts(bool $flagsApagado, HypervGate $hyperv): array
+    {
+        return [
+            $flagsApagado
+                ? 'configurações voltaram ao .env'
+                : 'FALHA ao apagar ' . Flags::path(),
+            $hyperv->disable()
+                ? 'painel do Hyper-V desligado'
+                : 'FALHA ao apagar ' . $hyperv->statePath(),
+        ];
     }
 
     /**

@@ -179,6 +179,7 @@ use App\Http\Respond;
 
       <p class="nota-estado">
         Apaga <code>storage/flags.json</code>: tudo volta ao que o <code>.env</code> diz.
+        Desliga também o painel do Hyper-V.
         Opcionalmente apaga também o arquivo do banco.
       </p>
 
