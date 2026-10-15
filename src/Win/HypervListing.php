@@ -91,6 +91,18 @@ final class HypervListing
         return new self(true, $vms, null);
     }
 
+    private static function vmId(mixed $id): string
+    {
+        // Só no formato que o hyperv-vm aceita; o resto vira vazio, e a linha
+        // fica sem botão em vez de mandar um id que o worker recusaria depois
+        // do UAC.
+        if (!is_string($id) || preg_match('/' . WinAction::HYPERV_VM_ID_PATTERN . '/', $id) !== 1) {
+            return '';
+        }
+
+        return strtolower($id);
+    }
+
     /**
      * @param array<mixed> $cru
      */
@@ -113,6 +125,7 @@ final class HypervListing
             memoryBytes: is_int($cru['memoryBytes'] ?? null) ? $cru['memoryBytes'] : 0,
             uptimeSeconds: is_int($cru['uptimeSeconds'] ?? null) ? $cru['uptimeSeconds'] : 0,
             ip: $ips,
+            id: self::vmId($cru['id'] ?? null),
         );
     }
 }

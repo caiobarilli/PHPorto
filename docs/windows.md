@@ -246,8 +246,8 @@ Moonlight: se o UAC demorar, gere outro. Detalhes em
 ## A tela Hyper-V
 
 `/hyperv` lista as máquinas virtuais deste computador: nome, situação, memória
-em uso, há quanto tempo está ligada e o endereço IP. **Só lê**: não liga, não
-desliga, não cria nem apaga VM, e abrir a tela não grava no histórico.
+em uso, há quanto tempo está ligada e o endereço IP. Abrir a tela não grava no
+histórico. Ela não cria nem apaga VM.
 
 Ela só existe com o **Painel do Hyper-V** ligado em `/config`. Ligar confere,
 sem elevação, se o recurso Hyper-V está ligado no Windows; se não estiver, o
@@ -271,6 +271,22 @@ O que cada faixa quer dizer:
 
 O IP mostra o IPv4 primeiro, com o botão **copiar**. Endereços `fe80::` ficam
 de fora; outros IPv6 aparecem em **mais endereços**.
+
+A coluna **Ações** liga (verde), desliga (vermelho) e reinicia (âmbar) uma VM,
+achada pelo id e nunca pelo nome. Cada clique abre o próprio UAC e entra no
+histórico da `/win`. Só fica habilitado o que cabe no estado lido:
+
+| situação | o que dá para fazer |
+|---|---|
+| desligada, salva ou hibernada | ligar |
+| pausada | retomar (o botão de ligar) |
+| rodando | desligar e reiniciar |
+| mudando de estado | nada, até atualizar |
+
+Desligar e reiniciar pedem confirmação. Desligar pede ao sistema da VM, como o
+menu Iniciar dela, e não corta a energia. Reiniciar também, quando o Hyper-V
+sabe; quando não sabe, faz um reset. O estado é conferido de novo na hora, e o
+que não cabe mais é recusado com o motivo.
 
 ## Reversíveis e não reversíveis
 

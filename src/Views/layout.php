@@ -26,6 +26,7 @@ use App\Http\Respond;
     --bg:    #ffffff;
     --panel: #fafbfc;
     --btn:   #262626;
+    --amber: #b45309;
     --mono:  ui-monospace, Consolas, "Courier New", monospace;
     --sans:  "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
     --mono-console: "JetBrainsMono Nerd Font", Consolas, ui-monospace, monospace;
@@ -166,6 +167,19 @@ use App\Http\Respond;
   .ok { color: #15803d; } .bad { color: #b91c1c; }
   .vm-parada { color: var(--mut); }
   .vm-ip { font: 12px var(--mono); }
+
+  /* ---- Ações por VM na /hyperv ------------------------------------------
+     Ícone só, com o nome no aria-label. A cor vem do currentColor: verde
+     liga, vermelho desliga, âmbar reinicia. Desabilitado pelo estado fica
+     apagado e sem cursor de espera. */
+  .c-vm-acoes { width: 132px; }
+  .vm-acoes { white-space: nowrap; }
+  .vm-form { display: inline-block; margin: 0 2px 0 0; }
+  .vm-acoes .btn-icone { padding: 6px; border-radius: 8px; }
+  .vm-acoes .btn-icone svg { width: 16px; height: 16px; }
+  .vm-start { color: #15803d; } .vm-stop { color: #b91c1c; } .vm-restart { color: var(--amber); }
+  .vm-acoes button[disabled] { opacity: .3; cursor: not-allowed; }
+  .vm-pendente { display: block; margin-top: 4px; color: var(--mut); font-size: 12px; white-space: normal; }
 
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   th, td { border: 1px solid var(--line); padding: 8px; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
@@ -401,10 +415,14 @@ use App\Http\Respond;
     var uac = botao.hasAttribute('data-uac') || form.querySelector('option[data-uac]:checked') !== null;
     var texto = uac ? 'aguardando o UAC… ' : 'executando… ';
     var t0 = Date.now();
-    botao.textContent = texto + '0 s';
+    // Botão só de ícone guarda o ícone: o relógio vai para o [data-pendente]
+    // da mesma célula, quando houver.
+    var alvo = botao.classList.contains('btn-icone') ? (botao.closest('td') || form).querySelector('[data-pendente]') : null;
+    if (alvo) { alvo.hidden = false; botao.setAttribute('aria-busy', 'true'); } else { alvo = botao; }
+    alvo.textContent = texto + '0 s';
 
     return setInterval(function () {
-      botao.textContent = texto + Math.round((Date.now() - t0) / 1000) + ' s';
+      alvo.textContent = texto + Math.round((Date.now() - t0) / 1000) + ' s';
     }, 1000);
   }
 

@@ -11,6 +11,11 @@ namespace App\Win;
  * jeito que a /wsl formata a saída dela. O `ip` é a lista que o Windows
  * conseguiu ler; vazia com a VM rodando quer dizer "não deu para ler", e é a
  * tela que diz isso — o valor não chuta.
+ *
+ * O `id` é o VMId, já conferido no formato de GUID pela leitura. É por ele
+ * que os botões de ligar, desligar e reiniciar acham a VM, nunca pelo nome.
+ * Vazio quer dizer que a saída não trouxe um id válido, e aí a linha fica sem
+ * botão.
  */
 final readonly class HypervVm
 {
@@ -24,6 +29,7 @@ final readonly class HypervVm
         public int $memoryBytes,
         public int $uptimeSeconds,
         public array $ip,
+        public string $id = '',
     ) {
     }
 

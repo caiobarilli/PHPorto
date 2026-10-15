@@ -17,6 +17,7 @@ use App\Win\HypervGate;
 use App\Win\HypervListing;
 use App\Win\JobChannel;
 use App\Win\OneShot;
+use App\Win\PsResult;
 use App\Win\UacPolicy;
 use App\Win\WinAction;
 use App\Win\WinConfig;
@@ -511,6 +512,13 @@ final class Pages
             Respond::redirect($aba->url());
         }
 
+        $recusa = self::winPostRefusal($acao);
+
+        if ($recusa !== null) {
+            $this->flash($recusa);
+            Respond::redirect($aba->url());
+        }
+
         // Só os campos que chegaram como texto, ou como lista de textos — a
         // lista de checkboxes (Items[], Packages[]), que vira texto separado
         // por vírgula. O resto não é entrada válida de formulário, e deixar
@@ -903,16 +911,25 @@ final class Pages
      * porque confirmar a existência é o que uma decisão desligada não deve
      * fazer.
      *
-     * SEM POST: a tela só mostra. A leitura roda no GET — o "Atualizar" é só
-     * outro GET — e roda pelo worker elevado, porque o Get-VM exige
-     * Administrador (medido), com teto próprio de HYPERV_READ_TIMEOUT_S. Não grava no histórico: abrir a tela é consulta,
-     * não execução a registrar, e uma linha por carregamento de página poluiria
-     * o log das ações que a pessoa de fato pediu.
+     * A LEITURA RODA NO GET — o "Atualizar" é só outro GET — e roda pelo
+     * worker elevado, porque o Get-VM exige Administrador (medido), com teto
+     * próprio de HYPERV_READ_TIMEOUT_S. Não grava no histórico: abrir a tela é
+     * consulta, não execução a registrar, e uma linha por carregamento de
+     * página poluiria o log das ações que a pessoa de fato pediu.
+     *
+     * O POST É SÓ O hyperv-vm: ligar, desligar ou reiniciar uma VM. Ele passa
+     * pelo token, pela WinAction e pelo uso único (um UAC por clique), grava no
+     * histórico do Windows e volta por 303 para a /hyperv, que lê a lista de
+     * novo. Qualquer outra ação aqui é recusada, e a /win recusa o hyperv-vm.
      */
-    public function hyperv(): never
+    public function hyperv(string $method = 'GET'): never
     {
         if (!$this->hyperv->enabled()) {
             Respond::notFound();
+        }
+
+        if ($method === 'POST') {
+            $this->handleHypervPost();
         }
 
         $blocked  = $this->winBlockingReason();
@@ -948,9 +965,120 @@ final class Pages
             listing: $listing,
             readAtUtc: gmdate(DATE_ATOM),
             timedOut: $timedOut,
+            notice: $this->takeFlash(),
+            csrfToken: Csrf::token(),
+            csrfField: Csrf::fieldName(),
+            // Como na /win: só o checkout. A política do UAC é lida no
+            // clique, e não a cada carga da tela.
+            actionsBlocked: $this->elevation->configProblem(),
         );
 
         Respond::html('PHPorto — Hyper-V', Respond::render('hyperv.php', $view));
+    }
+
+    private function handleHypervPost(): never
+    {
+        if (!Csrf::consume()) {
+            $this->flash(
+                'Requisição recusada: o token desta página já foi usado, ou está ausente. '
+                . 'Cada envio vale uma execução — recarregue a página para enviar de novo.'
+            );
+            Respond::redirect('/hyperv');
+        }
+
+        try {
+            $params = self::hypervPostParams($_POST);
+        } catch (InvalidArgumentException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/hyperv');
+        }
+
+        $blocked = $this->oneShot->blockingReason();
+
+        if ($blocked !== null) {
+            $this->flash($blocked);
+            Respond::redirect('/hyperv');
+        }
+
+        try {
+            $run = $this->oneShot->dispatch(WinAction::HypervVm, $params, $this->config['winutil']['timeout']);
+        } catch (RuntimeException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/hyperv');
+        }
+
+        $aviso = self::hypervVmNotice($run);
+
+        try {
+            ($this->makeService)()->record(new Execution(
+                command: self::describe(WinAction::HypervVm, $params),
+                output: $run->output,
+                exitCode: $run->exitCode,
+                durationMs: $run->durationMs,
+                kind: ExecutionKind::Windows,
+                timedOut: $run->timedOut,
+            ));
+        } catch (Throwable $e) {
+            $aviso .= ' A ação executou, mas o registro falhou: ' . $e->getMessage();
+        }
+
+        $this->flash($aviso);
+        Respond::redirect('/hyperv');
+    }
+
+    /**
+     * @param array<mixed> $post
+     *
+     * @return array<string, string|int|bool>
+     *
+     * @throws InvalidArgumentException com a frase da tela
+     */
+    public static function hypervPostParams(array $post): array
+    {
+        if (($post['acao'] ?? null) !== WinAction::HypervVm->value) {
+            throw new InvalidArgumentException('Ação desconhecida.');
+        }
+
+        $entrada = [];
+        foreach (['SubAction', 'VmId'] as $campo) {
+            if (isset($post[$campo]) && is_string($post[$campo])) {
+                $entrada[$campo] = $post[$campo];
+            }
+        }
+
+        return WinAction::HypervVm->validate($entrada);
+    }
+
+    public static function hypervVmNotice(PsResult $run): string
+    {
+        if ($run->timedOut) {
+            return 'A ação na VM demorou demais e foi cancelada. Atualize a lista para ver como ela ficou.';
+        }
+
+        $inicio = strpos($run->output, '{');
+        $fim    = strrpos($run->output, '}');
+        $dados  = $inicio !== false && $fim !== false && $fim > $inicio
+            ? json_decode(substr($run->output, $inicio, $fim - $inicio + 1), true)
+            : null;
+
+        if (!is_array($dados) || !is_string($dados['mensagem'] ?? null) || $dados['mensagem'] === '') {
+            return 'A ação na VM terminou sem uma resposta legível (código '
+                . ($run->exitCode === null ? 'nenhum' : $run->exitCode)
+                . '). A saída está no histórico da /win.';
+        }
+
+        $nome = is_string($dados['name'] ?? null) && $dados['name'] !== '' ? $dados['name'] . ': ' : '';
+
+        return $nome . $dados['mensagem'];
+    }
+
+    public static function winPostRefusal(WinAction $acao): ?string
+    {
+        // Ligar, desligar e reiniciar VM só pela /hyperv: é lá que estão o
+        // id certo, a confirmação e o painel que a pessoa ligou.
+        return $acao === WinAction::HypervVm
+            ? 'Ligar, desligar e reiniciar VM é pela tela do Hyper-V, não pela /win.'
+            : null;
     }
 
     public function wsl(string $method): never
