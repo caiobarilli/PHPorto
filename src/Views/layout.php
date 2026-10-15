@@ -40,6 +40,12 @@ use App\Http\Respond;
     --oh-cyan:        #56B6C2;
     --oh-brightblack: #5A6374;
     --oh-cursor:      #FFFFFF;
+    --ohl-bg:          #FAFAFA;
+    --ohl-fg:          #383A42;
+    --ohl-red:         #E45649;
+    --ohl-green:       #50A14F;
+    --ohl-brightblack: #4F525D;
+    --ohl-cursor:      #4F525D;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -197,46 +203,69 @@ use App\Http\Respond;
   .grupo.cuidado legend { color: #b45309; font-weight: 600; }
 
   /* ---- Console da /wsl -------------------------------------------------
-     One Half Dark só aqui, dentro de .term; o resto da PHPorto segue branco.
-     Os dois tons sem token (barra e bordas) saem misturados dos --oh-*. */
+     Só aqui, dentro de .term, o resto da PHPorto segue branco. Escuro é One
+     Half Dark (--oh-*), claro é One Half Light (--ohl-*). O modo vem de
+     data-term-tema no <html>, que a troca sem reload não toca; sem o
+     atributo vale o do sistema. Barra e bordas não têm token na paleta e
+     saem misturadas dela. */
   .term {
+    --t-bg: var(--oh-bg); --t-fg: var(--oh-fg); --t-mut: var(--oh-brightblack);
+    --t-ok: var(--oh-green); --t-bad: var(--oh-red); --t-cursor: var(--oh-cursor);
+    --t-go-bg: #fff; --t-go-fg: #1b1f24;
     --term-bar:  color-mix(in srgb, var(--oh-black) 85%, #000);
     --term-line: color-mix(in srgb, var(--oh-brightblack) 45%, var(--oh-bg));
-    background: var(--oh-bg); color: var(--oh-fg);
+    background: var(--t-bg); color: var(--t-fg);
     border-radius: 10px; overflow: hidden; margin-bottom: 0;
     font: 13px/1.45 var(--mono-console);
   }
+  html[data-term-tema="claro"] .term {
+    --t-bg: var(--ohl-bg); --t-fg: var(--ohl-fg); --t-mut: var(--ohl-brightblack);
+    --t-ok: var(--ohl-green); --t-bad: var(--ohl-red); --t-cursor: var(--ohl-cursor);
+    --t-go-bg: var(--ohl-fg); --t-go-fg: var(--ohl-bg);
+    --term-bar:  color-mix(in srgb, var(--ohl-fg) 7%, var(--ohl-bg));
+    --term-line: color-mix(in srgb, var(--ohl-brightblack) 25%, var(--ohl-bg));
+  }
+  @media (prefers-color-scheme: light) {
+    html:not([data-term-tema]) .term {
+      --t-bg: var(--ohl-bg); --t-fg: var(--ohl-fg); --t-mut: var(--ohl-brightblack);
+      --t-ok: var(--ohl-green); --t-bad: var(--ohl-red); --t-cursor: var(--ohl-cursor);
+      --t-go-bg: var(--ohl-fg); --t-go-fg: var(--ohl-bg);
+      --term-bar:  color-mix(in srgb, var(--ohl-fg) 7%, var(--ohl-bg));
+      --term-line: color-mix(in srgb, var(--ohl-brightblack) 25%, var(--ohl-bg));
+    }
+  }
   .term-bar {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 8px 12px; background: var(--term-bar); color: var(--oh-brightblack);
+    padding: 8px 12px; background: var(--term-bar); color: var(--t-mut);
     font: 12px/1.4 var(--sans);
   }
-  .term-bar strong { color: var(--oh-fg); font-weight: 500; }
-  .term-btns { display: flex; gap: 6px; }
+  .term-bar strong { color: var(--t-fg); font-weight: 500; }
+  .term-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .term-tema { display: flex; gap: 2px; margin-right: 6px; }
   .term-btn {
-    background: transparent; color: var(--oh-fg); border: 1px solid var(--term-line);
+    background: transparent; color: var(--t-fg); border: 1px solid var(--term-line);
     border-radius: 6px; padding: 4px 9px; font: 500 12px/1 var(--sans); cursor: pointer;
   }
-  .term-btn:hover { background: var(--term-line); }
+  .term-btn:hover, .term-btn[aria-pressed="true"] { background: var(--term-line); }
+  .term-btn[aria-pressed="true"] { font-weight: 600; }
   .term-scroll {
     margin: 0; min-height: 280px; max-height: 420px; overflow: auto;
     padding: 12px 14px 8px; font: inherit; color: inherit;
     white-space: pre-wrap; overflow-wrap: anywhere;
   }
   .term-prompt { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--term-line); }
-  .term-ps { color: var(--oh-green); flex: none; line-height: 1.4; padding-top: 6px; }
+  .term-ps { color: var(--t-ok); flex: none; line-height: 1.4; padding-top: 6px; }
   .term-prompt textarea {
     flex: 1; min-width: 0; height: auto; max-height: 160px; padding: 6px 0; resize: none; overflow-y: auto;
     background: transparent; border: 0; border-radius: 0; outline: none;
-    color: var(--oh-fg); caret-color: var(--oh-cursor); font: 13px/1.4 var(--mono-console);
+    color: var(--t-fg); caret-color: var(--t-cursor); font: 13px/1.4 var(--mono-console);
   }
-  .term-prompt textarea::placeholder { color: var(--oh-brightblack); }
-  .term-go, .btn-claro { background: #fff; color: #1b1f24; }
-  .term-go { border: 0; border-radius: 6px; padding: 6px 12px; font: 600 12px/1 var(--sans); cursor: pointer; flex: none; margin-top: 2px; }
-  .btn-claro { border: 1px solid var(--line); font-weight: 600; }
+  .term-prompt textarea::placeholder { color: var(--t-mut); }
+  .term-go { background: var(--t-go-bg); color: var(--t-go-fg); border: 0; border-radius: 6px; padding: 6px 12px; font: 600 12px/1 var(--sans); cursor: pointer; flex: none; margin-top: 2px; }
+  .btn-claro { background: #fff; color: #1b1f24; border: 1px solid var(--line); font-weight: 600; }
   .btn-claro:hover { background: var(--panel); }
-  .term-meta { display: flex; justify-content: space-between; gap: 12px; padding: 0 14px 10px; color: var(--oh-brightblack); font: 11px/1.4 var(--sans); }
-  .term-meta .ok { color: var(--oh-green); } .term-meta .bad { color: var(--oh-red); }
+  .term-meta { display: flex; justify-content: space-between; gap: 12px; padding: 0 14px 10px; color: var(--t-mut); font: 11px/1.4 var(--sans); }
+  .term-meta .ok { color: var(--t-ok); } .term-meta .bad { color: var(--t-bad); }
   .term-meta strong { font-weight: 600; }
   .term-dica { margin-bottom: 22px; }
   .anexo-caminhos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

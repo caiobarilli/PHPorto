@@ -54,6 +54,14 @@ $logs = (string) json_encode(
 );
 
 ?>
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('phporto.wsl.console.tema');
+    if (t === 'claro' || t === 'escuro') { document.documentElement.setAttribute('data-term-tema', t); }
+  } catch (e) { /* sem armazenamento, fica o do sistema */ }
+})();
+</script>
 <div class="wrap">
   <div class="topbar">
     <h1>WSL</h1>
@@ -84,6 +92,11 @@ $logs = (string) json_encode(
     <div class="term-bar">
       <span><strong>wsl</strong> &middot; <?= Respond::e($view->distro) ?><?= $view->root !== '' ? ' &middot; ' . Respond::e($view->root) : '' ?></span>
       <div class="term-btns">
+        <div class="term-tema" role="group" aria-label="Tema do console">
+          <button type="button" class="term-btn" data-term-tema="claro" aria-pressed="false">Claro</button>
+          <button type="button" class="term-btn" data-term-tema="escuro" aria-pressed="false">Escuro</button>
+          <button type="button" class="term-btn" data-term-tema="sistema" aria-pressed="true">Sistema</button>
+        </div>
         <button type="button" class="term-btn" id="btn-copiar">Copiar</button>
         <button type="button" class="term-btn" id="btn-copiar-json">Copiar JSON</button>
       </div>
@@ -258,7 +271,37 @@ $logs = (string) json_encode(
   var veioDoConsole = false;
   document.addEventListener('submit', function (ev) { veioDoConsole = ev.target.id === 'form-cmd'; });
 
+  var TEMA = 'phporto.wsl.console.tema';
+
+  function temaAtual() {
+    var t = document.documentElement.getAttribute('data-term-tema');
+    return t === 'claro' || t === 'escuro' ? t : 'sistema';
+  }
+
+  function pintarTema() {
+    var atual = temaAtual();
+    var botoes = document.querySelectorAll('.term-tema [data-term-tema]');
+    for (var i = 0; i < botoes.length; i++) {
+      botoes[i].setAttribute('aria-pressed', botoes[i].getAttribute('data-term-tema') === atual ? 'true' : 'false');
+    }
+  }
+
+  function trocarTema(modo) {
+    var raiz = document.documentElement;
+    if (modo === 'claro' || modo === 'escuro') { raiz.setAttribute('data-term-tema', modo); } else { raiz.removeAttribute('data-term-tema'); }
+    try {
+      if (modo === 'claro' || modo === 'escuro') { localStorage.setItem(TEMA, modo); } else { localStorage.removeItem(TEMA); }
+    } catch (e) { /* sem armazenamento, vale só nesta página */ }
+    pintarTema();
+  }
+
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('.term-tema [data-term-tema]');
+    if (b) { trocarTema(b.getAttribute('data-term-tema')); }
+  });
+
   document.addEventListener('phporto:trocou', function () {
+    pintarTema();
     clearInterval(relogio);
     if (veioDoConsole) { document.getElementById('input').focus(); }
   });
@@ -310,6 +353,7 @@ $logs = (string) json_encode(
     if (b && ACOES[b.id]) { ACOES[b.id](b); }
   });
 
+  pintarTema();
   document.getElementById('input').focus();
 })();
 </script>
