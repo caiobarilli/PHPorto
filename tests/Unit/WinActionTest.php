@@ -13,14 +13,14 @@ use App\Win\WinAction;
  * errado.
  */
 
-it('tem as dezesseis ações: as quinze do menu em ordem, e o hyperv fora dele', function () {
+it('tem as dezessete ações: as quinze do menu em ordem, e as duas da /hyperv fora dele', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
             'gdid', 'rdp', 'sunshine',
-            // Fora do menu da /win: atende a rota /hyperv, e por isso no fim.
-            'hyperv',
+            // Fora do menu da /win: atendem a rota /hyperv, e por isso no fim.
+            'hyperv', 'hyperv-vm',
         ]);
 });
 
@@ -609,6 +609,64 @@ it('hyperv é só leitura: não afirma nada sobre estado', function () {
     expect(WinAction::Hyperv->stateChange([]))->toBeNull();
 });
 
+// ------------------------------------------------------------- hyperv-vm
+
+it('hyperv-vm aceita <sub> com um VmId GUID, e guarda o id em minúsculas', function (string $sub) {
+    expect(WinAction::HypervVm->validate(['SubAction' => strtoupper($sub), 'VmId' => ' 6C1E2A4B-0D3F-4E5A-9B8C-7D6E5F4A3B2C ']))
+        ->toBe(['SubAction' => $sub, 'VmId' => '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c']);
+})->with(['start', 'stop', 'restart']);
+
+it('hyperv-vm exige a subação', function () {
+    WinAction::HypervVm->validate(['VmId' => '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c']);
+})->throws(InvalidArgumentException::class, 'Escolha um valor para SubAction (start, stop, restart).');
+
+it('hyperv-vm recusa subação fora de start, stop e restart', function (string $sub) {
+    WinAction::HypervVm->validate(['SubAction' => $sub, 'VmId' => '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c']);
+})->throws(InvalidArgumentException::class, 'Valor inválido para SubAction.')->with(['reset', 'turnoff', 'save', 'pause']);
+
+it('hyperv-vm exige o VmId', function () {
+    WinAction::HypervVm->validate(['SubAction' => 'start']);
+})->throws(InvalidArgumentException::class, 'Preencha VmId.');
+
+it('hyperv-vm recusa VmId que não é GUID', function (string $id) {
+    WinAction::HypervVm->validate(['SubAction' => 'stop', 'VmId' => $id]);
+})->throws(InvalidArgumentException::class, 'VmId não é um identificador de VM válido.')->with([
+    'curinga'        => ['*'],
+    'nome'           => ['Ubuntu'],
+    'sem hífens'     => ['6c1e2a4b0d3f4e5a9b8c7d6e5f4a3b2c'],
+    'com chaves'     => ['{6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c}'],
+    'letra fora'     => ['6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2g'],
+    'quebra no meio' => ["6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c\nx"],
+    'comando junto'  => ['6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c; Stop-VM *'],
+]);
+
+it('hyperv-vm não afirma nada sobre estado: quem diz o estado é a leitura da /hyperv', function () {
+    expect(WinAction::HypervVm->stateChange(['SubAction' => 'start', 'VmId' => '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c']))->toBeNull();
+});
+
+it('a allowlist do hyperv-vm no worker tem as mesmas subações, o mesmo padrão e o mesmo tamanho que a WinAction', function () {
+    $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+
+    expect(preg_match("/^    'hyperv-vm'\\s*=\\s*@\\{\\r?\\n(.*?)\\r?\\n    \\}/ms", $worker, $bloco))->toBe(1);
+    preg_match_all("/^\\s+'([A-Za-z]+)'\\s*=\\s*@\\{(.*)\\}\\s*$/m", $bloco[1], $linhas, PREG_SET_ORDER);
+
+    $campos = [];
+    foreach ($linhas as [, $nome, $regra]) {
+        $campos[$nome] = $regra;
+    }
+
+    expect(array_keys($campos))->toBe(['SubAction', 'VmId']);
+
+    expect(preg_match('/valores\s*=\s*@\(([^)]*)\)/', $campos['SubAction'], $valores))->toBe(1);
+    preg_match_all("/'([a-z-]+)'/", $valores[1], $subs);
+    expect($subs[1])->toBe(WinAction::HYPERV_VM_SUBACTIONS);
+
+    expect(preg_match("/padrao\s*=\s*'([^']+)'/", $campos['VmId'], $padrao))->toBe(1);
+    expect($padrao[1])->toBe(WinAction::HYPERV_VM_ID_PATTERN)
+        ->and($campos['VmId'])->toContain('max = ' . WinAction::HYPERV_VM_ID_BYTES)
+        ->and($campos['VmId'])->toContain('min = ' . WinAction::HYPERV_VM_ID_BYTES);
+});
+
 // ---------------------------------------------------------------- optimize
 
 it('optimize recusa chamada que não faria nada', function () {
@@ -678,6 +736,10 @@ it('a ação sensível é reconhecida pelo SubAction validado', function (WinAct
     'exporter metrics'         => [WinAction::Exporter, ['SubAction' => 'metrics'], false],
     'gpu install'              => [WinAction::Gpu, ['SubAction' => 'install'], true],
     'gpu uninstall'            => [WinAction::Gpu, ['SubAction' => 'uninstall'], false],
+    'hyperv-vm start'          => [WinAction::HypervVm, ['SubAction' => 'start', 'VmId' => '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c'], true],
+    'hyperv-vm stop'           => [WinAction::HypervVm, ['SubAction' => 'stop', 'VmId' => '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c'], true],
+    'hyperv-vm restart'        => [WinAction::HypervVm, ['SubAction' => 'restart', 'VmId' => '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c'], true],
+    'hyperv lista fica fora'   => [WinAction::Hyperv, [], false],
     'network fica de fora'     => [WinAction::Network, ['Interface' => 'Ethernet', 'Duration' => 30], false],
     'optimize -Undo fica fora' => [WinAction::Optimize, ['Undo' => true], false],
     'dns Custom fica de fora'  => [WinAction::Dns, ['Provider' => 'Custom', 'PrimaryDNS' => '1.1.1.1'], false],

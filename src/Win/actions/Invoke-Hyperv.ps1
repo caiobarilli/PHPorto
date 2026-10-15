@@ -47,7 +47,10 @@
             }
         }
 
+        # O id e' o VMId: e' por ele, e nunca pelo nome, que o Invoke-HypervVm
+        # acha a VM para ligar, desligar ou reiniciar.
         $lista.Add([ordered]@{
+            id            = [string]$vm.VMId
             name          = [string]$vm.Name
             state         = [string]$vm.State
             running       = $rodando

@@ -9,7 +9,7 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * As dezesseis ações do Windows, e a allowlist do lado PHP.
+ * As dezessete ações do Windows, e a allowlist do lado PHP.
  *
  * ESTA NÃO É A TRANCA. A tranca é a allowlist do worker.ps1, que roda em
  * integridade Alta e é a última a validar antes de executar. Esta classe é a
@@ -28,8 +28,8 @@ use RuntimeException;
  * duas listas.
  *
  * A ORDEM DOS CASOS É A DO MENU, de [1] a [15], e a tela repete essa ordem nas
- * seções dela. O décimo sexto, hyperv, é fora do menu: atende a rota /hyperv, e
- * por isso vem depois, sem seção na /win.
+ * seções dela. As duas últimas, hyperv e hyperv-vm, são fora do menu: atendem a
+ * rota /hyperv, e por isso vêm depois, sem seção na /win.
  *
  * Os nomes dos parâmetros devolvidos por validate() são os nomes EXATOS dos
  * parâmetros das ações (Preset, Provider, PrimaryDNS...), e não nomes próprios
@@ -62,6 +62,13 @@ enum WinAction: string
      * tem seção na tela /win, e por isso vem depois da ordem de [1] a [15].
      */
     case Hyperv = 'hyperv';
+
+    /**
+     * A décima sétima, também fora do menu: liga, desliga ou reinicia UMA VM
+     * da /hyperv, achada pelo VMId (GUID) e nunca pelo nome. Toda subação é
+     * sensível (ver SENSITIVE): cada clique abre o próprio prompt de UAC.
+     */
+    case HypervVm = 'hyperv-vm';
 
     /**
      * Teto de bytes de qualquer campo de texto livre.
@@ -170,6 +177,22 @@ enum WinAction: string
      */
     public const SECRET_PARAMS = ['Password', 'Pin'];
 
+    /**
+     * O hyperv-vm: start liga (ou retoma a pausada), stop pede o desligamento
+     * ao sistema da VM, restart reinicia. O Invoke-HypervVm confere o estado
+     * da VM na hora e recusa o que não cabe nele.
+     */
+    public const HYPERV_VM_SUBACTIONS = ['start', 'stop', 'restart'];
+
+    /**
+     * O VmId é o GUID do VMId no formato 8-4-4-4-12, 36 bytes. O worker.ps1
+     * repete o padrão e o tamanho na allowlist dele, e o teste de paridade
+     * confere.
+     */
+    public const HYPERV_VM_ID_PATTERN = '\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z';
+
+    public const HYPERV_VM_ID_BYTES = 36;
+
     /** run gera a auditoria; open abre a pasta do log no Explorer. Sem subação, run. */
     public const AUDIT_SUBACTIONS = ['run', 'open'];
 
@@ -182,9 +205,10 @@ enum WinAction: string
      * São as que abrem a máquina para a rede (rdp on, as portas do firewall),
      * instalam programa ou serviço (install, sunshine install, exporter
      * install), registram tarefa SYSTEM (gpu install), trocam a senha de
-     * administração do Sunshine (sunshine set-creds) ou autorizam um
+     * administração do Sunshine (sunshine set-creds), autorizam um
      * dispositivo novo a ver e controlar a tela (sunshine pair, da mesma classe
-     * do rdp on). Com o PowerShell elevado longo de pé,
+     * do rdp on) ou ligam, desligam e reiniciam uma VM (hyperv-vm, toda
+     * subação). Com o PowerShell elevado longo de pé,
      * quem lesse o nonce do marcador rodaria qualquer uma delas sem prompt;
      * por isso o worker longo as RECUSA, e cada uma abre o próprio prompt do
      * Windows (ver OneShot).
@@ -196,11 +220,12 @@ enum WinAction: string
      * @var array<string, '*'|list<string>>
      */
     public const SENSITIVE = [
-        'install'  => '*',
-        'rdp'      => ['on'],
-        'sunshine' => ['install', 'firewall-open', 'set-creds', 'pair'],
-        'exporter' => ['install', 'firewall'],
-        'gpu'      => ['install'],
+        'install'   => '*',
+        'rdp'       => ['on'],
+        'sunshine'  => ['install', 'firewall-open', 'set-creds', 'pair'],
+        'exporter'  => ['install', 'firewall'],
+        'gpu'       => ['install'],
+        'hyperv-vm' => '*',
     ];
 
     public const NETWORK_DURATION_MIN = 1;
@@ -245,6 +270,7 @@ enum WinAction: string
             self::Rdp       => ['SubAction' => $this->pick($input, 'SubAction', self::RDP_SUBACTIONS, obrigatorio: true)],
             self::Sunshine  => $this->sunshine($input),
             self::Optimize  => $this->optimize($input),
+            self::HypervVm  => $this->hypervVm($input),
         };
     }
 
@@ -786,6 +812,27 @@ enum WinAction: string
         if (preg_match('/[\x00-\x1F\x7F]/', $valor) === 1) {
             throw new InvalidArgumentException(sprintf('%s não pode ter caractere de controle.', $campo));
         }
+    }
+
+    /**
+     * @param array<string, string> $input
+     *
+     * @return array<string, string>
+     */
+    private function hypervVm(array $input): array
+    {
+        $sub = $this->pick($input, 'SubAction', self::HYPERV_VM_SUBACTIONS, obrigatorio: true);
+        $id  = trim($input['VmId'] ?? '');
+
+        if ($id === '') {
+            throw new InvalidArgumentException('Preencha VmId.');
+        }
+
+        if (strlen($id) !== self::HYPERV_VM_ID_BYTES || preg_match('/' . self::HYPERV_VM_ID_PATTERN . '/', $id) !== 1) {
+            throw new InvalidArgumentException('VmId não é um identificador de VM válido.');
+        }
+
+        return ['SubAction' => $sub, 'VmId' => strtolower($id)];
     }
 
     /**

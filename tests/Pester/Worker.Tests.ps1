@@ -343,9 +343,9 @@ Describe 'worker - o arquivo de conclusao' {
 # desta.
 Describe 'worker - a allowlist do lado elevado' {
 
-    It 'conhece as dezesseis acoes' {
+    It 'conhece as dezessete acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
-            'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'install',
+            'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
             'memory', 'network', 'optimize', 'performance', 'processes', 'rdp', 'sunshine', 'tweaks'
         )
     }
@@ -451,6 +451,38 @@ Describe 'worker - a allowlist do lado elevado' {
         }
 
         { Test-Job $job } | Should -Throw -ExpectedMessage "valor fora do conjunto em 'SubAction'"
+    }
+
+    It 'aceita hyperv-vm <_> no uso unico, com o VmId intacto' -ForEach @('start', 'stop', 'restart') {
+        $job = [PSCustomObject]@{ acao = 'hyperv-vm'; params = [PSCustomObject]@{ SubAction = $_; VmId = '6C1E2A4B-0D3F-4E5A-9B8C-7D6E5F4A3B2C' } }
+
+        $ok = Test-Job $job -Modo UmaVez
+        $ok.acao                | Should -Be 'hyperv-vm'
+        $ok.params['SubAction'] | Should -Be $_
+        $ok.params['VmId']      | Should -BeExactly '6C1E2A4B-0D3F-4E5A-9B8C-7D6E5F4A3B2C'
+    }
+
+    It 'hyperv-vm recusa subacao fora de start, stop e restart: <_>' -ForEach @('reset', 'turnoff', 'save', 'pause') {
+        $job = [PSCustomObject]@{ acao = 'hyperv-vm'; params = [PSCustomObject]@{ SubAction = $_; VmId = '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c' } }
+        { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "valor fora do conjunto em 'SubAction'"
+    }
+
+    It 'hyperv-vm recusa VmId que nao e GUID: <_>' -ForEach @(
+        '*'
+        'Ubuntu'
+        '6c1e2a4b0d3f4e5a9b8c7d6e5f4a3b2c'
+        '{6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c}'
+        '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2g'
+        "6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c`n"
+        '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c; Stop-VM *'
+    ) {
+        $job = [PSCustomObject]@{ acao = 'hyperv-vm'; params = [PSCustomObject]@{ SubAction = 'stop'; VmId = $_ } }
+        { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "'VmId' *"
+    }
+
+    It 'hyperv-vm nao aceita parametro de nome' {
+        $job = [PSCustomObject]@{ acao = 'hyperv-vm'; params = [PSCustomObject]@{ SubAction = 'stop'; VmId = '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c'; Name = '*' } }
+        { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "parametro fora da allowlist para 'hyperv-vm': 'Name'"
     }
 
     It 'aceita gdid com <_>' -ForEach @('status', 'disable', 'enable') {
@@ -1368,6 +1400,10 @@ Describe 'worker - acoes sensiveis' {
         @{ Acao = 'network';  Sub = $null;            Esperado = $false }
         @{ Acao = 'optimize'; Sub = $null;            Esperado = $false }
         @{ Acao = 'dns';      Sub = $null;            Esperado = $false }
+        @{ Acao = 'hyperv-vm'; Sub = 'start';         Esperado = $true }
+        @{ Acao = 'hyperv-vm'; Sub = 'stop';          Esperado = $true }
+        @{ Acao = 'hyperv-vm'; Sub = 'restart';       Esperado = $true }
+        @{ Acao = 'hyperv';   Sub = $null;            Esperado = $false }
     ) {
         $params = [ordered]@{}
         if ($null -ne $Sub) { $params['SubAction'] = $Sub }
@@ -1386,6 +1422,11 @@ Describe 'worker - acoes sensiveis' {
     ) {
         $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = $Acao; params = [PSCustomObject]@{ SubAction = $Sub } }
         { Test-Job $job } | Should -Throw -ExpectedMessage "acao sensivel: '$Acao $Sub' so roda com UAC proprio, pela tela"
+    }
+
+    It 'o worker longo recusa hyperv-vm <_>, mesmo com o nonce certo' -ForEach @('start', 'stop', 'restart') {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'hyperv-vm'; params = [PSCustomObject]@{ SubAction = $_; VmId = '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c' } }
+        { Test-Job $job } | Should -Throw -ExpectedMessage "acao sensivel: 'hyperv-vm $_' so roda com UAC proprio, pela tela"
     }
 
     It 'o worker longo recusa install, e a recusa sai com o nome da acao' {

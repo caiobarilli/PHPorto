@@ -239,8 +239,17 @@ $ALLOWLIST = @{
     }
 
     # O hyperv so lista, e listar nao tem parametro: allowlist vazia, como
-    # memory e processes. A rota /hyperv atende so a leitura nesta fatia.
+    # memory e processes.
     'hyperv'      = @{}
+
+    # O hyperv-vm liga, desliga ou reinicia UMA VM. VmId e' o GUID do VMId,
+    # 36 bytes exatos no formato 8-4-4-4-12: e' por ele que o Invoke-HypervVm
+    # acha a VM, nunca pelo nome. Os numeros e o padrao sao os da WinAction
+    # (HYPERV_VM_*), e o teste de paridade confere.
+    'hyperv-vm'   = @{
+        'SubAction' = @{ tipo = 'set'; valores = @('start', 'stop', 'restart') }
+        'VmId'      = @{ tipo = 'text'; max = 36; min = 36; padrao = '\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z' }
+    }
 }
 
 # ============================================================
@@ -248,8 +257,9 @@ $ALLOWLIST = @{
 # ============================================================
 #
 # As acoes que abrem a maquina para a rede, instalam programa, registram
-# tarefa SYSTEM, trocam a senha de administracao do Sunshine (set-creds) ou
-# autorizam um dispositivo novo a ver e controlar a tela (pair). O laco RECUSA estas (Test-Job -Modo Laco): com o worker longo
+# tarefa SYSTEM, trocam a senha de administracao do Sunshine (set-creds),
+# autorizam um dispositivo novo a ver e controlar a tela (pair) ou ligam,
+# desligam e reiniciam uma VM (hyperv-vm, toda subacao). O laco RECUSA estas (Test-Job -Modo Laco): com o worker longo
 # de pe, quem lesse o nonce do marcador rodaria qualquer uma delas sem prompt.
 # Elas so rodam no modo de uso unico, que nasce de um prompt de UAC por clique,
 # e o uso unico so roda estas.
@@ -257,11 +267,12 @@ $ALLOWLIST = @{
 # '*' = toda execucao da acao; lista = so essas subacoes. O lado PHP repete a
 # tabela em WinAction::SENSITIVE (roteia), e um teste confere as duas.
 $SENSIVEIS = @{
-    'install'  = '*'
-    'rdp'      = @('on')
-    'sunshine' = @('install', 'firewall-open', 'set-creds', 'pair')
-    'exporter' = @('install', 'firewall')
-    'gpu'      = @('install')
+    'install'   = '*'
+    'rdp'       = @('on')
+    'sunshine'  = @('install', 'firewall-open', 'set-creds', 'pair')
+    'exporter'  = @('install', 'firewall')
+    'gpu'       = @('install')
+    'hyperv-vm' = '*'
 }
 
 # ============================================================
