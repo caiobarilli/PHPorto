@@ -26,6 +26,8 @@ beforeEach(function () {
 
 afterEach(function () {
     // Duas pastas agora: files/ e a protegida dentro dela.
+    @chmod((string) $this->protegida, 0o775);
+
     if (is_string($this->files) && is_dir($this->files)) {
         foreach ([$this->protegida, $this->files] as $pasta) {
             foreach (glob($pasta . '/*') ?: [] as $f) {
@@ -43,14 +45,20 @@ function jobBruto(object $ctx): string
 }
 
 /** Finge o worker: escreve a saída e a conclusão de um id. */
-function fingirWorker(object $ctx, string $id, string $saida, ?int $exit = 0, string $nota = ''): void
+function fingirWorker(object $ctx, string $id, string $saida, ?int $exit = 0, string $nota = '', string $acao = ''): void
 {
     $dir = (string) $ctx->protegida;
     file_put_contents($dir . DIRECTORY_SEPARATOR . 'win-out-' . $id . '.txt', $saida);
     file_put_contents(
         $dir . DIRECTORY_SEPARATOR . 'win-done-' . $id . '.json',
-        (string) json_encode(['id' => $id, 'exit' => $exit, 'ms' => 123, 'nota' => $nota])
+        (string) json_encode(['id' => $id, 'exit' => $exit, 'ms' => 123, 'nota' => $nota, 'acao' => $acao])
     );
+}
+
+function travarProtegida(object $ctx, bool $travar): void
+{
+    chmod((string) $ctx->protegida, $travar ? 0o555 : 0o775);
+    clearstatcache();
 }
 
 // ---------------------------------------------------------------- send()
@@ -78,15 +86,16 @@ it('AÇÃO SEM PARÂMETRO VAI COMO OBJETO, e nunca como lista', function () {
         ->and(jobBruto($this))->not->toContain('"params":[]');
 });
 
-it('send() apaga a conclusão de uma ação anterior antes de mandar', function () {
-    // Sem isso, a ação seguinte devolveria na hora o resultado da anterior — e
-    // a pessoa leria a saída errada acreditando nela.
-    fingirWorker($this, '0a0000000000', 'saida velha');
+it('send() NÃO VARRE A PASTA PROTEGIDA: par de outra execução fica para o recolhimento', function () {
+    // Varrer tudo antes de mandar apagaria a órfã da /win que ainda não virou
+    // linha no banco. A conclusão velha não volta como resposta porque o
+    // collect() ignora os ids que já existiam no send().
+    fingirWorker($this, '0a0000000000', 'saida velha', 0, '', 'tweaks');
 
     $this->canal->send(WinAction::Memory, [], 'n');
 
-    expect(glob($this->protegida . '/win-done-*.json'))->toBe([])
-        ->and(glob($this->protegida . '/win-out-*.txt'))->toBe([]);
+    expect(is_file($this->protegida . '/win-done-0a0000000000.json'))->toBeTrue()
+        ->and(is_file($this->protegida . '/win-out-0a0000000000.txt'))->toBeTrue();
 });
 
 it('send() recusa quando a pasta de trabalho não existe', function () {
@@ -211,6 +220,87 @@ it('NO TIMEOUT COM ID, a ordem de cancelar é a daquele id, e não a do worker l
     expect($r->timedOut)->toBeTrue()
         ->and(is_file($this->files . DIRECTORY_SEPARATOR . Elevation::F_ORDEM_CANCELAR . '-ccc000000005'))->toBeTrue()
         ->and(is_file($this->files . DIRECTORY_SEPARATOR . Elevation::F_ORDEM_CANCELAR))->toBeFalse();
+});
+
+// ---------------------------------------------------------------- sem id, amarrado ao send()
+
+it('A /hyperv LÊ A PRÓPRIA CONCLUSÃO mesmo com par de processes que não sai da pasta', function () {
+    // Caso medido no disco: a limpeza não apagou, e o primeiro win-done do
+    // glob era de processes. A leitura do hyperv voltava "formato inesperado"
+    // com o JSON certo do hyperv na mesma pasta.
+    fingirWorker($this, '07cc00000000', "PID Nome\n", 0, '', 'processes');
+    travarProtegida($this, true);
+
+    $this->canal->send(WinAction::Hyperv, [], 'n');
+
+    travarProtegida($this, false);
+    fingirWorker($this, 'aea600000000', '{"hyperv":true,"vms":[]}', 0, '', 'hyperv');
+    travarProtegida($this, true);
+
+    $r = $this->canal->collect(5);
+
+    expect($r->output)->toStartWith('{"hyperv":true,"vms":[]}')
+        ->and($r->output)->not->toContain('PID Nome')
+        ->and($r->exitCode)->toBe(0)
+        ->and($r->timedOut)->toBeFalse();
+});
+
+it('collect() sem id ignora conclusão nova de outra ação e espera a pedida', function () {
+    $this->canal->send(WinAction::Hyperv, [], 'n');
+
+    fingirWorker($this, '0b0000000000', "outra\n", 0, '', 'processes');
+    fingirWorker($this, '0c0000000000', '{"hyperv":true,"vms":[]}', 0, '', 'hyperv');
+
+    expect($this->canal->collect(5)->output)->toBe('{"hyperv":true,"vms":[]}');
+});
+
+it('collect() sem id ignora conclusão da mesma ação que já existia no send()', function () {
+    fingirWorker($this, '0d0000000000', 'velha', 0, '', 'hyperv');
+
+    $this->canal->send(WinAction::Hyperv, [], 'n');
+
+    fingirWorker($this, '0e0000000000', 'nova', 0, '', 'hyperv');
+
+    expect($this->canal->collect(5)->output)->toBe('nova');
+});
+
+it('collect() sem id ainda aceita a recusa do worker, que sai sem ação', function () {
+    $this->canal->send(WinAction::Hyperv, [], 'n');
+
+    fingirWorker($this, '0f0000000000', "[phporto] job recusado pela allowlist do worker: x\n", 126, 'recusado');
+
+    $r = $this->canal->collect(5);
+
+    expect($r->exitCode)->toBe(126)
+        ->and($r->output)->toContain('A allowlist do PowerShell elevado recusou');
+});
+
+it('collect() apaga só o par daquela leitura', function () {
+    fingirWorker($this, '1a0000000000', 'orfa da win', 0, '', 'tweaks');
+
+    $this->canal->send(WinAction::Hyperv, [], 'n');
+
+    fingirWorker($this, '1b0000000000', '{"hyperv":true,"vms":[]}', 0, '', 'hyperv');
+
+    $this->canal->collect(5);
+
+    expect(is_file($this->protegida . '/win-done-1a0000000000.json'))->toBeTrue()
+        ->and(is_file($this->protegida . '/win-out-1a0000000000.txt'))->toBeTrue()
+        ->and(is_file($this->protegida . '/win-done-1b0000000000.json'))->toBeFalse()
+        ->and(is_file($this->protegida . '/win-out-1b0000000000.txt'))->toBeFalse();
+});
+
+it('QUANDO O PAR NÃO SAI DA PASTA, a saída diz, e o teste vê', function () {
+    $this->canal->send(WinAction::Hyperv, [], 'n');
+
+    fingirWorker($this, '1c0000000000', '{"hyperv":true,"vms":[]}', 0, '', 'hyperv');
+    travarProtegida($this, true);
+
+    $r = $this->canal->collect(5);
+
+    expect($r->output)->toContain('Não foi possível apagar win-done-1c0000000000.json, win-out-1c0000000000.txt')
+        ->and($this->canal->cleanupFailures())->toBe(['win-done-1c0000000000.json', 'win-out-1c0000000000.txt'])
+        ->and(\App\Win\HypervListing::fromOutput($r->output)->problem)->toBeNull();
 });
 
 it('collect() recusa id fora do formato antes de montar caminho', function () {
