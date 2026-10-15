@@ -135,3 +135,75 @@ it('sem reload: apagar registros usa requestSubmit, com submit() só de recaída
     expect($html)->toContain('if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }')
         ->and(substr_count($html, '.submit()'))->toBe(1);
 });
+
+// ---- Tema do console ----------------------------------------------------------
+
+function layoutCss(): string
+{
+    $html = Respond::render('layout.php', new \App\Http\LayoutView('PHPorto', '<div class="wrap">x</div>'));
+    preg_match('#<style>(.*?)</style>#s', $html, $m);
+
+    return $m[1] ?? '';
+}
+
+it('a barra do console tem Claro, Escuro e Sistema como botões, com Sistema marcado', function () {
+    $html = wslHtml([]);
+
+    expect($html)->toContain('<div class="term-tema" role="group" aria-label="Tema do console">')
+        ->and($html)->toContain('<button type="button" class="term-btn" data-term-tema="claro" aria-pressed="false">Claro</button>')
+        ->and($html)->toContain('<button type="button" class="term-btn" data-term-tema="escuro" aria-pressed="false">Escuro</button>')
+        ->and($html)->toContain('<button type="button" class="term-btn" data-term-tema="sistema" aria-pressed="true">Sistema</button>')
+        ->and(substr_count($html, 'aria-pressed="true"'))->toBe(1);
+});
+
+it('o modo fica no localStorage só da /wsl, com Sistema apagando a chave, e não no layout', function () {
+    $html = wslHtml([]);
+    $layout = Respond::render('layout.php', new \App\Http\LayoutView('PHPorto', '<div class="wrap">x</div>'));
+
+    expect($html)->toContain("localStorage.getItem('phporto.wsl.console.tema')")
+        ->and($html)->toContain("var TEMA = 'phporto.wsl.console.tema';")
+        ->and($html)->toContain('localStorage.removeItem(TEMA)')
+        ->and($html)->not->toContain('sessionStorage')
+        ->and($layout)->not->toContain('localStorage')
+        ->and($layout)->not->toContain('phporto.wsl.console.tema');
+});
+
+it('a troca sem reload repinta o botão marcado do tema', function () {
+    expect(wslHtml([]))->toMatch("~addEventListener\\('phporto:trocou', function \\(\\) \\{\\s*pintarTema\\(\\);~");
+});
+
+it('o CSS tem as duas paletas, e o claro e o sistema só pintam o .term', function () {
+    $css = layoutCss();
+
+    expect($css)->toContain('--oh-bg:          #282C34;')
+        ->and($css)->toContain('--ohl-bg:          #FAFAFA;')
+        ->and($css)->toContain('--ohl-fg:          #383A42;')
+        ->and($css)->toContain('--ohl-cursor:      #4F525D;')
+        ->and($css)->toContain('html[data-term-tema="claro"] .term {')
+        ->and($css)->toMatch('~@media \(prefers-color-scheme: light\) \{\s*html:not\(\[data-term-tema\]\) \.term \{~');
+
+    preg_match_all('~([^{}]*)\{[^{}]*--ohl-~', $css, $m);
+    foreach (array_slice($m[1], 1) as $seletor) {
+        expect(trim($seletor))->toEndWith('.term');
+    }
+});
+
+it('o Enviar do console claro não é branco no #FAFAFA, e o Enviar dos anexos não muda', function () {
+    $css = layoutCss();
+
+    preg_match('~html\[data-term-tema="claro"\] \.term \{([^}]*)\}~', $css, $claro);
+
+    expect($claro[1] ?? '')->toContain('--t-go-bg: var(--ohl-fg); --t-go-fg: var(--ohl-bg);')
+        ->and($css)->toContain('.term-go { background: var(--t-go-bg); color: var(--t-go-fg);')
+        ->and($css)->toContain('.btn-claro { background: #fff; color: #1b1f24; border: 1px solid var(--line); font-weight: 600; }')
+        ->and($css)->not->toContain('.term-go, .btn-claro');
+});
+
+it('o resto da PHPorto segue branco: sem color-scheme e sem tema fora do .term', function () {
+    $css = layoutCss();
+
+    expect($css)->toContain('--bg:    #ffffff;')
+        ->and($css)->not->toMatch('~(?<![-\w])color-scheme\s*:~')
+        ->and($css)->not->toMatch('~html\[data-term-tema[^\]]*\]\s*(body|:root|\.wrap)~')
+        ->and(substr_count($css, 'prefers-color-scheme'))->toBe(1);
+});

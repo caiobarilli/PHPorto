@@ -50,6 +50,10 @@ para Consolas e depois `ui-monospace`. A fonte não vem de CDN nem de arquivo
 estático: a PHPorto só a nomeia no CSS embutido em `layout.php`, e o navegador
 usa a que estiver instalada.
 
+A barra do console tem três modos: Claro (One Half Light), Escuro (One Half
+Dark) e Sistema, o padrão, que segue o `prefers-color-scheme`; a escolha fica
+no `localStorage` do navegador e só pinta o console, o resto segue branco.
+
 ## Anexos
 
 O card de anexos copia um arquivo com `cp -v`. Os **dois** caminhos, origem e
