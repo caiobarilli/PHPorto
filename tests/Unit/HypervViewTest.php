@@ -339,12 +339,14 @@ it('pausada: o ligar diz Retomar', function () {
     expect(hypervHtml(listing: vmJson('Paused')))->toContain('aria-label="Retomar Ubuntu" title="Retomar"');
 });
 
-it('as cores: verde liga, vermelho desliga, âmbar reinicia, e o âmbar é token', function () {
+it('as cores: verde liga, vermelho desliga, âmbar reinicia, e as três são token', function () {
     $layout = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Views/layout.php');
 
     expect($layout)->toContain('--amber: #b45309;')
-        ->and($layout)->toContain('.vm-start { color: #15803d; }')
-        ->and($layout)->toContain('.vm-stop { color: #b91c1c; }')
+        ->and($layout)->toContain('--ok:        #15803d;')
+        ->and($layout)->toContain('--bad:       #b91c1c;')
+        ->and($layout)->toContain('.vm-start { color: var(--ok); }')
+        ->and($layout)->toContain('.vm-stop { color: var(--bad); }')
         ->and($layout)->toContain('.vm-restart { color: var(--amber); }');
 });
 

@@ -96,3 +96,46 @@ it('Hyper-V: texto em uma linha, e o detalhe técnico recolhido', function () {
         // O caminho do arquivo só aparece dentro do <details>.
         ->and(strpos($html, '<summary>Como funciona</summary>'))->toBeLessThan(strpos($html, 'storage/hyperv.json'));
 });
+
+it('a Aparência vem antes da fábrica, com Claro, Escuro e Sistema e o Sistema marcado', function () {
+    $html = configHtml();
+    $aparencia = (int) strpos($html, '<section id="aparencia">');
+
+    expect($aparencia)->toBeGreaterThan(0)
+        ->and($aparencia)->toBeLessThan((int) strpos($html, '<h2>Restaurar configurações de fábrica</h2>'))
+        ->and($html)->toContain('<div class="linha-acao" role="group" aria-label="Aparência">')
+        ->and($html)->toContain('<button type="button" class="btn btn-sm btn-ghost" data-tema="claro" aria-pressed="false">Claro</button>')
+        ->and($html)->toContain('<button type="button" class="btn btn-sm btn-ghost" data-tema="escuro" aria-pressed="false">Escuro</button>')
+        ->and($html)->toContain('<button type="button" class="btn btn-sm btn-ghost" data-tema="sistema" aria-pressed="true">Sistema</button>')
+        ->and(substr_count($html, 'aria-pressed="true"'))->toBe(1)
+        ->and($html)->toContain('A escolha fica')
+        ->and($html)->toContain('guardada só neste navegador, e a restauração de fábrica não mexe nela.');
+});
+
+it('o texto do topo continua verdadeiro: a aparência não vai para o flags.json', function () {
+    expect(configHtml())->toContain('o <code>.env</code> nunca é reescrito. A aparência fica só neste navegador.</p>');
+});
+
+it('o script da /config grava phporto.tema, com Sistema apagando a chave, e troca o data-tema na hora', function () {
+    $html = configHtml();
+
+    expect($html)->toContain("var TEMA = 'phporto.tema';")
+        ->and($html)->toContain('if (fixo) { localStorage.setItem(TEMA, modo); } else { localStorage.removeItem(TEMA); }')
+        ->and($html)->toContain("if (fixo) { raiz.setAttribute('data-tema', modo); } else { raiz.removeAttribute('data-tema'); }")
+        ->and($html)->toMatch('~try \{\s*if \(fixo\) \{ localStorage\.setItem~')
+        ->and($html)->toContain("ev.target.closest('#aparencia [data-tema]')")
+        ->and($html)->not->toContain('sessionStorage');
+});
+
+it('o botão marcado é repintado na carga e depois de cada troca sem reload', function () {
+    $html = configHtml();
+
+    expect($html)->toContain("document.addEventListener('phporto:trocou', pintarTema);\n  pintarTema();");
+});
+
+it('a restauração de fábrica não toca no tema', function () {
+    $pages = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+
+    expect($pages)->not->toContain('phporto.tema')
+        ->and($pages)->not->toContain('data-tema');
+});

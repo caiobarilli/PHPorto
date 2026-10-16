@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * O documento. White mode, sem framework, sem CDN: CSS e JS embutidos e
+ * O documento. Claro, escuro ou o do sistema, sem framework, sem CDN: CSS e JS embutidos e
  * servidos pelo próprio PHP — a ferramenta não tem nenhum arquivo estático, e
  * é isso que permite o router ser lista de permissão.
  *
@@ -17,6 +17,16 @@ use App\Http\Respond;
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<script id="tema">
+(function () {
+  try {
+    localStorage.removeItem('phporto.wsl.console.tema');
+    var t = localStorage.getItem('phporto.tema');
+    if (t === 'claro' || t === 'escuro') { document.documentElement.setAttribute('data-tema', t); }
+  } catch (e) { /* sem armazenamento, fica o do sistema */ }
+})();
+</script>
 <title><?= Respond::e($view->title) ?></title>
 <style>
   :root {
@@ -27,6 +37,29 @@ use App\Http\Respond;
     --panel: #fafbfc;
     --btn:   #262626;
     --amber: #b45309;
+    --btn-fg:    #ffffff;
+    --btn-hover: #3a3a3a;
+    --forte:     #262626;
+    --ok:        #15803d;
+    --bad:       #b91c1c;
+    --bad-bg:    #fef2f2;
+    --nota:      #92400e;
+    --code-bg:   #f1f3f5;
+    --tag-bg:    #ececf0;
+    --tag-fg:    #3f3f46;
+    --cuidado-borda: #d97706;
+    --cuidado-bg:    #fffbeb;
+    --trilho:        #d6d9de;
+    --trilho-on:     #16a34a;
+    --bolinha:       #ffffff;
+    --claro-bg:      #ffffff;
+    --claro-fg:      #1b1f24;
+    --claro-hover:   #fafbfc;
+    --term-borda:    none;
+    --sombra-bolinha: rgba(0,0,0,.25);
+    --sombra-modal:   rgba(0,0,0,.18);
+    --sombra-aviso:   rgba(0,0,0,.14);
+    --fundo-modal:    rgba(15,17,21,.45);
     --mono:  ui-monospace, Consolas, "Courier New", monospace;
     --sans:  "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
     --mono-console: "JetBrainsMono Nerd Font", Consolas, ui-monospace, monospace;
@@ -47,6 +80,79 @@ use App\Http\Respond;
     --ohl-green:       #50A14F;
     --ohl-brightblack: #4F525D;
     --ohl-cursor:      #4F525D;
+    color-scheme: light dark;
+  }
+  /* Escuro: o mesmo conjunto de nomes com outros valores. Vale pelo
+     data-tema="escuro" no <html> ou, sem o atributo, pelo sistema. Os dois
+     blocos precisam ficar iguais. */
+  html[data-tema="claro"] { color-scheme: light; }
+  html[data-tema="escuro"] {
+    --ink:   #e6e8eb;
+    --mut:   #9aa3ae;
+    --line:  #343a43;
+    --bg:    #16181d;
+    --panel: #1d2026;
+    --btn:   #e6e8eb;
+    --amber: #fbbf24;
+    --btn-fg:    #16181d;
+    --btn-hover: #c9cdd3;
+    --forte:     #e6e8eb;
+    --ok:        #4ade80;
+    --bad:       #f87171;
+    --bad-bg:    #2a1517;
+    --nota:      #fcd34d;
+    --code-bg:   #262a31;
+    --tag-bg:    #2a2e35;
+    --tag-fg:    #d4d4d8;
+    --cuidado-borda: #b45309;
+    --cuidado-bg:    #241a0b;
+    --trilho:        #4b5563;
+    --trilho-on:     #16a34a;
+    --bolinha:       #ffffff;
+    --claro-bg:      #ffffff;
+    --claro-fg:      #1b1f24;
+    --claro-hover:   #e6e8eb;
+    --term-borda:    1px solid var(--line);
+    --sombra-bolinha: rgba(0,0,0,.5);
+    --sombra-modal:   rgba(0,0,0,.5);
+    --sombra-aviso:   rgba(0,0,0,.45);
+    --fundo-modal:    rgba(0,0,0,.6);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not([data-tema]) {
+      --ink:   #e6e8eb;
+      --mut:   #9aa3ae;
+      --line:  #343a43;
+      --bg:    #16181d;
+      --panel: #1d2026;
+      --btn:   #e6e8eb;
+      --amber: #fbbf24;
+      --btn-fg:    #16181d;
+      --btn-hover: #c9cdd3;
+      --forte:     #e6e8eb;
+      --ok:        #4ade80;
+      --bad:       #f87171;
+      --bad-bg:    #2a1517;
+      --nota:      #fcd34d;
+      --code-bg:   #262a31;
+      --tag-bg:    #2a2e35;
+      --tag-fg:    #d4d4d8;
+      --cuidado-borda: #b45309;
+      --cuidado-bg:    #241a0b;
+      --trilho:        #4b5563;
+      --trilho-on:     #16a34a;
+      --bolinha:       #ffffff;
+      --claro-bg:      #ffffff;
+      --claro-fg:      #1b1f24;
+      --claro-hover:   #e6e8eb;
+      --term-borda:    1px solid var(--line);
+      --sombra-bolinha: rgba(0,0,0,.5);
+      --sombra-modal:   rgba(0,0,0,.5);
+      --sombra-aviso:   rgba(0,0,0,.45);
+      --fundo-modal:    rgba(0,0,0,.6);
+      color-scheme: dark;
+    }
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -91,12 +197,12 @@ use App\Http\Respond;
     border: 0;
     border-radius: 12px;
     background: var(--btn);
-    color: #fff;
+    color: var(--btn-fg);
     font: 500 14px/1 var(--sans);
     text-decoration: none;
     cursor: pointer;
   }
-  .btn:hover { background: #3a3a3a; }
+  .btn:hover { background: var(--btn-hover); }
   .btn svg { width: 17px; height: 17px; display: block; }
   .btn.is-disabled {
     opacity: .38;
@@ -127,14 +233,14 @@ use App\Http\Respond;
   .topbar a { color: var(--mut); font-size: 13px; text-decoration: none; }
   .topbar a:hover { color: var(--ink); }
   .sub { color: var(--mut); font-size: 12px; margin: 0 0 18px; }
-  .sub code { background: #f1f3f5; padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
+  .sub code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
 
   section { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; background: var(--bg); }
   h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--mut); margin: 0 0 10px; font-weight: 600; }
 
   .alert { border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px; padding: 10px 13px; margin-bottom: 14px; font-size: 13px; background: var(--panel); }
-  .alert-block { border-left-color: #b91c1c; }
-  .alert-note  { border-left-color: #262626; }
+  .alert-block { border-left-color: var(--bad); }
+  .alert-note  { border-left-color: var(--forte); }
   .alert p { margin: 8px 0 0; }
   .alert details { margin-top: 8px; } .alert summary { color: var(--mut); cursor: pointer; font-size: 12px; }
   .alert details pre { margin: 6px 0 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; max-height: 220px; overflow: auto; }
@@ -154,17 +260,18 @@ use App\Http\Respond;
   .campo label { width: 74px; flex: none; color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
   .row { display: flex; gap: 8px; margin-top: 11px; align-items: center; flex-wrap: wrap; }
   .dica { color: var(--mut); font-size: 12px; margin: 11px 0 0; }
-  .dica code { background: #f1f3f5; padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
+  .dica code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
 
   .btn-sm { min-width: 0; padding: 8px 14px; border-radius: 8px; font-size: 13px; }
   .btn-ghost { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
   .btn-ghost:hover { background: var(--panel); }
-  .btn-danger { background: var(--bg); color: #b91c1c; border: 1px solid var(--line); }
-  .btn-danger:hover { background: #fef2f2; }
+  .btn-ghost[aria-pressed="true"] { background: var(--btn); color: var(--btn-fg); border-color: var(--btn); }
+  .btn-danger { background: var(--bg); color: var(--bad); border: 1px solid var(--line); }
+  .btn-danger:hover { background: var(--bad-bg); }
   button[disabled] { opacity: .5; cursor: progress; }
 
   .meta { color: var(--mut); font-size: 12px; margin-left: auto; font-variant-numeric: tabular-nums; }
-  .ok { color: #15803d; } .bad { color: #b91c1c; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
   .vm-parada { color: var(--mut); }
   .vm-ip { font: 12px var(--mono); }
 
@@ -177,7 +284,7 @@ use App\Http\Respond;
   .vm-form { display: inline-block; margin: 0 2px 0 0; }
   .vm-acoes .btn-icone { padding: 6px; border-radius: 8px; }
   .vm-acoes .btn-icone svg { width: 16px; height: 16px; }
-  .vm-start { color: #15803d; } .vm-stop { color: #b91c1c; } .vm-restart { color: var(--amber); }
+  .vm-start { color: var(--ok); } .vm-stop { color: var(--bad); } .vm-restart { color: var(--amber); }
   .vm-acoes button[disabled] { opacity: .3; cursor: not-allowed; }
   .vm-pendente { display: block; margin-top: 4px; color: var(--mut); font-size: 12px; white-space: normal; }
 
@@ -186,7 +293,7 @@ use App\Http\Respond;
   th { background: var(--panel); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); font-weight: 600; }
   td pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; max-height: 220px; overflow: auto; }
   .c-in { width: 32%; } .c-out { width: 52%; } .c-dt { width: 16%; }
-  .tag { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; padding: 2px 7px; border-radius: 10px; background: #ececf0; color: #3f3f46; margin-bottom: 6px; }
+  .tag { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; padding: 2px 7px; border-radius: 10px; background: var(--tag-bg); color: var(--tag-fg); margin-bottom: 6px; }
   .empty { color: var(--mut); padding: 12px 0; }
 
   .kv { display: grid; grid-template-columns: 130px 1fr; gap: 8px 16px; font-size: 13px; }
@@ -199,8 +306,8 @@ use App\Http\Respond;
   .caixa { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; cursor: pointer; }
   .caixa input { margin: 2px 0 0; flex: none; }
   .caixa small { display: block; color: var(--mut); font-size: 11.5px; line-height: 1.4; margin-top: 2px; }
-  .caixa .nota { color: #92400e; }
-  .caixa .aplicado { color: #15803d; font-weight: 600; }
+  .caixa .nota { color: var(--nota); }
+  .caixa .aplicado { color: var(--ok); font-weight: 600; }
 
   .principais { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
   .principais > section { margin: 0; }
@@ -213,39 +320,40 @@ use App\Http\Respond;
   .btn-campo { align-self: stretch; min-width: 0; padding: 0 18px; border-radius: 8px; flex: none; }
   .grupo { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; margin: 12px 0 0; }
   .grupo legend { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); padding: 0 6px; }
-  .grupo.cuidado { border-color: #d97706; background: #fffbeb; }
-  .grupo.cuidado legend { color: #b45309; font-weight: 600; }
+  .grupo.cuidado { border-color: var(--cuidado-borda); background: var(--cuidado-bg); }
+  .grupo.cuidado legend { color: var(--amber); font-weight: 600; }
 
   /* ---- Console da /wsl -------------------------------------------------
-     Só aqui, dentro de .term, o resto da PHPorto segue branco. Escuro é One
-     Half Dark (--oh-*), claro é One Half Light (--ohl-*). O modo vem de
-     data-term-tema no <html>, que a troca sem reload não toca; sem o
-     atributo vale o do sistema. Barra e bordas não têm token na paleta e
-     saem misturadas dela. */
+     Segue o modo do site: escuro é One Half Dark (--oh-*), claro é One Half
+     Light (--ohl-*). O modo vem de data-tema no <html>, que a troca sem
+     reload não toca; sem o atributo vale o do sistema. Barra e bordas não
+     têm token na paleta e saem misturadas dela. */
   .term {
     --t-bg: var(--oh-bg); --t-fg: var(--oh-fg); --t-mut: var(--oh-brightblack);
     --t-ok: var(--oh-green); --t-bad: var(--oh-red); --t-cursor: var(--oh-cursor);
     --t-go-bg: #fff; --t-go-fg: #1b1f24;
     --term-bar:  color-mix(in srgb, var(--oh-black) 85%, #000);
     --term-line: color-mix(in srgb, var(--oh-brightblack) 45%, var(--oh-bg));
-    background: var(--t-bg); color: var(--t-fg);
-    border-radius: 10px; overflow: hidden; margin-bottom: 0;
+    background: var(--t-bg); color: var(--t-fg); color-scheme: dark;
+    border: var(--term-borda); border-radius: 10px; overflow: hidden; margin-bottom: 0;
     font: 13px/1.45 var(--mono-console);
   }
-  html[data-term-tema="claro"] .term {
+  html[data-tema="claro"] .term {
     --t-bg: var(--ohl-bg); --t-fg: var(--ohl-fg); --t-mut: var(--ohl-brightblack);
     --t-ok: var(--ohl-green); --t-bad: var(--ohl-red); --t-cursor: var(--ohl-cursor);
     --t-go-bg: var(--ohl-fg); --t-go-fg: var(--ohl-bg);
     --term-bar:  color-mix(in srgb, var(--ohl-fg) 7%, var(--ohl-bg));
     --term-line: color-mix(in srgb, var(--ohl-brightblack) 25%, var(--ohl-bg));
+    color-scheme: light;
   }
   @media (prefers-color-scheme: light) {
-    html:not([data-term-tema]) .term {
+    html:not([data-tema]) .term {
       --t-bg: var(--ohl-bg); --t-fg: var(--ohl-fg); --t-mut: var(--ohl-brightblack);
       --t-ok: var(--ohl-green); --t-bad: var(--ohl-red); --t-cursor: var(--ohl-cursor);
       --t-go-bg: var(--ohl-fg); --t-go-fg: var(--ohl-bg);
       --term-bar:  color-mix(in srgb, var(--ohl-fg) 7%, var(--ohl-bg));
       --term-line: color-mix(in srgb, var(--ohl-brightblack) 25%, var(--ohl-bg));
+      color-scheme: light;
     }
   }
   .term-bar {
@@ -255,13 +363,11 @@ use App\Http\Respond;
   }
   .term-bar strong { color: var(--t-fg); font-weight: 500; }
   .term-btns { display: flex; gap: 6px; flex-wrap: wrap; }
-  .term-tema { display: flex; gap: 2px; margin-right: 6px; }
   .term-btn {
     background: transparent; color: var(--t-fg); border: 1px solid var(--term-line);
     border-radius: 6px; padding: 4px 9px; font: 500 12px/1 var(--sans); cursor: pointer;
   }
-  .term-btn:hover, .term-btn[aria-pressed="true"] { background: var(--term-line); }
-  .term-btn[aria-pressed="true"] { font-weight: 600; }
+  .term-btn:hover { background: var(--term-line); }
   .term-scroll {
     margin: 0; min-height: 280px; max-height: 420px; overflow: auto;
     padding: 12px 14px 8px; font: inherit; color: inherit;
@@ -276,8 +382,8 @@ use App\Http\Respond;
   }
   .term-prompt textarea::placeholder { color: var(--t-mut); }
   .term-go { background: var(--t-go-bg); color: var(--t-go-fg); border: 0; border-radius: 6px; padding: 6px 12px; font: 600 12px/1 var(--sans); cursor: pointer; flex: none; margin-top: 2px; }
-  .btn-claro { background: #fff; color: #1b1f24; border: 1px solid var(--line); font-weight: 600; }
-  .btn-claro:hover { background: var(--panel); }
+  .btn-claro { background: var(--claro-bg); color: var(--claro-fg); border: 1px solid var(--line); font-weight: 600; }
+  .btn-claro:hover { background: var(--claro-hover); }
   .term-meta { display: flex; justify-content: space-between; gap: 12px; padding: 0 14px 10px; color: var(--t-mut); font: 11px/1.4 var(--sans); }
   .term-meta .ok { color: var(--t-ok); } .term-meta .bad { color: var(--t-bad); }
   .term-meta strong { font-weight: 600; }
@@ -293,15 +399,15 @@ use App\Http\Respond;
   .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
   .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
   .switch .trilho {
-    width: 40px; height: 22px; border-radius: 999px; background: #d6d9de;
+    width: 40px; height: 22px; border-radius: 999px; background: var(--trilho);
     position: relative; transition: background .16s ease; flex: none;
   }
   .switch .trilho::after {
     content: ""; position: absolute; top: 3px; left: 3px;
-    width: 16px; height: 16px; border-radius: 50%; background: #fff;
-    transition: transform .16s ease; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    width: 16px; height: 16px; border-radius: 50%; background: var(--bolinha);
+    transition: transform .16s ease; box-shadow: 0 1px 2px var(--sombra-bolinha);
   }
-  .switch input:checked + .trilho { background: #16a34a; }
+  .switch input:checked + .trilho { background: var(--trilho-on); }
   .switch input:checked + .trilho::after { transform: translateX(18px); }
   .switch input:focus-visible + .trilho { outline: 2px solid var(--btn); outline-offset: 2px; }
   .switch .rotulo { font-size: 13px; }
@@ -317,14 +423,14 @@ use App\Http\Respond;
   dialog {
     border: 1px solid var(--line); border-radius: 12px; padding: 0;
     max-width: 460px; width: calc(100% - 32px); color: var(--ink); background: var(--bg);
-    box-shadow: 0 12px 40px rgba(0,0,0,.18);
+    box-shadow: 0 12px 40px var(--sombra-modal);
   }
-  dialog::backdrop { background: rgba(15,17,21,.45); }
+  dialog::backdrop { background: var(--fundo-modal); }
   .modal-corpo { padding: 20px 20px 4px; }
   .modal-corpo h3 { margin: 0 0 10px; font-size: 15px; }
   .modal-corpo p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--mut); }
   .modal-corpo p strong { color: var(--ink); }
-  .modal-corpo code { background: #f1f3f5; padding: 1px 5px; border-radius: 4px; font-family: var(--mono); font-size: 12px; }
+  .modal-corpo code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); font-size: 12px; }
   .modal-opcao {
     display: flex; gap: 9px; align-items: flex-start; font-size: 13px;
     border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; margin-bottom: 12px; cursor: pointer;
@@ -340,8 +446,8 @@ use App\Http\Respond;
   .aviso-rodape {
     position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
     width: min(720px, calc(100% - 32px)); display: flex; gap: 12px; align-items: flex-start;
-    border: 1px solid var(--line); border-left: 3px solid #262626; border-radius: 8px;
-    padding: 10px 13px; background: var(--bg); font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.14);
+    border: 1px solid var(--line); border-left: 3px solid var(--forte); border-radius: 8px;
+    padding: 10px 13px; background: var(--bg); font-size: 13px; box-shadow: 0 6px 24px var(--sombra-aviso);
   }
   .aviso-rodape[hidden] { display: none; }
   .aviso-rodape span { flex: 1; }
