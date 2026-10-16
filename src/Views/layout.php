@@ -265,6 +265,7 @@ use App\Http\Respond;
   .btn-sm { min-width: 0; padding: 8px 14px; border-radius: 8px; font-size: 13px; }
   .btn-ghost { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
   .btn-ghost:hover { background: var(--panel); }
+  .btn-ghost[aria-pressed="true"] { background: var(--btn); color: var(--btn-fg); border-color: var(--btn); }
   .btn-danger { background: var(--bg); color: var(--bad); border: 1px solid var(--line); }
   .btn-danger:hover { background: var(--bad-bg); }
   button[disabled] { opacity: .5; cursor: progress; }

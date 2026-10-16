@@ -120,3 +120,26 @@ it('o script do <head> só lê o modo, antes do <style>, e descarta a chave velh
         ->and($js)->not->toContain('fetch(')
         ->and($js)->not->toContain('innerHTML');
 });
+
+it('só a /config grava o tema; as outras telas e o layout não gravam nada no navegador', function () {
+    foreach (glob(dirname(__DIR__, 2) . '/src/Views/*.php') ?: [] as $arquivo) {
+        $fonte = (string) file_get_contents($arquivo);
+        $nome = basename($arquivo);
+
+        expect($fonte)->not->toContain('sessionStorage');
+        if ($nome === 'config.php') {
+            expect(substr_count($fonte, 'localStorage.setItem('))->toBe(1)
+                ->and(substr_count($fonte, 'localStorage.removeItem('))->toBe(1);
+        } elseif ($nome === 'layout.php') {
+            expect($fonte)->not->toContain('setItem')
+                ->and(substr_count($fonte, 'localStorage.removeItem('))->toBe(1)
+                ->and($fonte)->toContain("localStorage.removeItem('phporto.wsl.console.tema')");
+        } else {
+            expect($fonte)->not->toContain('localStorage');
+        }
+    }
+});
+
+it('o botão marcado da Aparência é o primário, nos dois modos', function () {
+    expect(temaCss())->toContain('.btn-ghost[aria-pressed="true"] { background: var(--btn); color: var(--btn-fg); border-color: var(--btn); }');
+});

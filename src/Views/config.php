@@ -20,7 +20,7 @@ use App\Http\Respond;
     <h1>Configuração</h1>
     <a href="/">voltar</a>
   </div>
-  <p class="sub">A configuração vive no <code>.env</code> e continua sendo lida de lá. Esta tela alterna apenas as chaves abaixo, gravando em <code>storage/flags.json</code> — o <code>.env</code> nunca é reescrito.</p>
+  <p class="sub">A configuração vive no <code>.env</code> e continua sendo lida de lá. Esta tela alterna apenas as chaves abaixo, gravando em <code>storage/flags.json</code> — o <code>.env</code> nunca é reescrito. A aparência fica só neste navegador.</p>
 
   <?php if ($view->notice !== null): ?>
     <div class="alert alert-note" data-aviso><?= Respond::e($view->notice) ?></div>
@@ -166,6 +166,21 @@ use App\Http\Respond;
     </form>
   </section>
 
+  <section id="aparencia">
+    <h2>Aparência</h2>
+
+    <div class="linha-acao" role="group" aria-label="Aparência">
+      <button type="button" class="btn btn-sm btn-ghost" data-tema="claro" aria-pressed="false">Claro</button>
+      <button type="button" class="btn btn-sm btn-ghost" data-tema="escuro" aria-pressed="false">Escuro</button>
+      <button type="button" class="btn btn-sm btn-ghost" data-tema="sistema" aria-pressed="true">Sistema</button>
+    </div>
+
+    <p class="nota-estado">
+      Vale para todas as páginas. Sistema segue o modo do Windows. A escolha fica
+      guardada só neste navegador, e a restauração de fábrica não mexe nela.
+    </p>
+  </section>
+
   <section>
     <h2>Restaurar configurações de fábrica</h2>
 
@@ -275,6 +290,38 @@ use App\Http\Respond;
     var r = ROTULOS[ev.target.id];
     if (r) { document.getElementById(r[0]).textContent = ev.target.checked ? r[1] : r[2]; }
   });
+
+  var TEMA = 'phporto.tema';
+
+  function temaAtual() {
+    var t = document.documentElement.getAttribute('data-tema');
+    return t === 'claro' || t === 'escuro' ? t : 'sistema';
+  }
+
+  function pintarTema() {
+    var atual = temaAtual();
+    document.querySelectorAll('#aparencia [data-tema]').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-tema') === atual ? 'true' : 'false');
+    });
+  }
+
+  function trocarTema(modo) {
+    var raiz = document.documentElement;
+    var fixo = modo === 'claro' || modo === 'escuro';
+    if (fixo) { raiz.setAttribute('data-tema', modo); } else { raiz.removeAttribute('data-tema'); }
+    try {
+      if (fixo) { localStorage.setItem(TEMA, modo); } else { localStorage.removeItem(TEMA); }
+    } catch (e) { /* sem armazenamento, vale só até sair da página */ }
+    pintarTema();
+  }
+
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('#aparencia [data-tema]');
+    if (b) { trocarTema(b.getAttribute('data-tema')); }
+  });
+
+  document.addEventListener('phporto:trocou', pintarTema);
+  pintarTema();
 
   function enviar(form) {
     form.setAttribute('data-confirmado', '');
