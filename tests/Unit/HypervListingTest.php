@@ -137,3 +137,21 @@ it('campos ausentes ou de tipo errado caem em padrões seguros', function () {
         // Só as strings não vazias entram na lista de IP.
         ->and($vm->ip)->toBe(['1.1.1.1']);
 });
+
+it('lê o id de cada VM, em minúsculas', function () {
+    $l = HypervListing::fromOutput('{"hyperv":true,"vms":[{"id":"6C1E2A4B-0D3F-4E5A-9B8C-7D6E5F4A3B2C","name":"U","state":"Off","running":false,"memoryBytes":0,"uptimeSeconds":0,"ip":[]}]}');
+
+    expect($l->vms[0]->id)->toBe('6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c');
+});
+
+it('id ausente ou fora do formato de GUID vira vazio', function (string $id) {
+    $l = HypervListing::fromOutput('{"hyperv":true,"vms":[{' . $id . '"name":"U","state":"Off","running":false,"memoryBytes":0,"uptimeSeconds":0,"ip":[]}]}');
+
+    expect($l->vms[0]->id)->toBe('');
+})->with([
+    'ausente'    => [''],
+    'curinga'    => ['"id":"*",'],
+    'nome'       => ['"id":"Ubuntu",'],
+    'sem hífens' => ['"id":"6c1e2a4b0d3f4e5a9b8c7d6e5f4a3b2c",'],
+    'número'     => ['"id":42,'],
+]);

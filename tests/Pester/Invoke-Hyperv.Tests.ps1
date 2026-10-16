@@ -14,11 +14,26 @@ BeforeAll {
     $Script:PastaWin    = Join-Path $Script:RaizProjeto 'src\Win'
     $Script:Acao        = Join-Path $Script:PastaWin 'actions\Invoke-Hyperv.ps1'
 
+    # Pester can only mock a command that exists. Where the Hyper-V module,
+    # CIM or the service cmdlets are absent (a host without the feature, or
+    # pwsh on Linux), they are stubbed first.
+    if (-not (Get-Command -Name 'Get-VM' -ErrorAction SilentlyContinue)) {
+        function global:Get-VM { [CmdletBinding()] param([guid[]]$Id, [string[]]$Name) }
+        function global:Get-VMNetworkAdapter { [CmdletBinding()] param([string[]]$VMName) }
+    }
+    if (-not (Get-Command -Name 'Get-CimInstance' -ErrorAction SilentlyContinue)) {
+        function global:Get-CimInstance { [CmdletBinding()] param([string]$ClassName, [string]$Filter) }
+    }
+    if (-not (Get-Command -Name 'Get-Service' -ErrorAction SilentlyContinue)) {
+        function global:Get-Service { [CmdletBinding()] param([string[]]$Name) }
+    }
+
     # Loads Write-Status, $sync, $root and every action.
     . (Join-Path $Script:PastaWin 'bootstrap.ps1')
 
-    function New-FakeVM([string]$Name, [string]$State, [long]$Memory, [int]$UptimeSeconds) {
+    function New-FakeVM([string]$Name, [string]$State, [long]$Memory, [int]$UptimeSeconds, [string]$Id = ([guid]::NewGuid().ToString())) {
         [PSCustomObject]@{
+            VMId           = [guid]$Id
             Name           = $Name
             State          = $State
             MemoryAssigned = $Memory
@@ -83,6 +98,22 @@ Describe "Invoke-Hyperv - listing" {
         $rodando.memoryBytes   | Should -Be 2147483648
         $rodando.uptimeSeconds | Should -Be 3661
         @($rodando.ip)         | Should -Be @('192.168.1.5', 'fe80::1')
+    }
+
+    It "each VM carries its VMId as id, the key the start/stop/restart action uses" {
+        Mock Get-VM {
+            @(
+                (New-FakeVM 'Ubuntu' 'Running' 2147483648 3661 '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c'),
+                (New-FakeVM 'Ubuntu' 'Off'     0          0    '0f9e8d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f')
+            )
+        }
+        Mock Get-VMNetworkAdapter { [PSCustomObject]@{ IPAddresses = @() } }
+
+        $obj = Invoke-Hyperv | ConvertFrom-Json
+
+        # Two VMs with the same name: only the id tells them apart.
+        @($obj.vms.id) | Should -Be @('6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c', '0f9e8d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f')
+        @($obj.vms.name) | Should -Be @('Ubuntu', 'Ubuntu')
     }
 
     It "the off VM has no IP read and no uptime" {

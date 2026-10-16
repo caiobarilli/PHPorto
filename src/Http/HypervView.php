@@ -22,6 +22,11 @@ use App\Win\HypervListing;
  * $timedOut é a leitura que estourou o teto próprio do /hyperv e foi
  * cancelada: não é bloqueio (não há o que ligar) nem problema de formato, e a
  * tela pede só para atualizar.
+ *
+ * $actionsBlocked é o que impede ligar, desligar ou reiniciar uma VM: o
+ * checkout sem os .ps1. Os botões passam pelo uso único, com UAC próprio, e
+ * não dependem do PowerShell elevado longo; a política do UAC é conferida no
+ * clique.
  */
 final readonly class HypervView
 {
@@ -31,6 +36,10 @@ final readonly class HypervView
         public ?HypervListing $listing,
         public string $readAtUtc,
         public bool $timedOut = false,
+        public ?string $notice = null,
+        public string $csrfToken = '',
+        public string $csrfField = '',
+        public ?string $actionsBlocked = null,
     ) {
     }
 }

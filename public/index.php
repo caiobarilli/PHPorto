@@ -170,6 +170,6 @@ match ($path) {
     '/config' => $pages->config($method),
     '/wsl'    => $pages->wsl($method),
     '/win'    => $pages->win($method),
-    '/hyperv' => $pages->hyperv(),
+    '/hyperv' => $pages->hyperv($method),
     default   => Respond::notFound(),
 };

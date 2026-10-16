@@ -12,6 +12,11 @@ declare(strict_types=1);
  * manda reiniciar; os outros não pedem uma ação cara sem motivo. Só com o hospedeiro ligado vem a lista —
  * ou, sem nenhuma VM, uma frase no lugar dela.
  *
+ * A COLUNA AÇÕES liga, desliga e reinicia uma VM pelo id dela, cada botão um
+ * POST do hyperv-vm com UAC próprio. O estado lido decide o que fica
+ * habilitado; o Invoke-HypervVm confere de novo na hora. Desligar e reiniciar
+ * pedem confirmação num <dialog>; ligar não. Linha sem id não tem botão.
+ *
  * @var \App\Http\HypervView $view
  */
 
@@ -39,6 +44,43 @@ $estados = [
 
 /** Parada de vez: cinza. Rodando é verde; o resto (transitório) fica neutro. */
 $paradas = ['Off', 'Saved', 'FastSaved', 'Hibernated'];
+
+$permite = static function (string $estado): array {
+    // Pausada liga retomando; salva e hibernada ligam voltando de onde
+    // pararam; o resto (transitório) não deixa nada.
+    return [
+        'start'   => in_array($estado, ['Off', 'Saved', 'FastSaved', 'Hibernated', 'Paused'], true),
+        'stop'    => $estado === 'Running',
+        'restart' => $estado === 'Running',
+    ];
+};
+
+$icones = [
+    'start'   => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>',
+    'stop'    => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6.5" y="6.5" width="11" height="11" rx="1.5" fill="currentColor"/></svg>',
+    'restart' => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12a7 7 0 1 1-2.05-4.95" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M19.5 4.5v4h-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+];
+
+$botaoVm = static function (\App\Win\HypervVm $vm, string $sub, bool $habilitado) use ($view, $icones): string {
+    $nome   = $vm->name !== '' ? $vm->name : '(sem nome)';
+    $rotulo = match ($sub) {
+        'start'   => $vm->state === 'Paused' ? 'Retomar' : 'Ligar',
+        'stop'    => 'Desligar',
+        default   => 'Reiniciar',
+    };
+    $confirma = $sub === 'start' ? '' : ' data-confirmar="' . $sub . '" data-vm="' . Respond::e($nome) . '"';
+
+    return '<form method="post" action="/hyperv" data-sem-reload class="vm-form"' . $confirma . '>'
+        . '<input type="hidden" name="' . Respond::e($view->csrfField) . '" value="' . Respond::e($view->csrfToken) . '">'
+        . '<input type="hidden" name="acao" value="hyperv-vm">'
+        . '<input type="hidden" name="SubAction" value="' . $sub . '">'
+        . '<input type="hidden" name="VmId" value="' . Respond::e($vm->id) . '">'
+        . '<button type="submit" class="btn btn-ghost btn-icone vm-' . $sub . '" data-uac'
+        . ' aria-label="' . Respond::e($rotulo . ' ' . $nome) . '" title="' . Respond::e($rotulo) . '"'
+        . ($habilitado ? '' : ' disabled') . '>'
+        . $icones[$sub]
+        . '</button></form>';
+};
 
 $memoria = static function (int $bytes): string {
     if ($bytes >= 1073741824) {
@@ -79,6 +121,10 @@ $listing = $view->listing;
     <h1>Hyper-V</h1>
     <a href="/">voltar</a>
   </div>
+
+  <?php if ($view->notice !== null): ?>
+    <div class="alert alert-note" data-aviso><?= Respond::e($view->notice) ?></div>
+  <?php endif; ?>
 
   <?php if ($view->blocked !== null): ?>
     <div class="alert alert-block" id="hyperv-faixa">
@@ -140,6 +186,12 @@ $listing = $view->listing;
     <?php if ($vms === []): ?>
       <p class="empty">Nenhuma máquina virtual neste computador.</p>
     <?php else: ?>
+      <?php if ($view->actionsBlocked !== null): ?>
+        <div class="alert alert-block" id="hyperv-acoes-bloqueio">
+          <strong>Ligar, desligar e reiniciar estão indisponíveis.</strong>
+          <?= Respond::e($view->actionsBlocked) ?>
+        </div>
+      <?php endif; ?>
       <table id="hyperv-tabela">
         <thead>
           <tr>
@@ -148,6 +200,7 @@ $listing = $view->listing;
             <th>Memória em uso</th>
             <th>Ligada há</th>
             <th>Endereço IP</th>
+            <th class="c-vm-acoes">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -178,6 +231,17 @@ $listing = $view->listing;
                 <?php endif; ?>
               <?php endif; ?>
             </td>
+            <td class="vm-acoes">
+              <?php if ($vm->id === ''): ?>
+                —
+              <?php else:
+                  $pode = $permite($vm->state);
+                  foreach (['start', 'stop', 'restart'] as $sub): ?>
+                <?= $botaoVm($vm, $sub, $pode[$sub] && $view->actionsBlocked === null) ?>
+              <?php endforeach; ?>
+                <span class="vm-pendente" data-pendente hidden></span>
+              <?php endif; ?>
+            </td>
           </tr>
         <?php endforeach; ?>
         </tbody>
@@ -186,7 +250,62 @@ $listing = $view->listing;
   <?php endif; ?>
 </div>
 
+<dialog id="modal-vm">
+  <div class="modal-corpo">
+    <h3 id="modal-vm-titulo">Desligar a VM?</h3>
+    <p id="modal-vm-texto"></p>
+    <p>O Windows vai pedir a confirmação do UAC antes de executar.</p>
+  </div>
+  <div class="modal-acoes">
+    <button type="button" class="btn btn-ghost btn-sm" data-fechar>Cancelar</button>
+    <button type="button" class="btn btn-danger btn-sm" id="btn-confirmar-vm">Desligar</button>
+  </div>
+</dialog>
+
 <script>
+/*
+ * Desligar e reiniciar confirmam num <dialog> antes do POST; ligar não. O
+ * submit é cancelado aqui, antes do sem-reload do layout, e o botão do modal
+ * envia de novo com requestSubmit(). O modal fica fora do .wrap, que a troca
+ * sem reload substitui, e os eventos vão por delegação.
+ */
+(function () {
+  'use strict';
+
+  var TEXTOS = {
+    stop: ['Desligar', 'O PHPorto pede ao sistema da VM para desligar, como no menu Iniciar dela. O que estiver aberto e sem salvar dentro da VM pode se perder.'],
+    restart: ['Reiniciar', 'O PHPorto pede ao sistema da VM para reiniciar. Se este Hyper-V não souber reiniciar pelo sistema, ele faz um reset, como apertar o botão de reiniciar do gabinete.']
+  };
+  var modal = document.getElementById('modal-vm');
+  var pendente = null;
+
+  document.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    var sub = form.getAttribute('data-confirmar');
+    if (!sub || !TEXTOS[sub] || !modal || !modal.showModal) { return; }
+    if (form.hasAttribute('data-confirmado')) { form.removeAttribute('data-confirmado'); return; }
+
+    ev.preventDefault();
+    pendente = form;
+    document.getElementById('modal-vm-titulo').textContent = TEXTOS[sub][0] + ' ' + form.getAttribute('data-vm') + '?';
+    document.getElementById('modal-vm-texto').textContent = TEXTOS[sub][1];
+    document.getElementById('btn-confirmar-vm').textContent = TEXTOS[sub][0];
+    modal.showModal();
+  });
+
+  document.addEventListener('click', function (ev) {
+    if (!ev.target.closest('#btn-confirmar-vm')) { return; }
+
+    modal.close();
+    var form = pendente;
+    pendente = null;
+    if (!form || !document.contains(form)) { return; }
+
+    form.setAttribute('data-confirmado', '');
+    if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }
+  });
+})();
+
 /*
  * "copiar" ao lado do IP. Só no navegador, sem requisição: em 127.0.0.1 o
  * navigator.clipboard funciona; fora de contexto seguro, seleciona o texto

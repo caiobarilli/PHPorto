@@ -201,22 +201,23 @@ it('os cinco painéis vêm na página, e só o da aba aberta está visível', fu
     expect($html)->toContain('Histórico do Windows');
 })->with(WinTab::cases());
 
-it('as quinze ações do menu aparecem uma vez só na página, e o hyperv não', function () {
-    // O hyperv é a ação fora do menu: ela atende a rota /hyperv e não tem
-    // seção na /win. Então a página traz as quinze do menu, nunca a décima
-    // sexta — e este teste guarda essa fronteira.
+it('as quinze ações do menu aparecem uma vez só na página, e as da /hyperv não', function () {
+    // hyperv e hyperv-vm são as ações fora do menu: atendem a rota /hyperv e
+    // não têm seção na /win. Então a página traz as quinze do menu, nunca a
+    // décima sexta nem a décima sétima — e este teste guarda essa fronteira.
     $todas = winAcoes(winHtml());
     sort($todas);
 
     $menu = array_filter(
         App\Win\WinAction::cases(),
-        static fn (App\Win\WinAction $a): bool => $a !== App\Win\WinAction::Hyperv,
+        static fn (App\Win\WinAction $a): bool => !in_array($a, [App\Win\WinAction::Hyperv, App\Win\WinAction::HypervVm], true),
     );
     $enum = array_map(static fn (App\Win\WinAction $a): string => $a->value, $menu);
     sort($enum);
 
     expect($todas)->toBe($enum)
-        ->and($todas)->not->toContain('hyperv');
+        ->and($todas)->not->toContain('hyperv')
+        ->and($todas)->not->toContain('hyperv-vm');
 });
 
 it('o menu tem as cinco abas como links, e só a aberta é a atual', function () {
