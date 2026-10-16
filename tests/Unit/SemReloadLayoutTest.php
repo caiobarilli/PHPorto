@@ -12,10 +12,14 @@ function layoutHtml(string $miolo = '<div class="wrap">x</div>'): string
     return Respond::render('layout.php', new LayoutView('PHPorto', $miolo));
 }
 
-/** Só o conteúdo dos <script> do HTML dado. */
+/**
+ * O script do sem-reload: todo <script> do <body> do layout, com ou sem
+ * atributo. O do <head> é o do tema e tem teste próprio.
+ */
 function scripts(string $html): string
 {
-    preg_match_all('#<script>(.*?)</script>#s', $html, $m);
+    $corpo = substr($html, (int) strpos($html, '</head>'));
+    preg_match_all('#<script\b[^>]*>(.*?)</script>#s', $corpo, $m);
 
     return implode("\n", $m[1]);
 }
@@ -25,6 +29,14 @@ it('o miolo fica dentro do <main id="conteudo">, e o aviso do rodapé fica fora 
 
     expect($html)->toContain('<main id="conteudo"><div class="wrap">miolo</div></main>')
         ->and($html)->toMatch('#</main>\s*<div class="aviso-rodape" id="aviso-rodape" role="status" aria-live="polite" hidden>#');
+});
+
+it('o <body> do layout tem um script só, o do sem-reload', function () {
+    $html = layoutHtml();
+    $corpo = substr($html, (int) strpos($html, '</head>'));
+
+    expect(preg_match_all('#^<script\b#m', $corpo))->toBe(1)
+        ->and(scripts($html))->toContain("hasAttribute('data-sem-reload')");
 });
 
 it('o script comum só pega formulário marcado, e manda o cabeçalho do sem-reload', function () {
