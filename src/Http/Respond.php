@@ -4,32 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http;
 
-/**
- * Saída HTTP: HTML, JSON e 404.
- *
- * O 404 é a resposta de superfície desligada — não 403, não página em branco.
- * 403 confirmaria que existe algo ali, e a existência é justamente o que uma
- * flag desligada não deve revelar.
- */
 final class Respond
 {
-    /** Escapa para HTML. Toda saída de texto na página passa por aqui. */
     public static function e(?string $text): string
     {
         return htmlspecialchars((string) $text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
-    /**
-     * A data de um registro, para exibição: dd/mm/aaaa hh:mm:ss no fuso dado.
-     *
-     * O QUE SE GRAVA CONTINUA SENDO UTC, e o schema não muda: a conversão é
-     * de exibição, e acontece o mais tarde possível. Guardar no fuso local
-     * pareceria mais simples e quebraria a comparação entre registros
-     * gravados antes e depois de uma mudança de horário.
-     *
-     * Valor ausente ou impossível de interpretar volta como veio — o log é
-     * prova, e inventar data seria pior que mostrar o valor estranho.
-     */
     public static function dateTime(?string $utcIso, string $tz): string
     {
         if ($utcIso === null || trim($utcIso) === '') {
@@ -41,18 +22,10 @@ final class Respond
 
             return $data->setTimezone(new \DateTimeZone($tz))->format('d/m/Y H:i:s');
         } catch (\Exception) {
-            // Decisão: o log é prova, e o valor estranho vale mais que uma data inventada.
             return $utcIso;
         }
     }
 
-    /**
-     * Renderiza um template de views/ para string.
-     *
-     * O template recebe uma única variável, $view, tipada — é o que permite
-     * manter views/ dentro da análise estática em vez de virar o depósito
-     * onde o código sem tipo se acumula.
-     */
     public static function render(string $template, object $view): string
     {
         ob_start();
@@ -66,7 +39,6 @@ final class Respond
         header('Content-Type: text/html; charset=utf-8');
         header('X-Content-Type-Options: nosniff');
         header('Referrer-Policy: no-referrer');
-        // A página carrega o token CSRF: não vai para cache nenhum.
         header('Cache-Control: no-store');
 
         $view = new LayoutView($title, $content);
@@ -97,12 +69,6 @@ final class Respond
         exit;
     }
 
-    /**
-     * Responde a uma requisição que o portão de token não deixou passar.
-     *
-     * Recebe a decisão: 401, 429 com o tempo que falta, ou 503 dizendo para
-     * rodar o php token.php. Não serve para Allowed.
-     */
     public static function authRefused(AuthDecision $decision): never
     {
         http_response_code($decision->outcome->status());
@@ -123,15 +89,11 @@ final class Respond
 
     private static function authHeaders(AuthDecision $decision): void
     {
-        // Sem WWW-Authenticate no 401, de propósito: o Basic abriria o diálogo
-        // nativo do navegador em quem abrir /api/* numa aba, e o curl manda o
-        // Basic sem precisar de desafio.
         if ($decision->outcome === AuthOutcome::Locked) {
             header('Retry-After: ' . $decision->retryAfter);
         }
     }
 
-    /** O texto do 429, com o tempo que falta em minutos e segundos. */
     public static function lockedMessage(int $segundos): string
     {
         return sprintf(

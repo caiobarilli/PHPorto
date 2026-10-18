@@ -14,36 +14,12 @@ use DateTimeZone;
 use PDO;
 use PDOException;
 
-/**
- * Implementação SQLite (PDO) do registro de execuções.
- *
- * Todo detalhe do driver fica confinado aqui: para fora, só a
- * DatabaseProviderInterface e a StorageException — nenhuma PDOException vaza.
- *
- * É o provider padrão porque não exige infraestrutura externa: o banco é um
- * arquivo local criado on-demand.
- */
 final class SQLiteProvider implements DatabaseProviderInterface
 {
     private PDO $pdo;
 
-    /** Nome da tabela, já validado contra a whitelist de identificadores. */
     private string $table;
 
-    /**
-     * Nome da tabela de estado da /win.
-     *
-     * DERIVADA DA OUTRA, com sufixo fixo, e não uma chave nova no .env. O
-     * nome da tabela de execuções já é configurável, então quem a renomeou
-     * para não colidir com algo ganha a de estado renomeada junto, sem ter de
-     * lembrar de uma segunda variável — e uma chave a menos é uma chave a
-     * menos para ficar para trás, que é o mesmo critério do caminho do
-     * bootstrap.ps1 no worker.
-     *
-     * Passa pelo sanitizeIdentifier de novo: o sufixo é literal aqui, mas
-     * validar o resultado é o que garante que a interpolação na query só
-     * recebe [A-Za-z0-9_] venha o prefixo de onde vier.
-     */
     private string $stateTable;
 
     /**
@@ -75,14 +51,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
 
     public function insert(Execution $execution): Execution
     {
-        // O created_at é do BANCO quando não vem preenchido, e é assim no
-        // caminho normal: a execução acabou de acontecer, e CURRENT_TIMESTAMP
-        // é mais confiável que o relógio do PHP.
-        //
-        // Vem preenchido só no recolhimento de execução órfã, e aí o padrão
-        // seria errado: carimbaria a hora em que a página foi aberta numa
-        // execução que terminou antes. Como a listagem ordena por created_at,
-        // isso poria a linha de ontem no topo do histórico de hoje.
         $comData = $execution->createdAt !== null;
 
         try {
@@ -110,22 +78,12 @@ final class SQLiteProvider implements DatabaseProviderInterface
 
             $stmt->execute($dados);
 
-            // Lê de volta pelo id recém-gerado, e não pelo conteúdo: dois
-            // registros idênticos no mesmo segundo são legítimos aqui, então
-            // buscar por comando devolveria o do vizinho.
             return $this->readBack((int) $this->pdo->lastInsertId(), $execution);
         } catch (PDOException $e) {
             throw new StorageException('Falha ao gravar a execução: ' . $e->getMessage(), 0, $e);
         }
     }
 
-    /**
-     * Devolve o registro com o created_at que o banco atribuiu.
-     *
-     * Se a leitura de volta não achar a linha, devolve o que foi gravado em vez
-     * de estourar: o dado ESTÁ no banco, e perder a data é menos grave que
-     * perder a confirmação da gravação.
-     */
     private function readBack(int $id, Execution $fallback): Execution
     {
         $stmt = $this->pdo->prepare(
@@ -152,17 +110,8 @@ final class SQLiteProvider implements DatabaseProviderInterface
     public function recent(int $limit = 100, ?array $kinds = null): array
     {
         try {
-            // O filtro entra na query e não depois: ver a nota na interface.
-            // Não há índice por (kind, created_at) de propósito — a consulta
-            // usa o índice de ordenação e descarta por tipo enquanto varre,
-            // parando no LIMIT, e num log local de uma pessoa isso não paga um
-            // segundo índice. No MySQL pagaria ainda menos: lá não existe
-            // CREATE INDEX IF NOT EXISTS, então criá-lo em tabela já existente
-            // exigiria consultar o INFORMATION_SCHEMA a cada abertura.
             [$where, $binds] = self::kindFilter($kinds);
 
-            // Desempate por id: duas execuções no mesmo segundo compartilham o
-            // created_at, e sem isso a ordem entre elas ficaria a critério do banco.
             $stmt = $this->pdo->prepare(
                 "SELECT command, output, exit_code, duration_ms, kind, timed_out, created_at
                    FROM \"{$this->table}\"{$where}
@@ -183,8 +132,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
                     continue;
                 }
 
-                // O PDO devolve chaves mistas para o analisador; normaliza para
-                // string antes de entregar ao hydrate, que trabalha por nome.
                 $assoc = [];
                 foreach ($row as $key => $value) {
                     $assoc[(string) $key] = $value;
@@ -202,9 +149,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
     public function clear(?array $kinds = null): int
     {
         try {
-            // prepare() nos dois casos, e não exec() no caminho sem filtro: com
-            // parâmetro o exec() não serve, e manter dois mecanismos para a
-            // mesma operação é onde um deles fica para trás numa mudança futura.
             [$where, $binds] = self::kindFilter($kinds);
             $stmt            = $this->pdo->prepare("DELETE FROM \"{$this->table}\"{$where}");
 
@@ -221,13 +165,7 @@ final class SQLiteProvider implements DatabaseProviderInterface
     }
 
     /**
-     * O WHERE do filtro por tipos e os valores a ligar nele.
-     *
-     * Recebe a lista de tipos, ou null para todos. Devolve a cláusula (vazia
-     * para todos, sempre falsa para lista vazia) e os parâmetros nomeados.
-     *
      * @param list<ExecutionKind>|null $kinds
-     *
      * @return array{string, array<string, string>}
      */
     private static function kindFilter(?array $kinds): array
@@ -251,12 +189,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
     public function putWinState(WinState $state): WinState
     {
         try {
-            // UPSERT NATIVO, e não SELECT-depois-INSERT-ou-UPDATE. Medido: o
-            // SQLite desta máquina é 3.53.4, e o ON CONFLICT existe desde o
-            // 3.24 (2018). A alternativa em dois passos abriria uma janela
-            // entre a leitura e a escrita — que aqui não teria consequência,
-            // porque o php -S atende em série, mas custaria uma ida a mais ao
-            // banco para resolver um problema que o banco resolve sozinho.
             $stmt = $this->pdo->prepare(
                 "INSERT INTO \"{$this->stateTable}\" (scope, action, payload, updated_at)
                       VALUES (:scope, :action, :payload, CURRENT_TIMESTAMP)
@@ -277,14 +209,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
         }
     }
 
-    /**
-     * Lê de volta só o updated_at, pelo mesmo motivo do readBack() do insert():
-     * quem chama não tem outra forma de saber a hora que o banco atribuiu.
-     *
-     * Falha na leitura devolve o que foi gravado em vez de estourar — o dado
-     * ESTÁ no banco, e perder a hora é menos grave que fazer o chamador
-     * concluir que a gravação falhou.
-     */
     private function readBackState(WinState $state): WinState
     {
         $stmt = $this->pdo->prepare(
@@ -309,7 +233,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
     public function winStates(WinStateScope $scope): array
     {
         try {
-            // O filtro na consulta, como no recent(): ver a nota na interface.
             $stmt = $this->pdo->prepare(
                 "SELECT scope, action, payload, updated_at
                    FROM \"{$this->stateTable}\"
@@ -332,9 +255,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
 
                 $estado = $this->hydrateState($assoc);
 
-                // Linha ilegível é descartada, não é erro: ver a nota na
-                // interface. A tela sem estado se comporta como antes desta
-                // fatia, que é o lado que não afirma nada.
                 if ($estado !== null) {
                     $estados[$estado->action] = $estado;
                 }
@@ -396,8 +316,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
         return new Execution(
             command: is_string($command) ? $command : '',
             output: is_string($output) ? $output : '',
-            // O nulo é preservado como nulo: 0 significa sucesso, null significa
-            // que não houve código de saída. Um cast cru colapsaria os dois.
             exitCode: is_numeric($exitRaw) ? (int) $exitRaw : null,
             durationMs: is_numeric($duration) ? (int) $duration : 0,
             kind: ExecutionKind::fromStorage($row['kind'] ?? null),
@@ -407,12 +325,7 @@ final class SQLiteProvider implements DatabaseProviderInterface
     }
 
     /**
-     * Recusa abrir quando a pasta-pai do arquivo .sqlite não existe.
-     *
-     * Recebe o caminho do arquivo. Não cria pasta: o arquivo o SQLite cria
-     * sozinho, a pasta tem de existir.
-     *
-     * @throws StorageException dizendo qual pasta falta.
+     * @throws StorageException
      */
     private function ensureDirectory(string $path): void
     {
@@ -425,7 +338,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
         }
     }
 
-    /** Cria a tabela se não existir. Idempotente. Sem UNIQUE: ver a interface. */
     private function ensureTable(): void
     {
         $this->pdo->exec(
@@ -447,28 +359,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
         $this->ensureStateTable();
     }
 
-    /**
-     * Cria a tabela de estado da /win. Idempotente, e no MESMO acesso.
-     *
-     * SEM MIGRATION, porque o projeto não tem esse mecanismo: a tabela de
-     * execuções também nasce no CREATE TABLE IF NOT EXISTS de toda abertura de
-     * conexão, e inventar um versionador de schema para a segunda tabela
-     * criaria uma peça nova que só ela usaria. Quem já tem banco ganha a
-     * tabela na próxima página que abrir, vazia — e tabela de estado vazia
-     * significa exatamente o que tem de significar: nada aplicado que esta
-     * ferramenta saiba.
-     *
-     * CHAVE COMPOSTA (scope, action) E SEM id, ao contrário da tabela de
-     * execuções. Lá não há unicidade de propósito, porque duas execuções
-     * iguais são dois fatos; aqui é o oposto — é uma linha por par, e gravar
-     * duas vezes é substituir. A chave composta é o que torna o upsert
-     * possível sem um SELECT antes.
-     *
-     * NÃO HÁ ÍNDICE ALÉM DA CHAVE, e pelo mesmo motivo registrado no recent():
-     * a tabela tem no máximo uma linha por ação por escopo — 26 linhas no
-     * limite, com as treze ações —, e varrer isso é mais rápido que abrir um
-     * índice.
-     */
     private function ensureStateTable(): void
     {
         $this->pdo->exec(
@@ -482,10 +372,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
         );
     }
 
-    /**
-     * Converte o created_at do SQLite ('YYYY-MM-DD HH:MM:SS', UTC) em ISO 8601
-     * — mesmo formato que os outros providers devolvem. Tolera ausência.
-     */
     private function formatDate(mixed $value): ?string
     {
         if (!is_string($value) || $value === '') {
@@ -497,11 +383,6 @@ final class SQLiteProvider implements DatabaseProviderInterface
         return $date ? $date->format(DATE_ATOM) : $value;
     }
 
-    /**
-     * O nome da tabela vem de env e não pode ser bind param (identificador,
-     * não valor). Restringe a [A-Za-z0-9_] para evitar SQL injection ao
-     * interpolar na query.
-     */
     private function sanitizeIdentifier(string $name): string
     {
         if ($name === '' || preg_match('/^[A-Za-z0-9_]+$/', $name) !== 1) {

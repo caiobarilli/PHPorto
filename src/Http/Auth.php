@@ -6,46 +6,24 @@ namespace App\Http;
 
 use Closure;
 
-/**
- * O portão de token: decide se uma requisição passa, antes de qualquer rota.
- *
- * Nas telas o token entra por um formulário e vira um cookie assinado; na
- * API ele vai no campo de senha do HTTP Basic, e o usuário é ignorado. Sem
- * PHPORTO_AUTH_TOKEN configurado nada é servido. Cinco erros seguidos, token
- * ou cookie, bloqueiam por quinze minutos, contados num arquivo que guarda
- * também a impressão do token: trocar o token descarta o contador.
- *
- * O cookie é "prazo.hmac": o HMAC-SHA256 de um rótulo fixo com o prazo, tendo
- * o próprio token como chave. O token nunca sai no cookie, o prazo não se
- * estende sem a chave, e trocar o token invalida todo cookie emitido.
- */
 final class Auth
 {
-    /** Erros seguidos que disparam o bloqueio. */
     public const MAX_FAILURES = 5;
 
-    /** Duração do bloqueio, em segundos. */
     public const LOCK_SECONDS = 900;
 
-    /** Nome do cookie de sessão das telas. */
     public const COOKIE = 'phporto_auth';
 
-    /** Validade do cookie, em segundos: sete dias, contados do login. */
     public const COOKIE_SECONDS = 604800;
 
-    /** O que o HMAC assina junto com o prazo; a versão permite trocar o formato. */
     private const COOKIE_LABEL = 'phporto-auth-cookie-v1';
 
-    /** Nome do arquivo do contador, em storage/. */
     public const COUNTER_FILE = 'auth-falhas.json';
 
     /** @var Closure(): int */
     private readonly Closure $clock;
 
     /**
-     * Recebe o token configurado, o caminho do arquivo do contador e,
-     * opcionalmente, o relógio em segundos (para teste).
-     *
      * @param (Closure(): int)|null $clock
      */
     public function __construct(
@@ -56,12 +34,6 @@ final class Auth
         $this->clock = $clock ?? static fn (): int => time();
     }
 
-    /**
-     * Decide sobre a senha que veio no Basic.
-     *
-     * Recebe a senha, ou null se a requisição não trouxe credencial. Devolve
-     * a decisão, com os segundos restantes quando bloqueado.
-     */
     public function check(?string $password): AuthDecision
     {
         if ($this->token === '') {
@@ -112,8 +84,6 @@ final class Auth
         $agora  = ($this->clock)();
         $estado = $this->load();
 
-        // O bloqueio vale também para quem já tem cookie: afrouxar aqui seria
-        // abrir uma porta que o token certo não abre.
         if ($estado['ate'] > $agora) {
             return new AuthDecision(AuthOutcome::Locked, $estado['ate'] - $agora);
         }
@@ -127,9 +97,6 @@ final class Auth
             return $this->fail($estado['falhas'], $agora);
         }
 
-        // Assinatura certa e prazo vencido não é ataque: é sessão velha, e não
-        // conta como erro. Prazo além da validade só aparece com o relógio
-        // voltando, e cai no mesmo caso.
         $ate = (int) $m[1];
 
         if ($ate <= $agora || $ate > $agora + self::COOKIE_SECONDS) {
@@ -160,11 +127,6 @@ final class Auth
     }
 
     /**
-     * O contador guardado para o token atual.
-     *
-     * Devolve zero falhas e nenhum bloqueio quando o arquivo falta, é
-     * ilegível, ou é de outro token.
-     *
      * @return array{falhas: int, ate: int}
      */
     private function load(): array
@@ -188,7 +150,6 @@ final class Auth
         ];
     }
 
-    /** Grava o contador do token atual. Falha de disco não impede a resposta. */
     private function save(int $falhas, int $ate): void
     {
         @file_put_contents(
@@ -198,7 +159,6 @@ final class Auth
         );
     }
 
-    /** A impressão do token que o contador guarda, em vez do token. */
     private function fingerprint(): string
     {
         return hash('sha256', $this->token);

@@ -4,35 +4,12 @@ declare(strict_types=1);
 
 namespace App\Wsl;
 
-/**
- * Descobre se a distro configurada existe, sem executar nada dentro dela.
- *
- * A DIFERENÇA DE CUSTO É O MOTIVO DESTA CLASSE, e foi medida nesta máquina:
- *
- *   wsl.exe -l -q .................. 42-47 ms com a VM de pé, 35 ms desligada
- *   wsl.exe -d <distro> -- true .... 4543 ms com a VM FRIA, 88 ms depois
- *
- * A listagem NÃO acorda a VM — por isso responde igual, e até mais rápido, com
- * o WSL dormindo: ela lê distros REGISTRADAS, não distros rodando. A execução
- * real acorda, e acordar custa quatro segundos e meio.
- *
- * Então a verificação usa a listagem. Usar execução real cobraria 4,5 s da
- * home a cada primeiro acesso do dia para responder o que a listagem responde
- * em 35 ms.
- *
- * E o significado importa: isto responde "dá para usar", não "está rodando
- * agora". A VM dormir é normal, e ela sobe sozinha no primeiro comando —
- * desabilitar o botão porque ela dormiu seria mentir para o usuário.
- */
 final class Distro
 {
-    /** Timeout curto: a listagem responde em dezenas de milissegundos. */
     private const LIST_TIMEOUT_S = 10;
 
-    /** Distros registradas, um nome por linha. */
     private const ARGS_REGISTERED = '-l -q';
 
-    /** Distros com a VM de pé, um nome por linha, sem o "(Padrão)" da listagem longa. */
     private const ARGS_RUNNING = '-l --running -q';
 
     public function __construct(
@@ -45,13 +22,6 @@ final class Distro
         return $this->distro;
     }
 
-    /**
-     * O estado do WSL do ponto de vista desta ferramenta.
-     *
-     * Distingue "WSL não instalado" de "distro configurada não existe" porque
-     * a tela precisa dizer QUAL dos dois é: são problemas com soluções
-     * diferentes, e um erro genérico manda a pessoa procurar no lugar errado.
-     */
     public function status(): DistroStatus
     {
         $list = $this->registered();
@@ -72,12 +42,6 @@ final class Distro
         return $this->status() === DistroStatus::Ok;
     }
 
-    /**
-     * Diz se a VM da distro configurada está de pé agora, sem acordá-la.
-     *
-     * Devolve true se a distro está em "wsl -l --running -q", false se não
-     * está, e null quando o wsl.exe não respondeu.
-     */
     public function isRunning(): ?bool
     {
         $list = $this->listing(self::ARGS_RUNNING);
@@ -86,8 +50,6 @@ final class Distro
     }
 
     /**
-     * Diz se um nome de distro está na listagem, sem diferenciar caixa.
-     *
      * @param list<string> $names
      */
     public static function contains(array $names, string $distro): bool
@@ -102,9 +64,6 @@ final class Distro
     }
 
     /**
-     * Distros registradas, ou null quando o wsl.exe não pôde ser executado
-     * (não instalado, ou fora do PATH).
-     *
      * @return list<string>|null
      */
     public function registered(): ?array
@@ -113,11 +72,6 @@ final class Distro
     }
 
     /**
-     * Roda wsl.exe com os argumentos de listagem dados.
-     *
-     * Devolve um nome por linha, ou null quando o wsl.exe não pôde ser
-     * executado ou saiu com erro sem escrever nada.
-     *
      * @return list<string>|null
      */
     private function listing(string $args): ?array
@@ -129,12 +83,9 @@ final class Distro
         ];
 
         $env = getenv();
-        // Sem isto o wsl.exe escreve a listagem em UTF-16LE.
         $env['WSL_UTF8'] = '1';
 
         $pipes = [];
-        // bypass_shell pelo mesmo motivo do Runner: a forma de array aspearia
-        // o "-l" e o wsl.exe deixaria de reconhecer o próprio flag.
         $proc = @proc_open('wsl.exe ' . $args, $descriptors, $pipes, null, $env, ['bypass_shell' => true]);
 
         if (!is_resource($proc)) {
@@ -184,10 +135,6 @@ final class Distro
     }
 
     /**
-     * A listagem vem com um nome por linha. Mesmo com WSL_UTF8=1 podem sobrar
-     * bytes nulos e CR, então limpa antes de comparar — nome com resíduo nunca
-     * casaria com o que está no .env.
-     *
      * @return list<string>
      */
     public static function parse(string $raw): array

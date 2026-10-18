@@ -7,26 +7,10 @@ namespace App\Win;
 use App\Domain\OutputCap;
 use RuntimeException;
 
-/**
- * Executa um .ps1 no PowerShell do Windows e devolve a saída, com teto.
- *
- * POR QUE ISTO NÃO PASSA PELO WSL: o PHP já roda no Windows. Medido nesta
- * máquina, com a VM do WSL quente: 191/198/242 ms chamando o powershell.exe
- * direto, contra 397/405/457 ms atravessando o interop da Debian — mais os
- * ~4543 ms de acordar a VM quando ela está fria. A volta Windows -> Linux ->
- * Windows não devolvia nada em troca, porque o canal com o processo elevado é
- * por arquivo de qualquer forma.
- *
- * O QUE ESTA CLASSE NÃO FAZ: elevar. Ela roda no mesmo token do php -S, que é
- * integridade Média. Quem eleva é a Elevation, e o resultado dessa elevação
- * não volta por aqui — volta por arquivo.
- */
 final class PsRunner
 {
-    /** Intervalo de sondagem do processo, igual ao do Runner do WSL. */
     private const POLL_US = 80000;
 
-    /** Espera pelo término após o sinal, antes de partir para o taskkill. */
     private const KILL_GRACE_US = 200000;
 
     public function __construct(
@@ -34,12 +18,6 @@ final class PsRunner
     ) {
     }
 
-    /**
-     * Roda o script no caminho dado e espera o fim, ou o timeout.
-     *
-     * O script é um ARQUIVO e o que vai para a linha de comando é só o caminho
-     * dele — mesma regra do cmd.sh no lado WSL. Ver PsScriptBuilder.
-     */
     public function run(string $scriptPath, int $timeoutSeconds): PsResult
     {
         if (!is_file($scriptPath)) {
@@ -52,14 +30,6 @@ final class PsRunner
         file_put_contents($outFile, '');
         file_put_contents($errFile, '');
 
-        // bypass_shell pelo mesmo motivo do Runner do WSL: a forma de array do
-        // proc_open aspeia TODO argumento no Windows, e o powershell.exe
-        // deixaria de reconhecer os próprios flags. Continua seguro porque
-        // nenhum texto de usuário está nesta string — só flags fixos e um
-        // caminho que este código escreveu.
-        //
-        // -NoProfile é economia e previsibilidade: o perfil do usuário pode
-        // imprimir coisa na saída e mudar o que este código lê.
         $cmdLine = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File '
             . self::arg($scriptPath);
 
@@ -102,9 +72,6 @@ final class PsRunner
 
         [$output, $truncated] = self::readBounded($outFile);
 
-        // stderr vem depois porque o script gerado funde os fluxos com *>&1 e
-        // só sobra aqui o que o próprio host emitir — erro de ligação de
-        // parâmetro, por exemplo.
         [$stray, $strayTruncated] = self::readBounded($errFile, max(0, OutputCap::MAX_OUTPUT_BYTES - strlen($output)));
         if (trim($stray) !== '') {
             $output .= $stray;
@@ -122,11 +89,6 @@ final class PsRunner
     }
 
     /**
-     * Lê a saída do PowerShell até o teto, e diz se cortou.
-     *
-     * Recebe o caminho e, opcionalmente, um teto menor que o padrão. Devolve
-     * o texto em UTF-8, sem BOM, com o aviso de corte no fim quando cortou.
-     *
      * @return array{0: string, 1: bool}
      */
     public static function readBounded(string $path, ?int $limit = null): array
@@ -144,11 +106,6 @@ final class PsRunner
         return [$buffer, $truncated];
     }
 
-    /**
-     * Garante UTF-8 válido. Sem isso o htmlspecialchars() devolve string
-     * vazia e a saída SOME da tela — o mesmo motivo do toUtf8 do Runner do
-     * WSL, e a mesma solução.
-     */
     public static function toUtf8(string $s): string
     {
         if ($s === '') {
@@ -156,8 +113,6 @@ final class PsRunner
         }
 
         if (!mb_check_encoding($s, 'UTF-8')) {
-            // O PowerShell 5.1 sem BOM na saída cai no codepage ANSI da
-            // máquina; no Brasil isso é Windows-1252.
             $conv = @iconv('Windows-1252', 'UTF-8//IGNORE', $s);
             $s    = $conv === false ? mb_convert_encoding($s, 'UTF-8', 'UTF-8') : $conv;
         }
@@ -165,7 +120,6 @@ final class PsRunner
         return str_replace("\r\n", "\n", $s);
     }
 
-    /** Aspas só quando o valor tem espaço, como no Runner do WSL. */
     private static function arg(string $value): string
     {
         return preg_match('/\s/', $value) === 1 ? '"' . $value . '"' : $value;
@@ -177,14 +131,6 @@ final class PsRunner
     }
 
     /**
-     * Mata o powershell.exe e o que ele pendurou embaixo.
-     *
-     * O /T é o que alcança os filhos — um winget ou um tshark iniciado pelo
-     * script sobreviveria à morte só do pai. Vale a ressalva medida: isto só
-     * funciona contra processo do MESMO nível de integridade. Contra o worker
-     * elevado, o taskkill devolve "Acesso negado" — por isso o cancelamento
-     * de ação elevada é por arquivo, e não por aqui.
-     *
      * @param resource $proc
      */
     private static function kill($proc, int $pid): void

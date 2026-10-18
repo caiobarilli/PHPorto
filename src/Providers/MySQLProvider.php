@@ -14,20 +14,12 @@ use DateTimeZone;
 use PDO;
 use PDOException;
 
-/**
- * Implementação MySQL (PDO) do registro de execuções.
- *
- * Espelha o contrato dos outros dois: todo detalhe do driver fica confinado
- * aqui e, para fora, só a DatabaseProviderInterface e a StorageException.
- */
 final class MySQLProvider implements DatabaseProviderInterface
 {
     private PDO $pdo;
 
-    /** Nome da tabela, já validado contra a whitelist de identificadores. */
     private string $table;
 
-    /** Tabela de estado da /win, derivada da outra. Ver a nota no SQLiteProvider. */
     private string $stateTable;
 
     /**
@@ -63,9 +55,6 @@ final class MySQLProvider implements DatabaseProviderInterface
 
     public function insert(Execution $execution): Execution
     {
-        // Ver a nota no SQLiteProvider: o created_at só vem preenchido no
-        // recolhimento de execução órfã, e nesse caso o padrão do banco
-        // carimbaria a hora em que a página foi aberta.
         $comData = $execution->createdAt !== null;
 
         try {
@@ -93,19 +82,12 @@ final class MySQLProvider implements DatabaseProviderInterface
 
             $stmt->execute($dados);
 
-            // Pelo id, não pelo conteúdo: dois registros idênticos no mesmo
-            // segundo são legítimos aqui.
             return $this->readBack((int) $this->pdo->lastInsertId(), $execution);
         } catch (PDOException $e) {
             throw new StorageException('Falha ao gravar a execução: ' . $e->getMessage(), 0, $e);
         }
     }
 
-    /**
-     * Devolve o registro com o created_at que o banco atribuiu. Falha na
-     * leitura de volta devolve o que foi gravado: o dado ESTÁ no banco, e
-     * perder a data é menos grave que perder a confirmação da gravação.
-     */
     private function readBack(int $id, Execution $fallback): Execution
     {
         $stmt = $this->pdo->prepare("SELECT created_at FROM `{$this->table}` WHERE id = :id");
@@ -130,10 +112,6 @@ final class MySQLProvider implements DatabaseProviderInterface
     public function recent(int $limit = 100, ?array $kinds = null): array
     {
         try {
-            // Espelha o SQLite, inclusive na ausência de índice por tipo:
-            // aqui não existe CREATE INDEX IF NOT EXISTS, então criá-lo em
-            // tabela já existente exigiria consultar o INFORMATION_SCHEMA a
-            // cada abertura de conexão para um ganho que este volume não tem.
             [$where, $binds] = self::kindFilter($kinds);
 
             $stmt = $this->pdo->prepare(
@@ -156,8 +134,6 @@ final class MySQLProvider implements DatabaseProviderInterface
                     continue;
                 }
 
-                // O PDO devolve chaves mistas para o analisador; normaliza para
-                // string antes de entregar ao hydrate, que trabalha por nome.
                 $assoc = [];
                 foreach ($row as $key => $value) {
                     $assoc[(string) $key] = $value;
@@ -191,14 +167,7 @@ final class MySQLProvider implements DatabaseProviderInterface
     }
 
     /**
-     * O WHERE do filtro por tipos e os valores a ligar nele.
-     *
-     * Recebe a lista de tipos, ou null para todos. Devolve a cláusula (vazia
-     * para todos, sempre falsa para lista vazia) e os parâmetros nomeados, um
-     * por tipo, porque sem emulação o PDO não reusa named param.
-     *
      * @param list<ExecutionKind>|null $kinds
-     *
      * @return array{string, array<string, string>}
      */
     private static function kindFilter(?array $kinds): array
@@ -222,16 +191,6 @@ final class MySQLProvider implements DatabaseProviderInterface
     public function putWinState(WinState $state): WinState
     {
         try {
-            // ON DUPLICATE KEY, o upsert do MySQL — equivalente ao ON CONFLICT
-            // do SQLite. Dois nomes de parâmetro para o mesmo payload porque
-            // ATTR_EMULATE_PREPARES está desligado neste provider, e sem
-            // emulação o PDO não deixa reusar um named param na mesma query.
-            //
-            // O updated_at é escrito explicitamente na cláusula de UPDATE, e
-            // não deixado para o ON UPDATE CURRENT_TIMESTAMP da coluna: o
-            // MySQL não considera a linha alterada quando o payload chega
-            // idêntico, e aí a hora ficaria a da gravação anterior — dizendo
-            // que ninguém reaplicou quando alguém reaplicou.
             $stmt = $this->pdo->prepare(
                 "INSERT INTO `{$this->stateTable}` (scope, action, payload, updated_at)
                       VALUES (:scope, :action, :payload, CURRENT_TIMESTAMP)
@@ -253,7 +212,6 @@ final class MySQLProvider implements DatabaseProviderInterface
         }
     }
 
-    /** Ver a nota no readBackState() do SQLiteProvider. */
     private function readBackState(WinState $state): WinState
     {
         $stmt = $this->pdo->prepare(
@@ -361,8 +319,6 @@ final class MySQLProvider implements DatabaseProviderInterface
         return new Execution(
             command: is_string($command) ? $command : '',
             output: is_string($output) ? $output : '',
-            // O nulo é preservado como nulo: 0 significa sucesso, null significa
-            // que não houve código de saída. Um cast cru colapsaria os dois.
             exitCode: is_numeric($exitRaw) ? (int) $exitRaw : null,
             durationMs: is_numeric($duration) ? (int) $duration : 0,
             kind: ExecutionKind::fromStorage($row['kind'] ?? null),
@@ -371,7 +327,6 @@ final class MySQLProvider implements DatabaseProviderInterface
         );
     }
 
-    /** Cria a tabela se não existir. Idempotente. Sem UNIQUE: ver a interface. */
     private function ensureTable(): void
     {
         $this->pdo->exec(
@@ -390,14 +345,6 @@ final class MySQLProvider implements DatabaseProviderInterface
         $this->ensureStateTable();
     }
 
-    /**
-     * Cria a tabela de estado da /win. Ver a nota no SQLiteProvider.
-     *
-     * VARCHAR e não TEXT nas duas colunas da chave: o MySQL não indexa TEXT
-     * sem prefixo de tamanho, e chave primária sobre TEXT seria recusada na
-     * criação da tabela. Os 16 e 32 bytes são folgados — escopo é enum de duas
-     * palavras, e a ação mais longa das treze tem onze letras.
-     */
     private function ensureStateTable(): void
     {
         $this->pdo->exec(
@@ -411,10 +358,6 @@ final class MySQLProvider implements DatabaseProviderInterface
         );
     }
 
-    /**
-     * Converte o created_at do MySQL ('YYYY-MM-DD HH:MM:SS', UTC) em ISO 8601.
-     * Tolera ausência.
-     */
     private function formatDate(mixed $value): ?string
     {
         if (!is_string($value) || $value === '') {
@@ -426,10 +369,6 @@ final class MySQLProvider implements DatabaseProviderInterface
         return $date ? $date->format(DATE_ATOM) : $value;
     }
 
-    /**
-     * O nome da tabela vem de env e não pode ser bind param (identificador,
-     * não valor). Restringe a [A-Za-z0-9_] para evitar SQL injection.
-     */
     private function sanitizeIdentifier(string $name): string
     {
         if ($name === '' || preg_match('/^[A-Za-z0-9_]+$/', $name) !== 1) {

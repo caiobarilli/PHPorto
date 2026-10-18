@@ -6,49 +6,16 @@ namespace App\Win;
 
 use Throwable;
 
-/**
- * O interruptor do painel do Hyper-V, e a conferência do recurso no Windows.
- *
- * A DIFERENÇA EM RELAÇÃO À Elevation É O PONTO. O PowerShell elevado é prova
- * viva de privilégio, amarrada ao PID do php -S: some a cada reinício, e é isso
- * que se quer lá. Aqui é o contrário — habilitar o painel do Hyper-V é uma
- * decisão do dono da máquina, não uma prova, então mora em arquivo próprio em
- * storage/ e SOBREVIVE a reiniciar o servidor e o Windows. Por isso não passa
- * pelo win-elevation.json nem pelo flags.json: o primeiro expira de propósito,
- * o segundo é a superfície da API, e misturar as três decisões numa só gaveta
- * seria dar a uma o prazo de validade da outra.
- *
- * FAIL-SAFE PARA O LADO FECHADO, como o Flags e a Elevation: arquivo ausente,
- * ilegível, ou sem `enabled` verdadeiro lê como desabilitado. A falha cai para
- * o lado seguro por construção, não por tratamento de erro.
- *
- * A CONFERÊNCIA DO RECURSO NÃO PRECISA DE ELEVAÇÃO, e isto foi medido: o
- * Get-WindowsOptionalFeature -Online exige Administrador (COMException "requer
- * elevação") e não roda do processo Média do PHPorto, mas o Win32_OptionalFeature
- * pelo CIM lê o mesmo estado sem elevar — InstallState 1 é ligado, 2 é presente
- * e desligado, 3 é ausente. É esse o caminho usado aqui. Habilitar o recurso no
- * Windows, esse sim, é mudança grande que pede reinício, e o PHPorto não a faz.
- */
 final class HypervGate
 {
     public const F_STATE = 'hyperv.json';
 
-    /** O recurso opcional do Windows que precisa estar ligado. */
     public const FEATURE_NAME = 'Microsoft-Hyper-V';
 
-    /**
-     * Teto da conferência do recurso.
-     *
-     * Uma consulta CIM ao Win32_OptionalFeature responde em menos de um
-     * segundo; o teto folgado cobre a primeira chamada fria e o custo de abrir
-     * o powershell.exe (~200 ms medidos), sem pendurar a requisição.
-     */
     public const CHECK_TIMEOUT_S = 30;
 
-    /** InstallState do Win32_OptionalFeature: ligado. */
     private const STATE_ENABLED = 1;
 
-    /** InstallState: presente, porém desligado. */
     private const STATE_DISABLED = 2;
 
     public function __construct(
@@ -62,19 +29,11 @@ final class HypervGate
         return $this->read() !== null;
     }
 
-    /** Quando o painel foi habilitado, em UTC, ou null. */
     public function enabledAt(): ?string
     {
         return $this->read()['enabled_at'] ?? null;
     }
 
-    /**
-     * Confere o recurso e, só se ele estiver ligado, grava o estado.
-     *
-     * Devolve null quando habilitou, ou a frase para a tela quando não —
-     * recurso desligado, ausente, ou conferência que não voltou. Nunca liga o
-     * recurso do Windows: isso é mudança grande, com reinício, e fica de fora.
-     */
     public function enable(): ?string
     {
         [$estado, $edicao] = $this->featureState();
@@ -89,14 +48,6 @@ final class HypervGate
         return self::refusal($estado, $edicao);
     }
 
-    /**
-     * A frase da recusa, dado o InstallState e a edição do Windows lida.
-     *
-     * A EDIÇÃO SÓ PESA NO "NÃO INSTALADO": no Windows Home o recurso não
-     * existe, e "não está instalado" sozinho manda a pessoa procurar uma caixa
-     * que o "Ativar ou desativar recursos" dela não tem. Edição ilegível leva a
-     * frase genérica; edição lida e que não é Home não leva nada.
-     */
     public static function refusal(int $estado, ?string $edicao): string
     {
         return match ($estado) {
@@ -126,12 +77,6 @@ final class HypervGate
     }
 
     /**
-     * Lê a saída da conferência: o InstallState (0 quando ilegível) e a
-     * edição do Windows (null quando ilegível).
-     *
-     * A edição vem do Caption do Win32_OperatingSystem e é texto de fora: só
-     * passa o que parece nome de produto, e cortado, porque vai para a tela.
-     *
      * @return array{0: int, 1: ?string}
      */
     public static function parseCheck(string $output, bool $timedOut = false): array
@@ -150,13 +95,6 @@ final class HypervGate
         return [$estado, $edicao];
     }
 
-    /**
-     * Desliga o painel apagando o arquivo.
-     *
-     * Ausência já é o estado desabilitado, então sumir com o arquivo é a
-     * operação correta — não existe "gravar desligado". Sem arquivo para
-     * apagar, já está no estado pedido.
-     */
     public function disable(): bool
     {
         $caminho = $this->statePath();
@@ -174,13 +112,6 @@ final class HypervGate
     }
 
     /**
-     * O InstallState do recurso e a edição do Windows (ver parseCheck()).
-     *
-     * Roda um powershell.exe COMUM, não elevado: o Win32_OptionalFeature e o
-     * Win32_OperatingSystem pelo CIM leem sem Administrador. Qualquer coisa
-     * fora do esperado — timeout, erro, saída inesperada — vira estado 0, que o
-     * enable() trata como "não deu para conferir" e recusa.
-     *
      * @return array{0: int, 1: ?string}
      */
     private function featureState(): array
@@ -225,8 +156,6 @@ final class HypervGate
     }
 
     /**
-     * O estado gravado, ou null quando ausente, ilegível ou desabilitado.
-     *
      * @return array{enabled: true, enabled_at: string}|null
      */
     private function read(): ?array

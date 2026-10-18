@@ -4,32 +4,12 @@ declare(strict_types=1);
 
 namespace App\Win;
 
-/**
- * A saída do Invoke-Hyperv, já lida do JSON e virada dado tipado.
- *
- * SEPARADA DA VIEW E DA PÁGINA de propósito: ler o JSON que atravessou o worker
- * é onde uma saída inesperada tem de virar mensagem, não erro fatal — e isso se
- * testa alimentando texto, sem subir PowerShell nenhum. A página só orquestra;
- * a view só desenha; esta classe é a única que sabe a forma do JSON.
- *
- * O JSON pode vir sujo: o canal do worker prefixa notas de timeout ou de recusa
- * à saída. Por isso recorta do primeiro `{` ao último `}` antes de decodificar,
- * e o que não casar com a forma esperada vira problema, não exceção.
- *
- * COM O HOSPEDEIRO FORA, O MOTIVO É FECHADO: recurso desligado, serviço parado
- * ou outro erro. Motivo ausente ou desconhecido cai em "erro", e não em
- * "recurso desligado" — mandar reiniciar o computador sem saber é o conselho
- * errado mais caro que a tela pode dar.
- */
 final class HypervListing
 {
-    /** O recurso Microsoft-Hyper-V não está ligado no Windows. */
     public const REASON_FEATURE_OFF = 'recurso-desligado';
 
-    /** O serviço vmms (Gerenciamento de Máquina Virtual) não está rodando. */
     public const REASON_SERVICE_STOPPED = 'servico-parado';
 
-    /** Qualquer outra falha do Get-VM; a mensagem vem em $error. */
     public const REASON_ERROR = 'erro';
 
     /**
@@ -93,9 +73,6 @@ final class HypervListing
 
     private static function vmId(mixed $id): string
     {
-        // Só no formato que o hyperv-vm aceita; o resto vira vazio, e a linha
-        // fica sem botão em vez de mandar um id que o worker recusaria depois
-        // do UAC.
         if (!is_string($id) || preg_match('/' . WinAction::HYPERV_VM_ID_PATTERN . '/', $id) !== 1) {
             return '';
         }
