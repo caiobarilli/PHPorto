@@ -55,29 +55,53 @@ escuro, e o do sistema (`prefers-color-scheme`) quando nada foi escolhido.
 
 ## Anexos
 
-O card de anexos copia um arquivo com `cp -v`. Os **dois** caminhos, origem e
-destino, são vistos de dentro do WSL, e é isso que faz o card servir nos dois
-sentidos:
+O card de anexos manda **um arquivo** do navegador para dentro do WSL. Há três
+peças: a zona de arquivo, o campo **Destino** e o botão **Enviar**.
 
-| sentido | origem | destino |
-| --- | --- | --- |
-| Windows para a distro | `/mnt/c/Users/voce/pasta/arquivo.csv` | `~/pasta/arquivo.csv` |
-| distro para o Windows | `~/pasta/arquivo.csv` | `/mnt/c/Users/voce/pasta/arquivo.csv` |
+- **Escolher:** clique na zona, ou chegue nela com Tab e aperte Enter ou Espaço,
+  e o seletor de arquivo do sistema abre. Também dá para soltar um arquivo na
+  zona; soltar só escolhe o arquivo, não envia. A zona mostra o nome e o tamanho
+  do que foi escolhido.
+- **Destino:** o caminho completo do arquivo visto de dentro do WSL, por exemplo
+  `~/pasta/arquivo.csv` ou `/home/voce/arquivo.csv`. O `~` no começo vira o home
+  do usuário do WSL, e caminho relativo parte do `PHPORTO_WSL_ROOT`. O destino
+  **não pode existir**: se existir (arquivo, pasta ou link), nada é copiado e o
+  registro diz por quê. Não há sobrescrever.
+- **Enviar:** é o único que envia, por `POST` com `acao=anexo` em
+  `multipart/form-data`, com o token de uso único como os outros formulários.
 
-O `~` no começo de um caminho vira o home do usuário do WSL. Os caminhos viajam
-por variável de ambiente, não interpolados no script.
+Por dentro, o PHP recebe o arquivo na pasta temporária dele, confere que veio de
+um envio deste formulário (`is_uploaded_file`) e o move para a pasta de trabalho
+`files/`, a mesma onde fica o `cmd.sh`, com um nome aleatório. O WSL lê essa
+pasta por `/mnt/<letra>/...`, e o `cp -v` do anexo copia de lá para o destino,
+pelo mesmo caminho de antes: `wsl.exe`, script em arquivo e caminhos pelo
+ambiente. A cópia temporária é apagada no fim, com sucesso ou falha.
 
-Os dois campos começam vazios. O botão **Inverter** troca os dois, para
-devolver um arquivo pelo mesmo caminho por onde ele foi. O botão **Preencher**
-põe na origem o perfil do Windows visto do WSL (`USERPROFILE`, de
-`C:\Users\voce` para `/mnt/c/Users/voce`) e no destino o `PHPORTO_WSL_ROOT`;
-o que não estiver definido fica como está. Os dois rodam só no navegador: não
-enviam o formulário e não gastam o token de uso único.
+O histórico registra o nome do arquivo, o tamanho e o destino. O conteúdo nunca
+vai para o registro.
 
-Não há zona de soltar arquivo: o navegador não entrega o caminho do arquivo no
-Windows, e o anexo trabalha com caminhos, não com upload.
+O caminho inverso, da distro para o Windows, é pelo console: um `cp` para
+`/mnt/c/...`.
 
-O histórico registra o anexo com o comando efetivo e os dois caminhos.
+### Limite do arquivo
+
+O limite é o menor entre 25 MB, o `upload_max_filesize` e o `post_max_size` do
+PHP que roda o servidor, lido a cada requisição. O card mostra o valor em uso.
+Com o `php.ini` padrão do PHP (`upload_max_filesize = 2M`, `post_max_size = 8M`),
+o limite efetivo é 2 MB. Para chegar aos 25 MB, suba os dois no `php.ini`, ou
+na linha do servidor:
+
+```
+php -d upload_max_filesize=25M -d post_max_size=26M -S 127.0.0.1:4001 -t public public/router.php
+```
+
+Arquivo acima do limite volta com aviso, sem copiar. Se o envio inteiro passar do
+`post_max_size`, o PHP descarta o corpo todo, inclusive o token; a tela diz que
+o envio passou do limite do servidor, em vez de reclamar do token.
+
+A [API](api.md) continua com o anexo por caminhos, sem upload: `src` e `dst`,
+os dois vistos de dentro do WSL, copiados com `cp -v`. Lá o destino existente
+não é recusado; a recusa é só do card.
 
 ## Limites
 
@@ -86,7 +110,8 @@ Recusados no servidor, iguais na tela e na [API](api.md):
 | o quê | teto |
 | --- | --- |
 | comando | 64 KB (65.536 bytes) |
-| cada caminho de anexo | 4 KB (4.096 bytes) |
+| destino do anexo (tela) e cada caminho de anexo (API) | 4 KB (4.096 bytes) |
+| arquivo enviado pelo card de anexos | o menor entre 25 MB, `upload_max_filesize` e `post_max_size` |
 | saída de uma execução | 1 MiB (1.048.576 bytes) |
 | tempo | `PHPORTO_TIMEOUT`, com piso de 30 s |
 

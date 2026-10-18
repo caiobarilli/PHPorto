@@ -24,7 +24,9 @@ use App\Win\WinConfig;
 use App\Wsl\Distro;
 use App\Wsl\InputLimit;
 use App\Wsl\Runner;
+use App\Wsl\RunResult;
 use App\Wsl\ScriptBuilder;
+use App\Wsl\Upload;
 use Closure;
 use InvalidArgumentException;
 use RuntimeException;
@@ -1115,7 +1117,7 @@ final class Pages
             maxPathBytes: InputLimit::MAX_PATH_BYTES,
             // Só com a distro usável: distro ausente não está "dormindo".
             awake: $blocked === null ? $this->distroChecker->isRunning() : null,
-            windowsRoot: WslView::mntPath($this->config['wsl']['windows_home']),
+            maxUploadBytes: Upload::limit(),
         );
 
         Respond::html('PHPorto — WSL', Respond::render('wsl.php', $view));
@@ -1124,6 +1126,17 @@ final class Pages
     /** Executa, registra e redireciona. Nunca renderiza direto. */
     private function handlePost(): never
     {
+        // Corpo acima do post_max_size: o PHP descarta tudo, inclusive o
+        // token, e a recusa do token mandaria a pessoa procurar o erro errado.
+        if (Upload::postOverflow($_SERVER, $_POST, $_FILES)) {
+            $this->flash(sprintf(
+                'O envio passou do limite do servidor (post_max_size = %s). Nada foi copiado. O limite por arquivo é %s.',
+                (string) ini_get('post_max_size'),
+                Upload::megabytes(Upload::limit()),
+            ));
+            Respond::redirect('/wsl');
+        }
+
         // consume(), não check(): o token vale por UMA execução. Ver a nota na
         // Csrf — é o que impede uma intenção virar três comandos executados.
         if (!Csrf::consume()) {
@@ -1155,28 +1168,7 @@ final class Pages
         }
 
         if ($action === 'anexo') {
-            $src = trim(is_string($_POST['origem'] ?? null) ? $_POST['origem'] : '');
-            $dst = trim(is_string($_POST['destino'] ?? null) ? $_POST['destino'] : '');
-
-            if ($src === '' || $dst === '') {
-                $this->flash('Preencha origem e destino do anexo.');
-                Respond::redirect('/wsl');
-            }
-
-            try {
-                InputLimit::path('Origem', $src);
-                InputLimit::path('Destino', $dst);
-            } catch (InvalidArgumentException $e) {
-                $this->flash($e->getMessage());
-                Respond::redirect('/wsl');
-            }
-
-            $this->execute(
-                ScriptBuilder::attachment(),
-                ScriptBuilder::attachmentRecord($src, $dst),
-                ExecutionKind::Anexo,
-                ['PHPORTO_SRC' => $src, 'PHPORTO_DST' => $dst],
-            );
+            $this->handleUpload();
         }
 
         $command = is_string($_POST['cmd'] ?? null) ? $_POST['cmd'] : '';
@@ -1201,15 +1193,53 @@ final class Pages
         );
     }
 
+    private function handleUpload(): never
+    {
+        $upload = Upload::forRequest($this->filesDir);
+
+        try {
+            $dst     = Upload::destination($_POST['destino'] ?? null);
+            $arquivo = $upload->accept($_FILES[Upload::FIELD] ?? null, Upload::limit());
+        } catch (InvalidArgumentException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/wsl');
+        }
+
+        $this->runAndRecord(
+            function (Runner $runner) use ($upload, $arquivo, $dst): RunResult {
+                $run = $upload->copy($arquivo, $dst, $runner->run(...));
+                if ($run->exitCode === Upload::EXIT_DESTINATION_EXISTS) {
+                    $this->flash('O destino já existe no WSL. Nada foi copiado; escolha outro nome.');
+                }
+
+                return $run;
+            },
+            Upload::record($arquivo['name'], $arquivo['size'], $dst),
+            ExecutionKind::Anexo,
+        );
+    }
+
     /**
      * @param array<string, string> $extraEnv
      */
     private function execute(string $script, string $record, ExecutionKind $kind, array $extraEnv): never
     {
+        $this->runAndRecord(
+            static fn (Runner $runner): RunResult => $runner->run($script, $extraEnv),
+            $record,
+            $kind,
+        );
+    }
+
+    /**
+     * @param Closure(Runner): RunResult $runWith
+     */
+    private function runAndRecord(Closure $runWith, string $record, ExecutionKind $kind): never
+    {
         $runner = new Runner($this->config['wsl'], $this->filesDir);
 
         try {
-            $run = $runner->run($script, $extraEnv);
+            $run = $runWith($runner);
         } catch (RuntimeException $e) {
             $this->flash($e->getMessage());
             Respond::redirect('/wsl');
