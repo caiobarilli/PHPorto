@@ -64,6 +64,47 @@ it('os caminhos do anexo começam vazios, sem link nem texto de sentido', functi
         ->and($html)->not->toContain('Do Windows para a distro');
 });
 
+it('a zona de soltar fica no card de anexos, acima do formulário, com o texto honesto', function () {
+    $html = wslHtml([]);
+
+    $secao  = strpos($html, '<section class="anexos">');
+    $zona   = strpos($html, '<div class="anexo-solta" id="anexo-solta" aria-hidden="true">Solte um arquivo aqui para preencher o nome. O envio é pelo botão Enviar.</div>');
+    $form   = strpos($html, 'id="form-anexo"');
+    $origem = strpos($html, 'id="origem"');
+
+    expect($zona)->toBeInt()
+        ->and($secao)->toBeLessThan($zona)
+        ->and($zona)->toBeLessThan($form)
+        ->and($form)->toBeLessThan($origem)
+        ->and($html)->not->toContain('Soltar salva o anexo.')
+        ->and($html)->not->toContain('Solte o arquivo aqui');
+});
+
+it('o anexo continua indo só pelo Enviar, com acao=anexo e os dois caminhos em texto', function () {
+    $html = wslHtml([]);
+
+    expect($html)->toMatch('~<form method="post" action="/wsl" id="form-anexo" data-sem-reload>\s*<input type="hidden" name="acao" value="anexo">~')
+        ->and($html)->toContain('<button type="submit" class="btn btn-sm btn-claro" id="btn-anexo">Enviar</button>')
+        ->and($html)->not->toContain('type="file"')
+        ->and($html)->not->toContain('enctype=');
+});
+
+it('soltar só escreve o nome do arquivo na origem, sem ler, enviar nem salvar', function () {
+    $html = wslHtml([]);
+
+    expect($html)->toContain("document.addEventListener('drop'")
+        ->and($html)->toContain('origem.value = atual + arquivo.name;')
+        ->and($html)->not->toContain('FileReader')
+        ->and($html)->not->toContain('fakepath');
+
+    preg_match("~document\.addEventListener\('drop'.*?\n  \}\);~s", $html, $m);
+    expect($m[0] ?? '')->not->toBe('')
+        ->and($m[0] ?? '')->not->toContain('submit')
+        ->and($m[0] ?? '')->not->toContain('fetch(')
+        ->and($m[0] ?? '')->not->toContain('FormData')
+        ->and($m[0] ?? '')->not->toContain('.click(');
+});
+
 it('Preencher leva o perfil do Windows na origem e a raiz no destino, sem enviar', function () {
     $html = wslHtml([], null, '/mnt/c/Users/x');
 
