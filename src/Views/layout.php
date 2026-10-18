@@ -389,6 +389,11 @@ use App\Http\Respond;
   .term-meta .ok { color: var(--t-ok); } .term-meta .bad { color: var(--t-bad); }
   .term-meta strong { font-weight: 600; }
   .term-dica { margin-bottom: 22px; }
+  .anexo-solta {
+    border: 1.5px dashed var(--line); border-radius: 10px; padding: 22px 16px; margin-bottom: 14px;
+    text-align: center; color: var(--mut); background: var(--panel); font-size: 13px;
+  }
+  .anexo-solta.arrastando { border-color: var(--ink); color: var(--ink); }
   .anexo-caminhos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .anexo-caminhos .campo { display: block; margin: 0; }
   .anexo-caminhos .campo label { display: block; width: auto; margin-bottom: 6px; }

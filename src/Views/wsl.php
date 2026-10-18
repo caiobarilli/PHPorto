@@ -119,6 +119,7 @@ $logs = (string) json_encode(
 
   <section class="anexos">
     <h2>Anexos</h2>
+    <div class="anexo-solta" id="anexo-solta" aria-hidden="true">Solte um arquivo aqui para preencher o nome. O envio é pelo botão Enviar.</div>
     <form method="post" action="/wsl" id="form-anexo" data-sem-reload>
       <input type="hidden" name="acao" value="anexo">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
@@ -277,6 +278,51 @@ $logs = (string) json_encode(
     if (ev.target.id !== 'input') { return; }
     ev.target.style.height = 'auto';
     ev.target.style.height = Math.min(ev.target.scrollHeight, 160) + 'px';
+  });
+
+  function naZona(ev) {
+    var zona = ev.target.closest ? ev.target.closest('#anexo-solta') : null;
+    var tipos = ev.dataTransfer ? Array.prototype.slice.call(ev.dataTransfer.types || []) : [];
+    return zona && tipos.indexOf('Files') !== -1 ? zona : null;
+  }
+
+  ['dragenter', 'dragover'].forEach(function (tipo) {
+    document.addEventListener(tipo, function (ev) {
+      var zona = naZona(ev);
+      if (!zona) { return; }
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = 'copy';
+      zona.classList.add('arrastando');
+    });
+  });
+
+  document.addEventListener('dragleave', function (ev) {
+    var zona = ev.target.closest ? ev.target.closest('#anexo-solta') : null;
+    if (zona && !zona.contains(ev.relatedTarget)) { zona.classList.remove('arrastando'); }
+  });
+
+  // O navegador entrega o nome do arquivo solto, nunca o caminho no disco.
+  // Soltar só escreve esse nome na Origem, depois da pasta que já estiver lá;
+  // não lê o arquivo, não envia e não salva. Quem envia é o botão Enviar.
+  document.addEventListener('drop', function (ev) {
+    var zona = naZona(ev);
+    if (!zona) { return; }
+    ev.preventDefault();
+    zona.classList.remove('arrastando');
+    var arquivo = ev.dataTransfer.files && ev.dataTransfer.files[0];
+    var origem = document.getElementById('origem');
+    if (!arquivo || !origem) { return; }
+
+    var atual = origem.value;
+    var antes = origem.getAttribute('data-solto') || '';
+    if (antes !== '' && (atual === antes || atual.slice(-(antes.length + 1)) === '/' + antes)) {
+      atual = atual.slice(0, atual.length - antes.length);
+    }
+    if (atual !== '' && atual.slice(-1) !== '/') { atual += '/'; }
+    origem.value = atual + arquivo.name;
+    origem.setAttribute('data-solto', arquivo.name);
+    origem.focus();
+    document.getElementById('estado-anexo').textContent = 'Nome na Origem. Confira a pasta e clique em Enviar.';
   });
 
   var ACOES = {
