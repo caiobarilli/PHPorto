@@ -113,6 +113,33 @@ $tempo = static function (int $segundos): string {
     return implode(' ', $partes);
 };
 
+$celulaIp = static function (\App\Win\HypervVm $vm): string {
+    // O HTML fica literal, com o recuo da tabela, para a célula sair igual à
+    // que estava no laço; o buffer só tira o aninhamento de dentro do foreach.
+    $uteis  = $vm->usefulIps();
+    $ip     = $uteis[0] ?? null;
+    $outros = array_slice($uteis, 1);
+
+    ob_start();
+    ?>
+              <?php if (!$vm->running): ?>
+                —
+              <?php elseif ($ip === null): ?>
+                <span class="vm-parada">não foi possível ler o IP</span>
+              <?php else: ?>
+                <code class="vm-ip"><?= Respond::e($ip) ?></code>
+                <button type="button" class="btn btn-ghost btn-sm" data-copiar="<?= Respond::e($ip) ?>" hidden>copiar</button>
+                <?php if ($outros !== []): ?>
+                  <details>
+                    <summary>mais endereços</summary>
+                    <?= Respond::e(implode(', ', $outros)) ?>
+                  </details>
+                <?php endif; ?>
+              <?php endif; ?>
+<?php
+    return (string) ob_get_clean();
+};
+
 $listing = $view->listing;
 
 ?>
@@ -206,9 +233,6 @@ $listing = $view->listing;
         <tbody>
         <?php foreach ($vms as $vm):
             $classe = $vm->running ? 'ok' : (in_array($vm->state, $paradas, true) ? 'vm-parada' : '');
-            $uteis  = $vm->usefulIps();
-            $ip     = $uteis[0] ?? null;
-            $outros = array_slice($uteis, 1);
             ?>
           <tr>
             <td><?= Respond::e($vm->name !== '' ? $vm->name : '(sem nome)') ?></td>
@@ -216,20 +240,7 @@ $listing = $view->listing;
             <td><?= $vm->running ? Respond::e($memoria($vm->memoryBytes)) : '—' ?></td>
             <td><?= $vm->running ? Respond::e($tempo($vm->uptimeSeconds)) : '—' ?></td>
             <td>
-              <?php if (!$vm->running): ?>
-                —
-              <?php elseif ($ip === null): ?>
-                <span class="vm-parada">não foi possível ler o IP</span>
-              <?php else: ?>
-                <code class="vm-ip"><?= Respond::e($ip) ?></code>
-                <button type="button" class="btn btn-ghost btn-sm" data-copiar="<?= Respond::e($ip) ?>" hidden>copiar</button>
-                <?php if ($outros !== []): ?>
-                  <details>
-                    <summary>mais endereços</summary>
-                    <?= Respond::e(implode(', ', $outros)) ?>
-                  </details>
-                <?php endif; ?>
-              <?php endif; ?>
+<?= $celulaIp($vm) ?>
             </td>
             <td class="vm-acoes">
               <?php if ($vm->id === ''): ?>

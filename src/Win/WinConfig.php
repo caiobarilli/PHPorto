@@ -159,6 +159,7 @@ final class WinConfig
         try {
             $dados = self::json($dir, self::TWEAKS_TRANSLATION);
         } catch (RuntimeException) {
+            // Decisão: sem tradução legível, os textos ficam como vieram do tweaks.json.
             return $tweaks;
         }
 

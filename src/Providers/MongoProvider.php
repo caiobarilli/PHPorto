@@ -81,6 +81,7 @@ final class MongoProvider implements DatabaseProviderInterface
                     new \DateTimeImmutable($execution->createdAt, new \DateTimeZone('UTC'))
                 );
             } catch (\Exception) {
+                // Decisão: perder a hora é menos grave que perder a execução.
                 $createdAt = new UTCDateTime();
             }
         }
