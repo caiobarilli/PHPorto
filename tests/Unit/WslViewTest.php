@@ -6,13 +6,14 @@ use App\Domain\Execution;
 use App\Domain\ExecutionKind;
 use App\Http\Respond;
 use App\Http\WslView;
+use App\Wsl\Upload;
 
 /**
  * Monta a /wsl com as execuções e o estado da VM dados e devolve o HTML.
  *
  * @param list<Execution> $rows
  */
-function wslHtml(array $rows, ?bool $awake = null, string $windowsRoot = ''): string
+function wslHtml(array $rows, ?bool $awake = null, int $maxUploadBytes = 2097152): string
 {
     return Respond::render('wsl.php', new WslView(
         rows: $rows,
@@ -30,7 +31,7 @@ function wslHtml(array $rows, ?bool $awake = null, string $windowsRoot = ''): st
         maxCommandBytes: 65536,
         maxPathBytes: 4096,
         awake: $awake,
-        windowsRoot: $windowsRoot,
+        maxUploadBytes: $maxUploadBytes,
     ));
 }
 
@@ -51,78 +52,65 @@ it('o JSON que o botão de copiar entrega continua com o UTC gravado', function 
     expect($logs[0]['created_at'] ?? null)->toBe('2026-09-09 02:54:17');
 });
 
-it('o card de anexos tem o botão de inverter, que não envia o formulário', function () {
-    expect(wslHtml([]))->toContain('<button type="button" class="btn btn-sm btn-ghost" id="btn-inverter" title="Inverter origem e destino">Inverter</button>');
-});
-
-it('os caminhos do anexo começam vazios, sem link nem texto de sentido', function () {
-    $html = wslHtml([], null, '/mnt/c/Users/x');
-
-    expect($html)->toContain('id="origem" name="origem" value=""')
-        ->and($html)->toContain('id="destino" name="destino" value=""')
-        ->and($html)->not->toContain('&rarr;')
-        ->and($html)->not->toContain('Do Windows para a distro');
-});
-
-it('a zona de soltar fica no card de anexos, acima do formulário, com o texto honesto', function () {
+it('o card de anexos não tem mais Origem, Inverter nem Preencher', function () {
     $html = wslHtml([]);
 
-    $secao  = strpos($html, '<section class="anexos">');
-    $zona   = strpos($html, '<div class="anexo-solta" id="anexo-solta" aria-hidden="true">Solte um arquivo aqui para preencher o nome. O envio é pelo botão Enviar.</div>');
-    $form   = strpos($html, 'id="form-anexo"');
-    $origem = strpos($html, 'id="origem"');
+    expect($html)->not->toContain('id="origem"')
+        ->and($html)->not->toContain('name="origem"')
+        ->and($html)->not->toContain('btn-inverter')
+        ->and($html)->not->toContain('btn-preencher')
+        ->and($html)->not->toContain('>Inverter<')
+        ->and($html)->not->toContain('>Preencher<')
+        ->and($html)->not->toContain('Solte um arquivo aqui para preencher o nome.');
+});
+
+it('o anexo é multipart, com acao=anexo, token, um campo de arquivo e o destino', function () {
+    $html = wslHtml([]);
+
+    expect($html)->toMatch('~<form method="post" action="/wsl" id="form-anexo" enctype="multipart/form-data" data-sem-reload>\s*<input type="hidden" name="acao" value="anexo">\s*<input type="hidden" name="_csrf" value="t">~')
+        ->and($html)->toMatch('~<input type="file" id="arquivo" name="arquivo" class="anexo-arquivo" required\s~')
+        ->and($html)->toContain('id="destino" name="destino" value="" required')
+        ->and($html)->toContain('<button type="submit" class="btn btn-sm btn-claro" id="btn-anexo">Enviar</button>');
+
+    preg_match('~<form[^>]*id="form-anexo".*?</form>~s', $html, $m);
+    expect(substr_count($m[0] ?? '', 'type="file"'))->toBe(1)
+        ->and($m[0] ?? '')->not->toContain('multiple');
+});
+
+it('a zona é o rótulo do campo de arquivo, que segue alcançável pelo teclado', function () {
+    $html = wslHtml([]);
+
+    $campo = strpos($html, 'id="arquivo"');
+    $zona  = strpos($html, '<label for="arquivo" class="anexo-solta" id="anexo-solta">');
 
     expect($zona)->toBeInt()
-        ->and($secao)->toBeLessThan($zona)
-        ->and($zona)->toBeLessThan($form)
-        ->and($form)->toBeLessThan($origem)
-        ->and($html)->not->toContain('Soltar salva o anexo.')
-        ->and($html)->not->toContain('Solte o arquivo aqui');
+        ->and($campo)->toBeLessThan($zona)
+        ->and($html)->not->toMatch('~id="arquivo"[^>]*(hidden|tabindex="-1"|disabled)~')
+        ->and(layoutCss())->toContain('.anexo-arquivo:focus-visible + .anexo-solta')
+        ->and(layoutCss())->not->toMatch('~\.anexo-arquivo\s*\{[^}]*display:\s*none~');
 });
 
-it('o anexo continua indo só pelo Enviar, com acao=anexo e os dois caminhos em texto', function () {
+it('o card mostra o limite em uso e manda o MAX_FILE_SIZE antes do arquivo', function () {
+    $html = wslHtml([], null, 2097152);
+
+    expect($html)->toContain('Um arquivo por vez, até 2 MB.')
+        ->and(strpos($html, 'name="MAX_FILE_SIZE" value="2097152"'))->toBeLessThan(strpos($html, 'id="arquivo"'))
+        ->and(wslHtml([], null, Upload::MAX_BYTES))->toContain('até 25 MB.');
+});
+
+it('soltar põe o arquivo no campo de arquivo e não envia nem lê nada', function () {
     $html = wslHtml([]);
 
-    expect($html)->toMatch('~<form method="post" action="/wsl" id="form-anexo" data-sem-reload>\s*<input type="hidden" name="acao" value="anexo">~')
-        ->and($html)->toContain('<button type="submit" class="btn btn-sm btn-claro" id="btn-anexo">Enviar</button>')
-        ->and($html)->not->toContain('type="file"')
-        ->and($html)->not->toContain('enctype=');
+    preg_match("~document\\.addEventListener\\('drop'.*?\\n  \\}\\);~s", $html, $m);
+    $drop = $m[0] ?? '';
+
+    expect($drop)->not->toBe('')
+        ->and($drop)->toContain('campo.files = soltos;')
+        ->and($drop)->toContain('soltos.length > 1')
+        ->and($drop)->not->toContain('submit')
+        ->and($drop)->not->toContain('fetch(')
+        ->and($html)->not->toContain('FileReader');
 });
-
-it('soltar só escreve o nome do arquivo na origem, sem ler, enviar nem salvar', function () {
-    $html = wslHtml([]);
-
-    expect($html)->toContain("document.addEventListener('drop'")
-        ->and($html)->toContain('origem.value = atual + arquivo.name;')
-        ->and($html)->not->toContain('FileReader')
-        ->and($html)->not->toContain('fakepath');
-
-    preg_match("~document\.addEventListener\('drop'.*?\n  \}\);~s", $html, $m);
-    expect($m[0] ?? '')->not->toBe('')
-        ->and($m[0] ?? '')->not->toContain('submit')
-        ->and($m[0] ?? '')->not->toContain('fetch(')
-        ->and($m[0] ?? '')->not->toContain('FormData')
-        ->and($m[0] ?? '')->not->toContain('.click(');
-});
-
-it('Preencher leva o perfil do Windows na origem e a raiz no destino, sem enviar', function () {
-    $html = wslHtml([], null, '/mnt/c/Users/x');
-
-    expect($html)->toMatch('~<button type="button"[^>]*id="btn-preencher"\s+data-origem="/mnt/c/Users/x" data-destino="/home/x">Preencher</button>~');
-});
-
-it('o perfil do Windows vira caminho /mnt/<letra> do WSL', function (string $windows, string $wsl) {
-    expect(WslView::mntPath($windows))->toBe($wsl);
-})->with([
-    'perfil'          => ['C:\\Users\\x', '/mnt/c/Users/x'],
-    'barra no fim'    => ['C:\\Users\\x\\', '/mnt/c/Users/x'],
-    'outra letra'     => ['D:\\dados', '/mnt/d/dados'],
-    'barra normal'    => ['C:/Users/x', '/mnt/c/Users/x'],
-    'raiz do disco'   => ['C:\\', '/mnt/c'],
-    'vazio'           => ['', ''],
-    'rede'            => ['\\\\srv\\perfil', ''],
-    'sem letra'       => ['/home/x', ''],
-]);
 
 it('o console: saída em #output fora de textarea, prompt $ com o campo de uma linha e o Enviar', function () {
     $html = wslHtml([new Execution('ls', "a\nb", 0, 10, ExecutionKind::Comando, false, '2026-09-09 02:54:17')]);

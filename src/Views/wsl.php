@@ -13,6 +13,7 @@ declare(strict_types=1);
  */
 
 use App\Http\Respond;
+use App\Wsl\Upload;
 
 $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 1200): string {
     $texto  = rtrim($texto, "\n");
@@ -119,30 +120,28 @@ $logs = (string) json_encode(
 
   <section class="anexos">
     <h2>Anexos</h2>
-    <div class="anexo-solta" id="anexo-solta" aria-hidden="true">Solte um arquivo aqui para preencher o nome. O envio é pelo botão Enviar.</div>
-    <form method="post" action="/wsl" id="form-anexo" data-sem-reload>
+    <form method="post" action="/wsl" id="form-anexo" enctype="multipart/form-data" data-sem-reload>
       <input type="hidden" name="acao" value="anexo">
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-      <div class="anexo-caminhos">
-        <div class="campo">
-          <label for="origem">Origem</label>
-          <input type="text" id="origem" name="origem" value="" spellcheck="false" autocomplete="off" placeholder="/mnt/c/…">
-        </div>
-        <div class="campo">
-          <label for="destino">Destino</label>
-          <input type="text" id="destino" name="destino" value="" spellcheck="false" autocomplete="off" placeholder="~/…">
-        </div>
+      <input type="hidden" name="MAX_FILE_SIZE" value="<?= $view->maxUploadBytes ?>">
+      <input type="file" id="arquivo" name="<?= Respond::e(Upload::FIELD) ?>" class="anexo-arquivo" required
+             aria-describedby="anexo-limite" data-limite="<?= $view->maxUploadBytes ?>">
+      <label for="arquivo" class="anexo-solta" id="anexo-solta">
+        <strong id="anexo-nome">Escolha um arquivo ou solte aqui</strong>
+        <small id="anexo-limite">Um arquivo por vez, até <?= Respond::e(Upload::megabytes($view->maxUploadBytes)) ?>.</small>
+      </label>
+      <div class="campo anexo-destino">
+        <label for="destino">Destino</label>
+        <input type="text" id="destino" name="destino" value="" required spellcheck="false" autocomplete="off" placeholder="~/pasta/arquivo.csv">
       </div>
       <div class="row">
         <button type="submit" class="btn btn-sm btn-claro" id="btn-anexo">Enviar</button>
-        <button type="button" class="btn btn-sm btn-ghost" id="btn-inverter" title="Inverter origem e destino">Inverter</button>
-        <button type="button" class="btn btn-sm btn-ghost" id="btn-preencher"
-                data-origem="<?= Respond::e($view->windowsRoot) ?>" data-destino="<?= Respond::e($view->root) ?>">Preencher</button>
-        <span class="meta" id="estado-anexo"></span>
+        <span class="meta" id="estado-anexo" aria-live="polite"></span>
       </div>
     </form>
     <p class="dica">
-      Os dois caminhos são vistos de dentro do WSL. Cada caminho aceita até <?= number_format($view->maxPathBytes, 0, ',', '.') ?> bytes.
+      O destino é o caminho completo do arquivo visto de dentro do WSL (<code>~/</code> é o home) e não pode existir:
+      nada é sobrescrito. Aceita até <?= number_format($view->maxPathBytes, 0, ',', '.') ?> bytes.
     </p>
   </section>
 
@@ -280,15 +279,19 @@ $logs = (string) json_encode(
     ev.target.style.height = Math.min(ev.target.scrollHeight, 160) + 'px';
   });
 
-  function naZona(ev) {
+  function zonaDe(ev) {
     var zona = ev.target.closest ? ev.target.closest('#anexo-solta') : null;
     var tipos = ev.dataTransfer ? Array.prototype.slice.call(ev.dataTransfer.types || []) : [];
     return zona && tipos.indexOf('Files') !== -1 ? zona : null;
   }
 
+  function tamanho(bytes) {
+    return bytes < 1048576 ? Math.max(1, Math.round(bytes / 1024)) + ' KB' : (bytes / 1048576).toFixed(1).replace('.', ',') + ' MB';
+  }
+
   ['dragenter', 'dragover'].forEach(function (tipo) {
     document.addEventListener(tipo, function (ev) {
-      var zona = naZona(ev);
+      var zona = zonaDe(ev);
       if (!zona) { return; }
       ev.preventDefault();
       ev.dataTransfer.dropEffect = 'copy';
@@ -301,44 +304,35 @@ $logs = (string) json_encode(
     if (zona && !zona.contains(ev.relatedTarget)) { zona.classList.remove('arrastando'); }
   });
 
-  // O navegador entrega o nome do arquivo solto, nunca o caminho no disco.
-  // Soltar só escreve esse nome na Origem, depois da pasta que já estiver lá;
-  // não lê o arquivo, não envia e não salva. Quem envia é o botão Enviar.
+  // Soltar põe o arquivo no próprio campo de arquivo, como se tivesse sido
+  // escolhido: o envio continua sendo só o Enviar.
   document.addEventListener('drop', function (ev) {
-    var zona = naZona(ev);
+    var zona = zonaDe(ev);
     if (!zona) { return; }
     ev.preventDefault();
     zona.classList.remove('arrastando');
-    var arquivo = ev.dataTransfer.files && ev.dataTransfer.files[0];
-    var origem = document.getElementById('origem');
-    if (!arquivo || !origem) { return; }
-
-    var atual = origem.value;
-    var antes = origem.getAttribute('data-solto') || '';
-    if (antes !== '' && (atual === antes || atual.slice(-(antes.length + 1)) === '/' + antes)) {
-      atual = atual.slice(0, atual.length - antes.length);
+    var campo = document.getElementById('arquivo');
+    var soltos = ev.dataTransfer.files;
+    if (!campo || !soltos || soltos.length === 0) { return; }
+    if (soltos.length > 1) {
+      document.getElementById('estado-anexo').textContent = 'Solte um arquivo por vez.';
+      return;
     }
-    if (atual !== '' && atual.slice(-1) !== '/') { atual += '/'; }
-    origem.value = atual + arquivo.name;
-    origem.setAttribute('data-solto', arquivo.name);
-    origem.focus();
-    document.getElementById('estado-anexo').textContent = 'Nome na Origem. Confira a pasta e clique em Enviar.';
+    campo.files = soltos;
+    campo.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  document.addEventListener('change', function (ev) {
+    if (ev.target.id !== 'arquivo') { return; }
+    var arquivo = ev.target.files && ev.target.files[0];
+    var limite = parseInt(ev.target.getAttribute('data-limite') || '0', 10);
+    var nome = document.getElementById('anexo-nome');
+    var estado = document.getElementById('estado-anexo');
+    nome.textContent = arquivo ? arquivo.name + ' (' + tamanho(arquivo.size) + ')' : 'Escolha um arquivo ou solte aqui';
+    estado.textContent = arquivo && limite > 0 && arquivo.size > limite ? 'Esse arquivo passa do limite e vai ser recusado.' : '';
   });
 
   var ACOES = {
-    'btn-inverter': function () {
-      var origem  = document.getElementById('origem');
-      var destino = document.getElementById('destino');
-      var antes   = origem.value;
-      origem.value  = destino.value;
-      destino.value = antes;
-    },
-    'btn-preencher': function (b) {
-      var origem  = b.getAttribute('data-origem') || '';
-      var destino = b.getAttribute('data-destino') || '';
-      if (origem !== '') { document.getElementById('origem').value = origem; }
-      if (destino !== '') { document.getElementById('destino').value = destino; }
-    },
     'btn-copiar': function (b) { copy(document.getElementById('output').textContent); flash(b); },
     'btn-copiar-json': function (b) { var l = logs(); copy(JSON.stringify(l.length ? l[0] : null, null, 2)); flash(b); },
     'btn-json': function (b) { copy(JSON.stringify(logs(), null, 2)); flash(b); },

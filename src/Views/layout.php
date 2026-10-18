@@ -389,14 +389,20 @@ use App\Http\Respond;
   .term-meta .ok { color: var(--t-ok); } .term-meta .bad { color: var(--t-bad); }
   .term-meta strong { font-weight: 600; }
   .term-dica { margin-bottom: 22px; }
-  .anexo-solta {
-    border: 1.5px dashed var(--line); border-radius: 10px; padding: 22px 16px; margin-bottom: 14px;
-    text-align: center; color: var(--mut); background: var(--panel); font-size: 13px;
+  .anexo-arquivo {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; border: 0; opacity: 0;
   }
-  .anexo-solta.arrastando { border-color: var(--ink); color: var(--ink); }
-  .anexo-caminhos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .anexo-caminhos .campo { display: block; margin: 0; }
-  .anexo-caminhos .campo label { display: block; width: auto; margin-bottom: 6px; }
+  .anexo-solta {
+    display: block; border: 1.5px dashed var(--line); border-radius: 10px; padding: 22px 16px; margin-bottom: 14px;
+    text-align: center; color: var(--mut); background: var(--panel); font-size: 13px; cursor: pointer;
+  }
+  .anexo-solta strong { display: block; color: var(--ink); font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
+  .anexo-solta small { font-size: 12px; }
+  .anexo-solta:hover, .anexo-solta.arrastando { border-color: var(--ink); }
+  .anexo-arquivo:focus-visible + .anexo-solta { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .anexo-destino { display: block; margin: 0 0 12px; }
+  .anexo-destino label { display: block; width: auto; margin-bottom: 6px; }
 
   /* ---- Interruptor da /config -------------------------------------------
      Um checkbox de verdade por baixo: o rótulo continua clicável, o teclado
@@ -595,7 +601,9 @@ use App\Http\Respond;
 
     fetch(form.action, {
       method: 'POST',
-      body: new URLSearchParams(dados),
+      // Formulário com arquivo vai como multipart, com o FormData inteiro; os
+      // outros seguem urlencoded, como sempre foram.
+      body: form.enctype === 'multipart/form-data' ? dados : new URLSearchParams(dados),
       credentials: 'same-origin',
       mode: 'same-origin',
       redirect: 'follow',

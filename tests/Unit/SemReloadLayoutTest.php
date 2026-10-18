@@ -91,3 +91,8 @@ it('POST de outro site é recusado antes de olhar o token, e o token não queima
 })->after(function () {
     unset($_SERVER['HTTP_SEC_FETCH_SITE'], $_POST[Csrf::fieldName()]);
 });
+
+it('o script comum manda o FormData inteiro só no formulário multipart, e urlencoded nos outros', function () {
+    expect(scripts(layoutHtml()))
+        ->toContain("body: form.enctype === 'multipart/form-data' ? dados : new URLSearchParams(dados),");
+});

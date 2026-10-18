@@ -93,6 +93,15 @@ final class ScriptBuilder
             . 'cp -v -- "$PHPORTO_SRC" "$PHPORTO_DST"' . "\n";
     }
 
+    public static function upload(): string
+    {
+        return self::header()
+            . 'case "$PHPORTO_DST" in "~") PHPORTO_DST="$HOME";; "~/"*) PHPORTO_DST="$HOME/${PHPORTO_DST#\~/}";; esac' . "\n"
+            . 'if [ -e "$PHPORTO_DST" ] || [ -L "$PHPORTO_DST" ]; then echo "[phporto] o destino ja existe, nada foi copiado: $PHPORTO_DST"; exit '
+            . Upload::EXIT_DESTINATION_EXISTS . '; fi' . "\n"
+            . 'cp -v -- "$PHPORTO_SRC" "$PHPORTO_DST"' . "\n";
+    }
+
     /**
      * O que se registra de um anexo: o comando efetivo mais os dois caminhos.
      * O log precisa dizer o que foi copiado, e os caminhos não aparecem no
