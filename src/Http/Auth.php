@@ -9,10 +9,15 @@ use Closure;
 /**
  * O portão de token: decide se uma requisição passa, antes de qualquer rota.
  *
- * O token vai no campo de senha do HTTP Basic, e o usuário é ignorado. Sem
- * PHPORTO_AUTH_TOKEN configurado nada é servido. Cinco erros seguidos
- * bloqueiam por quinze minutos, contados num arquivo que guarda também a
- * impressão do token: trocar o token descarta o contador.
+ * Nas telas o token entra por um formulário e vira um cookie assinado; na
+ * API ele vai no campo de senha do HTTP Basic, e o usuário é ignorado. Sem
+ * PHPORTO_AUTH_TOKEN configurado nada é servido. Cinco erros seguidos, token
+ * ou cookie, bloqueiam por quinze minutos, contados num arquivo que guarda
+ * também a impressão do token: trocar o token descarta o contador.
+ *
+ * O cookie é "prazo.hmac": o HMAC-SHA256 de um rótulo fixo com o prazo, tendo
+ * o próprio token como chave. O token nunca sai no cookie, o prazo não se
+ * estende sem a chave, e trocar o token invalida todo cookie emitido.
  */
 final class Auth
 {
@@ -22,8 +27,14 @@ final class Auth
     /** Duração do bloqueio, em segundos. */
     public const LOCK_SECONDS = 900;
 
-    /** O texto do diálogo do navegador. */
-    public const REALM = 'PHPorto - cole o token no campo de senha';
+    /** Nome do cookie de sessão das telas. */
+    public const COOKIE = 'phporto_auth';
+
+    /** Validade do cookie, em segundos: sete dias, contados do login. */
+    public const COOKIE_SECONDS = 604800;
+
+    /** O que o HMAC assina junto com o prazo; a versão permite trocar o formato. */
+    private const COOKIE_LABEL = 'phporto-auth-cookie-v1';
 
     /** Nome do arquivo do contador, em storage/. */
     public const COUNTER_FILE = 'auth-falhas.json';
@@ -76,7 +87,61 @@ final class Auth
             return new AuthDecision(AuthOutcome::Allowed);
         }
 
-        $falhas = $estado['falhas'] + 1;
+        return $this->fail($estado['falhas'], $agora);
+    }
+
+    public function isConfigured(): bool
+    {
+        return $this->token !== '';
+    }
+
+    /** @return array{value: string, expires: int} */
+    public function issueCookie(): array
+    {
+        $ate = ($this->clock)() + self::COOKIE_SECONDS;
+
+        return ['value' => $ate . '.' . $this->sign($ate), 'expires' => $ate];
+    }
+
+    public function checkCookie(?string $cookie): AuthDecision
+    {
+        if ($this->token === '') {
+            return new AuthDecision(AuthOutcome::NotConfigured);
+        }
+
+        $agora  = ($this->clock)();
+        $estado = $this->load();
+
+        // O bloqueio vale também para quem já tem cookie: afrouxar aqui seria
+        // abrir uma porta que o token certo não abre.
+        if ($estado['ate'] > $agora) {
+            return new AuthDecision(AuthOutcome::Locked, $estado['ate'] - $agora);
+        }
+
+        if ($cookie === null || $cookie === '') {
+            return new AuthDecision(AuthOutcome::Missing);
+        }
+
+        if (preg_match('/^(\d{1,12})\.([0-9a-f]{64})$/D', $cookie, $m) !== 1
+            || !hash_equals($this->sign((int) $m[1]), $m[2])) {
+            return $this->fail($estado['falhas'], $agora);
+        }
+
+        // Assinatura certa e prazo vencido não é ataque: é sessão velha, e não
+        // conta como erro. Prazo além da validade só aparece com o relógio
+        // voltando, e cai no mesmo caso.
+        $ate = (int) $m[1];
+
+        if ($ate <= $agora || $ate > $agora + self::COOKIE_SECONDS) {
+            return new AuthDecision(AuthOutcome::Expired);
+        }
+
+        return new AuthDecision(AuthOutcome::Allowed);
+    }
+
+    private function fail(int $falhasAntes, int $agora): AuthDecision
+    {
+        $falhas = $falhasAntes + 1;
 
         if ($falhas >= self::MAX_FAILURES) {
             $this->save(0, $agora + self::LOCK_SECONDS);
@@ -87,6 +152,11 @@ final class Auth
         $this->save($falhas, 0);
 
         return new AuthDecision(AuthOutcome::Wrong);
+    }
+
+    private function sign(int $ate): string
+    {
+        return hash_hmac('sha256', self::COOKIE_LABEL . '|' . $ate, $this->token);
     }
 
     /**

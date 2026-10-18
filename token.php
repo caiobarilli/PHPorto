@@ -75,5 +75,5 @@ if (file_put_contents($temporario, EnvFile::with($conteudo, PHPORTO_TOKEN_KEY, $
 }
 
 echo "\nToken gravado em " . PHPORTO_TOKEN_KEY . " no .env:\n\n    {$token}\n\n";
-echo "No navegador, cole no campo de senha do diálogo; o usuário é ignorado.\n";
+echo "No navegador, cole no formulário de entrada.\n";
 echo "Pela API:  curl -u :{$token} http://127.0.0.1:4001/api/executions\n";

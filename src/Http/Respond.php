@@ -100,8 +100,8 @@ final class Respond
     /**
      * Responde a uma requisição que o portão de token não deixou passar.
      *
-     * Recebe a decisão: 401 com o pedido de Basic, 429 com o tempo que falta,
-     * ou 503 dizendo para rodar o php token.php. Não serve para Allowed.
+     * Recebe a decisão: 401, 429 com o tempo que falta, ou 503 dizendo para
+     * rodar o php token.php. Não serve para Allowed.
      */
     public static function authRefused(AuthDecision $decision): never
     {
@@ -115,26 +115,24 @@ final class Respond
             AuthOutcome::NotConfigured => "PHPORTO_AUTH_TOKEN não está configurado no .env, e sem ele nada é servido.\n"
                 . "Rode na raiz do projeto:  php token.php\n",
             AuthOutcome::Locked => self::lockedMessage($decision->retryAfter),
-            default => "Token ausente ou errado. Cole o token no campo de senha; o usuário é ignorado.\n",
+            default => "Token ausente ou errado. Mande o token no campo de senha do Basic (curl -u :TOKEN); o usuário é ignorado.\n",
         };
 
         exit;
     }
 
-    /** Os cabeçalhos da recusa: o pedido de Basic no 401, o Retry-After no 429. */
     private static function authHeaders(AuthDecision $decision): void
     {
-        if ($decision->outcome->status() === 401) {
-            header('WWW-Authenticate: Basic realm="' . Auth::REALM . '"');
-        }
-
+        // Sem WWW-Authenticate no 401, de propósito: o Basic abriria o diálogo
+        // nativo do navegador em quem abrir /api/* numa aba, e o curl manda o
+        // Basic sem precisar de desafio.
         if ($decision->outcome === AuthOutcome::Locked) {
             header('Retry-After: ' . $decision->retryAfter);
         }
     }
 
     /** O texto do 429, com o tempo que falta em minutos e segundos. */
-    private static function lockedMessage(int $segundos): string
+    public static function lockedMessage(int $segundos): string
     {
         return sprintf(
             "Tentativas erradas demais: bloqueado por mais %d min %02d s.\n",

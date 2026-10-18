@@ -245,7 +245,7 @@ use App\Http\Respond;
   .alert details { margin-top: 8px; } .alert summary { color: var(--mut); cursor: pointer; font-size: 12px; }
   .alert details pre { margin: 6px 0 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; max-height: 220px; overflow: auto; }
 
-  textarea, input[type=text] {
+  textarea, input[type=text], .login input[type=password] {
     width: 100%;
     padding: 10px;
     border: 1px solid var(--line);
@@ -259,6 +259,7 @@ use App\Http\Respond;
   .campo { display: flex; align-items: center; gap: 12px; margin-bottom: 9px; }
   .campo label { width: 74px; flex: none; color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
   .row { display: flex; gap: 8px; margin-top: 11px; align-items: center; flex-wrap: wrap; }
+  .login { max-width: 480px; padding-top: 12vh; }
   .dica { color: var(--mut); font-size: 12px; margin: 11px 0 0; }
   .dica code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
 

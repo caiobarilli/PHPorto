@@ -51,9 +51,10 @@ final class PhpServer
             $dotenv,
         );
 
+        $nulo = DIRECTORY_SEPARATOR === '\\' ? 'NUL' : '/dev/null';
         $proc = proc_open(
             [PHP_BINARY, '-d', 'variables_order=EGPCS', '-S', '127.0.0.1:' . $porta, '-t', 'public', 'public/router.php'],
-            [0 => ['file', 'NUL', 'r'], 1 => ['file', 'NUL', 'w'], 2 => ['file', 'NUL', 'w']],
+            [0 => ['file', $nulo, 'r'], 1 => ['file', $nulo, 'w'], 2 => ['file', $nulo, 'w']],
             $pipes,
             $root,
             array_diff_key(getenv(), $dotenv, ['SQLITE_PATH' => '']),
@@ -85,16 +86,21 @@ final class PhpServer
     /**
      * Faz uma requisição sem seguir redirecionamento.
      *
-     * Recebe o método, o caminho, a senha do Basic (null = sem credencial) e o
-     * corpo de formulário. Devolve [status, cabeçalhos, corpo].
+     * Recebe o método, o caminho, a senha do Basic (null = sem credencial), o
+     * corpo de formulário e cabeçalhos extras. Devolve [status, cabeçalhos, corpo].
      *
      * @param array<string, string> $form
+     * @param list<string>          $headers
      *
      * @return array{0: int, 1: list<string>, 2: string}
      */
-    public function request(string $method, string $path, ?string $password, array $form = []): array
+    public function request(string $method, string $path, ?string $password, array $form = [], array $headers = []): array
     {
         $cabecalhos = $password === null ? '' : 'Authorization: Basic ' . base64_encode('qualquer:' . $password) . "\r\n";
+
+        foreach ($headers as $linha) {
+            $cabecalhos .= $linha . "\r\n";
+        }
         $corpo      = '';
 
         if ($form !== []) {

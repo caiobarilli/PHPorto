@@ -16,8 +16,11 @@ enum AuthOutcome
     /** Nenhuma credencial na requisição. Não conta como erro. */
     case Missing;
 
-    /** Credencial com o token errado. Conta como erro. */
+    /** Credencial com o token errado, ou cookie com assinatura errada. Conta como erro. */
     case Wrong;
+
+    /** Cookie com assinatura certa e prazo vencido. Não conta como erro. */
+    case Expired;
 
     /** Erros demais em seguida: bloqueado até o prazo acabar. */
     case Locked;
@@ -29,7 +32,8 @@ enum AuthOutcome
             self::Allowed       => 0,
             self::NotConfigured => 503,
             self::Missing,
-            self::Wrong         => 401,
+            self::Wrong,
+            self::Expired       => 401,
             self::Locked        => 429,
         };
     }
