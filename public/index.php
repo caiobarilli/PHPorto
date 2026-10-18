@@ -2,42 +2,6 @@
 
 declare(strict_types=1);
 
-/**
- * PHPorto — front controller.
- *
- * Recebe um comando pelo navegador, executa dentro da distro do WSL, devolve a
- * saída e guarda o registro no banco.
- *
- * Sobe com:  php -S 127.0.0.1:4001 -t public public/router.php
- *
- * O -t public NÃO é detalhe da linha de comando: é a defesa principal. Este
- * diretório é o ÚNICO servido pela web. src/, storage/, files/ e o .env ficam
- * fora dele, então não existe URL que os alcance — o 404 vem de não haver o
- * que servir, não de uma regra ter lembrado de proibir.
- *
- * Antes desta separação, o diretório servido era a raiz do projeto, e a única
- * defesa era uma expressão regular acertar todos os casos: /src/Config/Config.php
- * não é dotfile e passaria por qualquer regra escrita para dotfiles. Defende-se
- * com geografia o que não se deve defender com regex.
- *
- * O router.php continua, como segunda camada e como despachante das rotas.
- * O motivo completo está no docblock dele.
- *
- * E só 127.0.0.1. Nunca 0.0.0.0, nunca o IP da rede, nunca atrás de proxy:
- * esta página executa comando arbitrário com os privilégios do usuário do WSL,
- * e no Windows como Administrador. O token não muda isso: o Basic manda o token
- * em base64, que é codificação e não cifra. Acesso remoto é pelo túnel SSH.
- *
- * O PORTÃO DE TOKEN vem antes de qualquer rota, nas telas e em /api/*, com o
- * mesmo token e o mesmo contador de erros. Sem PHPORTO_AUTH_TOKEN nada é
- * servido (503). Nas telas, sem cookie válido, a resposta é 401 com o
- * formulário de entrada; em /api/*, o token vai no Basic e a recusa é 401 em
- * texto. Nenhum dos dois leva WWW-Authenticate, que é o que abre o diálogo
- * nativo do navegador. O 401 é exceção deliberada à regra do 404: as
- * superfícies desligadas respondem 404 para não confirmar que existem, mas
- * aqui a pessoa precisa ser solicitada.
- */
-
 use App\Http\Api;
 use App\Http\Auth;
 use App\Http\AuthOutcome;
@@ -52,11 +16,6 @@ use App\Win\UacPolicy;
 use App\Wsl\Distro;
 
 /**
- * A forma vem escrita por extenso porque um arquivo de script não tem onde
- * pendurar um @phpstan-import-type — o alias AppConfig vive no docblock da
- * classe Config. Se esta forma divergir de lá, o PHPStan acusa na primeira
- * passagem, que é o comportamento desejado.
- *
  * @var array{
  *     config: array{
  *         db_provider: string,
@@ -82,8 +41,6 @@ $config = $app['config'];
 
 date_default_timezone_set($config['tz']);
 
-// O router já resolveu e validou o caminho; o fallback existe para quem
-// executar o index.php diretamente (outro servidor, ou teste).
 $path = $_SERVER['PHPORTO_PATH'] ?? null;
 
 if (!is_string($path) || $path === '') {
@@ -99,7 +56,6 @@ if (!is_string($path) || $path === '') {
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $method = is_string($method) ? strtoupper($method) : 'GET';
 
-// --- Portão de token ---------------------------------------------------------
 $auth = new Auth(
     $config['auth_token'],
     dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . Auth::COUNTER_FILE,
@@ -120,10 +76,8 @@ $filesDir    = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'files';
 $distro      = new Distro($config['wsl']['distro']);
 $makeService = Closure::fromCallable($app['makeService']);
 
-// --- API -------------------------------------------------------------------
 if (str_starts_with($path, '/api/')) {
     if (!$config['api_enabled']) {
-        // 404 e não 403: a flag desligada não deve revelar que existe algo ali.
         Respond::notFound();
     }
 
@@ -138,14 +92,10 @@ if (str_starts_with($path, '/api/')) {
     $api->handle($path, $method);
 }
 
-// --- Telas -----------------------------------------------------------------
 if (!$config['dashboard_enabled']) {
     Respond::notFound();
 }
 
-// O marcador da elevação mora em storage/, ao lado do flags.json, e não em
-// files/: files/ é área de trabalho descartável do que está executando, e o
-// marcador precisa sobreviver a uma limpeza dela.
 $winDir    = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Win';
 $elevation = new Elevation(
     filesDir: $filesDir,
@@ -153,8 +103,6 @@ $elevation = new Elevation(
     winDir: $winDir,
 );
 
-// A política do UAC é lida só quando alguém pergunta (a /config e a ação
-// sensível), e uma vez por requisição. Ver UacPolicy.
 $uac = new UacPolicy();
 
 $pages = new Pages(
@@ -163,13 +111,10 @@ $pages = new Pages(
     makeService: $makeService,
     filesDir: $filesDir,
     elevation: $elevation,
-    // O painel do Hyper-V é decisão persistente, não prova de elevação: mora em
-    // storage/hyperv.json e sobrevive a reiniciar o servidor. Ver HypervGate.
     hyperv: new HypervGate(
         storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
         filesDir: $filesDir,
     ),
-    // A ação sensível: um prompt de UAC por execução. Ver OneShot.
     oneShot: new OneShot($filesDir, $winDir, $elevation, $uac),
     uac: $uac,
 );

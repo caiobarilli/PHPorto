@@ -8,59 +8,14 @@ use Closure;
 use RuntimeException;
 use stdClass;
 
-/**
- * A ação sensível: um prompt de UAC, um job, e o processo elevado sai.
- *
- * POR QUE EXISTE: com o PowerShell elevado longo de pé, qualquer processo do
- * usuário que lesse o nonce do marcador (o WSL inclusive) mandava job para
- * ele — e conseguia, sem prompt nenhum, instalar qualquer pacote do winget,
- * ligar o RDP ou abrir porta no firewall. O worker longo agora RECUSA essas
- * ações (ver WinAction::SENSITIVE e o $SENSIVEIS do worker.ps1), e cada uma
- * passa por aqui: um powershell.exe novo, aberto por Start-Process -Verb RunAs,
- * ou seja, com um prompt de UAC só para ela.
- *
- * O FLUXO, de ponta a ponta:
- *
- *   1. o PHP gera o id (e por isso sabe exatamente qual conclusão esperar) e
- *      grava o PEDIDO em files/win-oneshot-<id>.json: o job e o manifesto de
- *      src/Win tirado AGORA — para ação sensível, o momento de confiar em
- *      src/Win é o clique mais o prompt, e não a ligação de horas atrás;
- *   2. o SHA-256 desse arquivo e o do worker.ps1 vão na linha de comando,
- *      dentro de um stub em -EncodedCommand. O texto do usuário NUNCA entra
- *      ali: só caminhos que este código escreveu e dois hashes;
- *   3. o lançador roda em integridade Média e bloqueia enquanto o prompt está
- *      na tela. Recusado, sem resposta ou com erro, o pedido é apagado, e
- *      aceitar o prompt depois não roda nada;
- *   4. o stub confere o worker.ps1, o worker confere e CONSOME o pedido,
- *      prepara a pasta protegida e escreve ACEITO no .estado;
- *   5. o resultado chega pela pasta protegida, pelo id, como no worker longo.
- *
- * NÃO DEPENDE DO POWERSHELL ELEVADO LONGO: o pedido é autossuficiente. Só
- * depende do checkout (Elevation::configProblem) e de a política do UAC
- * garantir um prompt (UacPolicy).
- */
 final class OneShot
 {
-    /**
-     * Teto da linha de comando do processo elevado, em caracteres.
-     *
-     * O -Verb RunAs passa pelo ShellExecuteEx, que corta em ~2048 sem avisar.
-     * Com folga: acima disto a ação é recusada antes de abrir o prompt, em
-     * vez de chegar truncada do outro lado.
-     */
     public const MAX_ARGLINE = 1900;
 
-    /**
-     * O maior timeout que o pedido carrega. O worker recusa prazo_s fora de
-     * 60-3615 s; um PHPORTO_WINUTIL_TIMEOUT maior que isto vale até aqui para
-     * a ação sensível, em vez de a tornar inalcançável.
-     */
     public const MAX_TIMEOUT_S = 3600;
 
-    /** Folga do prazo do processo elevado sobre o timeout da ação. */
     public const PRAZO_FOLGA_S = 15;
 
-    /** Código do lançador quando a pessoa recusou o prompt (ERROR_CANCELLED). */
     private const EXIT_CANCELADO = 2;
 
     private const POLL_US = 100000;
@@ -69,10 +24,8 @@ final class OneShot
     private readonly Closure $runLauncher;
 
     /**
-     * @param (Closure(string, int): PsResult)|null $runLauncher roda o
-     *        lançador e devolve a saída dele; injetável para teste, e por
-     *        padrão o PsRunner
-     * @param int $startTimeout quanto esperar o ACEITO; só o teste muda
+     * @param (Closure(string, int): PsResult)|null $runLauncher
+     * @param int $startTimeout
      */
     public function __construct(
         private readonly string $filesDir,
@@ -86,18 +39,14 @@ final class OneShot
             ?? fn (string $lancador, int $timeout): PsResult => (new PsRunner($this->filesDir))->run($lancador, $timeout);
     }
 
-    /** O que impede uma ação sensível agora, ou null. */
     public function blockingReason(): ?string
     {
         return $this->elevation->configProblem() ?? $this->uac->blockingReason();
     }
 
     /**
-     * Abre o prompt, roda a ação e devolve a saída dela.
-     *
-     * @param array<string, string|int|bool> $params já validados pela WinAction
-     *
-     * @throws RuntimeException com a frase da tela, quando nada foi executado
+     * @param array<string, string|int|bool> $params
+     * @throws RuntimeException
      */
     public function dispatch(WinAction $acao, array $params, int $timeoutSeconds): PsResult
     {
@@ -109,9 +58,6 @@ final class OneShot
             throw new RuntimeException('A pasta de trabalho não existe: ' . $this->filesDir . '.');
         }
 
-        // A tela já confere antes de chamar; conferir de novo AQUI, antes de
-        // gravar o pedido, é o que garante que com o UAC fraco nada vai para
-        // files/ — e o pedido do sunshine pode levar senha e PIN.
         $bloqueio = $this->blockingReason();
 
         if ($bloqueio !== null) {
@@ -149,9 +95,6 @@ final class OneShot
             return (new JobChannel($this->filesDir))
                 ->collect($timeout, $id, Elevation::F_ORDEM_CANCELAR . '-' . $id);
         } finally {
-            // O pedido sai em todo caminho: se o prompt for aceito depois, não
-            // há o que rodar. Os resultados, na pasta protegida, saem pelo
-            // collect() — ou ficam para o recolhimento de órfãs.
             foreach ([$pedido, $estado, $lancador] as $arquivo) {
                 if (is_file($arquivo)) {
                     @unlink($arquivo);
@@ -160,20 +103,6 @@ final class OneShot
         }
     }
 
-    /**
-     * O stub que o processo elevado roda: confere o worker.ps1 e chama.
-     *
-     * Lê os bytes do worker UMA vez, confere o SHA-256 deles e roda o texto
-     * desses mesmos bytes — nada é carregado pelo caminho depois de conferido.
-     * Arquivo trocado depois do clique sai com 97, sem rodar nada.
-     *
-     * DOT-SOURCE (o ponto), e não &: medido no pwsh, com & o scriptblock ganha
-     * um escopo próprio, e o $script:filho que as funções do worker gravam
-     * deixa de ser o $filho que o código de cima lê. Com o ponto, os dois são o
-     * mesmo escopo, como quando o worker roda por -File.
-     *
-     * Público para o teste conferir o texto; o OneShot.Tests.ps1 roda um igual.
-     */
     public static function stub(string $worker, string $workerSha, string $pedido, string $pedidoSha): string
     {
         return '$b=[IO.File]::ReadAllBytes(' . PsScriptBuilder::literal($worker) . ');'
@@ -185,25 +114,12 @@ final class OneShot
             . ' -PedidoSha256 ' . PsScriptBuilder::literal($pedidoSha);
     }
 
-    /**
-     * A linha de comando do processo elevado: flags fixos e o stub em base64.
-     *
-     * -EncodedCommand é UTF-16LE em base64. O alfabeto não tem espaço nem
-     * aspa, então um caminho com espaço deixa de partir a linha.
-     */
     public static function argLine(string $stub): string
     {
         return '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand '
             . base64_encode(mb_convert_encoding($stub, 'UTF-16LE', 'UTF-8'));
     }
 
-    /**
-     * O lançador, que roda em integridade Média e pede a elevação.
-     *
-     * O -ArgumentList vai como UMA string: como array, o 5.1 junta os itens
-     * sem aspas. 1223 é ERROR_CANCELLED, o "Não" do prompt; ele vem como
-     * exceção interna, e o laço desce até ela.
-     */
     public static function launcherBody(string $argLine): string
     {
         return implode("\n", [
@@ -221,8 +137,6 @@ final class OneShot
     }
 
     /**
-     * Grava o pedido e devolve o SHA-256 dos bytes gravados.
-     *
      * @param array<string, string|int|bool> $params
      */
     private function writeRequest(string $caminho, string $id, WinAction $acao, array $params, int $timeout): string
@@ -234,16 +148,12 @@ final class OneShot
             'v'         => 1,
             'id'        => $id,
             'acao'      => $acao->value,
-            // Objeto sempre, e nunca lista: ver o JSON_FORCE_OBJECT do
-            // JobChannel::send(), o mesmo defeito medido.
             'params'    => $params === [] ? new stdClass() : $params,
             'php_pid'   => getmypid(),
             'raiz_win'  => $this->winDir,
             'dir'       => $this->filesDir,
             'criado_em' => $agora,
-            // Depois disto o pedido não vale, mesmo com o prompt aceito.
             'expira_em' => $agora + Elevation::ONESHOT_CONSENT_S + Elevation::ONESHOT_START_S,
-            // O teto de vida do processo elevado, se o PHP sumir sem cancelar.
             'prazo_s'   => $timeout + self::PRAZO_FOLGA_S,
             'manifesto' => $manifesto === [] ? new stdClass() : $manifesto,
         ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -252,21 +162,14 @@ final class OneShot
             throw new RuntimeException('Não foi possível gravar o pedido em ' . $this->filesDir . '.');
         }
 
-        // O hash é dos bytes gravados: é ele que o worker confere.
         return hash('sha256', $json);
     }
 
     /**
-     * Roda o lançador e espera a resposta ao prompt.
-     *
-     * @throws RuntimeException quando o prompt foi recusado, ficou sem
-     *                          resposta, ou o Windows não abriu o processo
+     * @throws RuntimeException
      */
     private function consent(string $lancador): void
     {
-        // ANTES do lançador: o Start-Process -Verb RunAs bloqueia enquanto o
-        // prompt está na tela, e no Windows o max_execution_time do cli-server
-        // conta tempo de relógio. Ver Elevation::TIME_LIMIT_MARGIN_S.
         set_time_limit(Elevation::ONESHOT_CONSENT_S + Elevation::TIME_LIMIT_MARGIN_S);
 
         $r     = ($this->runLauncher)($lancador, Elevation::ONESHOT_CONSENT_S);
@@ -294,9 +197,7 @@ final class OneShot
     }
 
     /**
-     * Espera o processo elevado dizer que aceitou o pedido.
-     *
-     * @throws RuntimeException quando ele recusou, ou não deu sinal
+     * @throws RuntimeException
      */
     private function awaitStart(string $estado): void
     {

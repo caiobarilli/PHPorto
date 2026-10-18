@@ -2,36 +2,6 @@
 
 declare(strict_types=1);
 
-/**
- * Roda o PHP-CS-Fixer sobre uma cópia do código em LF.
- *
- * POR QUE ESTE ARQUIVO EXISTE:
- *
- * O repositório se apoia no `core.autocrlf=true` do Windows, então a árvore de
- * trabalho tem `.php` em CRLF. O PSR-12 exige LF. Rodar `composer cs-check`
- * direto reporta 37 dos 53 arquivos como "podem ser corrigidos", e o diff de
- * cada um é o arquivo inteiro — o que esconde qualquer problema de estilo de
- * verdade no meio do ruído.
- *
- * MEDIDO, e foi surpresa: desligar a regra `line_ending` NÃO resolve. Com ela
- * fora, os 37 continuam, agora com um diff de cinco linhas cada — as regras do
- * PSR-12 que mexem no bloco de abertura (`<?php`, `declare`, `namespace`)
- * reescrevem aquele trecho em LF e deixam o arquivo misto. Não há uma chave que
- * faça o fixer ignorar fim de linha.
- *
- * Daí a cópia: converte para LF num diretório temporário, roda o fixer lá, e
- * devolve o código de saída. O que sobra no relatório é estilo de verdade.
- *
- * NÃO CORRIGE NADA NO LUGAR, de propósito. O fixer roda em `--dry-run` sobre a
- * cópia, que é descartada — escrever de volta traria o LF junto e brigaria com
- * o autocrlf a cada checkout. Para corrigir, `composer cs-fix` na árvore real;
- * o que ele mexe é estilo, e o fim de linha volta ao normal no próximo commit.
- */
-
-/**
- * Apaga a cópia. Chamada em todo caminho de saída, inclusive nos de erro:
- * deixar a cópia para trás encheria o temp de árvores do projeto.
- */
 function limpar(string $dir): void
 {
     if (!is_dir($dir)) {
@@ -114,9 +84,6 @@ foreach ($alvo as $dir) {
     }
 }
 
-// A config resolve os caminhos por __DIR__, então copiá-la para a raiz da
-// cópia é o que faz o finder apontar para lá, sem um segundo arquivo de
-// config para manter em dia.
 $config = file_get_contents($raiz . DIRECTORY_SEPARATOR . '.php-cs-fixer.php');
 
 if ($config === false) {
@@ -132,8 +99,6 @@ $fixer = $raiz . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'bin' . 
 
 echo "cs-check em cópia LF: {$copiados} arquivo(s) em {$tmp}\n";
 
-// --using-cache=no: o cache é indexado por caminho, e o caminho muda a cada
-// execução — um cache aqui nunca acertaria, e ainda deixaria lixo no temp.
 $comando = sprintf(
     '%s %s fix --dry-run --diff --config=%s --using-cache=no',
     escapeshellarg(PHP_BINARY),

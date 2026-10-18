@@ -14,17 +14,10 @@ use MongoDB\Client;
 use MongoDB\Collection;
 use MongoDB\Driver\Exception\Exception as MongoDriverException;
 
-/**
- * Implementação MongoDB do registro de execuções.
- *
- * Todo detalhe do driver (Client, Collection, UTCDateTime) fica confinado a
- * esta classe. Para fora, só a DatabaseProviderInterface e a StorageException.
- */
 final class MongoProvider implements DatabaseProviderInterface
 {
     private Collection $collection;
 
-    /** Coleção de estado da /win, derivada da outra. Ver a nota no SQLiteProvider. */
     private Collection $stateCollection;
 
     /**
@@ -32,9 +25,6 @@ final class MongoProvider implements DatabaseProviderInterface
      */
     public function __construct(array $config)
     {
-        // Driver opcional: mongodb/mongodb está em "suggest", não em "require".
-        // Checa a presença antes de usar qualquer classe do driver, para dar
-        // uma mensagem clara em vez de um "Class not found" cru do PHP.
         if (!class_exists(Client::class)) {
             throw new StorageException(
                 'Driver do MongoDB ausente. Rode "composer require mongodb/mongodb" e '
@@ -49,10 +39,6 @@ final class MongoProvider implements DatabaseProviderInterface
         try {
             $client           = new Client($config['uri']);
             $this->collection = $client->selectCollection($config['database'], $config['collection']);
-            // Coleção separada, e não um tipo de documento dentro da mesma:
-            // uma coleção só obrigaria toda consulta de execução a filtrar
-            // "documentos que não são estado", e o clear() de execuções
-            // passaria a poder levar o estado embora por descuido de filtro.
             $this->stateCollection = $client->selectCollection(
                 $config['database'],
                 $config['collection'] . self::STATE_SUFFIX
@@ -65,14 +51,6 @@ final class MongoProvider implements DatabaseProviderInterface
 
     public function insert(Execution $execution): Execution
     {
-        // Aqui a data é gerada por este código, não pelo servidor, então não há
-        // leitura de volta: o valor devolvido é exatamente o que foi gravado.
-        //
-        // Quando vem preenchida, é recolhimento de execução órfã, e a hora tem
-        // de ser a de TÉRMINO — a listagem ordena por created_at, e o "agora"
-        // poria a linha de ontem no topo do histórico de hoje. Ver a nota no
-        // SQLiteProvider. Data ilegível cai no agora em vez de derrubar a
-        // gravação: perder a hora é menos grave que perder a execução.
         $createdAt = new UTCDateTime();
 
         if ($execution->createdAt !== null) {
@@ -81,7 +59,6 @@ final class MongoProvider implements DatabaseProviderInterface
                     new \DateTimeImmutable($execution->createdAt, new \DateTimeZone('UTC'))
                 );
             } catch (\Exception) {
-                // Decisão: perder a hora é menos grave que perder a execução.
                 $createdAt = new UTCDateTime();
             }
         }
@@ -117,8 +94,6 @@ final class MongoProvider implements DatabaseProviderInterface
             $cursor = $this->collection->find(
                 self::kindFilter($kinds),
                 [
-                    // _id do Mongo é monotônico por processo e serve de desempate
-                    // quando duas execuções caem no mesmo milissegundo.
                     'sort'    => ['created_at' => -1, '_id' => -1],
                     'limit'   => $limit,
                     'typeMap' => ['root' => 'array', 'document' => 'array', 'array' => 'array'],
@@ -150,14 +125,7 @@ final class MongoProvider implements DatabaseProviderInterface
     }
 
     /**
-     * O filtro do Mongo por tipos.
-     *
-     * Recebe a lista de tipos, ou null para todos. Devolve o documento vazio
-     * para todos, e um $in com os valores — vazio, para lista vazia, que não
-     * casa nada.
-     *
      * @param list<ExecutionKind>|null $kinds
-     *
      * @return array<string, mixed>
      */
     private static function kindFilter(?array $kinds): array
@@ -171,24 +139,14 @@ final class MongoProvider implements DatabaseProviderInterface
 
     public function putWinState(WinState $state): WinState
     {
-        // A hora é gerada por este código, não pelo servidor — como no
-        // insert() —, então não há leitura de volta: o valor devolvido é
-        // exatamente o que foi gravado.
         $updatedAt = new UTCDateTime();
 
         try {
-            // replaceOne com upsert, e a chave é o _id: ele já é único e
-            // indexado por construção, então a garantia de uma linha por
-            // (escopo, ação) sai de graça, sem depender de um createIndex que
-            // numa coleção preexistente pode falhar sem ninguém notar. Ver a
-            // nota em WinState::key().
             $this->stateCollection->replaceOne(
                 ['_id' => $state->key()],
                 [
                     'scope'  => $state->scope->value,
                     'action' => $state->action,
-                    // Texto, como nos outros dois: subdocumento recusaria
-                    // chave com ponto ou '$'. Ver WinState::encodedPayload().
                     'payload'    => $state->encodedPayload(),
                     'updated_at' => $updatedAt,
                 ],
@@ -292,16 +250,11 @@ final class MongoProvider implements DatabaseProviderInterface
         );
     }
 
-    /**
-     * Índice de ordenação. NÃO é único: log de execução aceita repetição —
-     * ver a nota na DatabaseProviderInterface.
-     */
     private function ensureIndex(): void
     {
         $this->collection->createIndex(['created_at' => -1, '_id' => -1]);
     }
 
-    /** Converte o created_at (UTCDateTime) em ISO 8601, mantendo a saída agnóstica. */
     private function formatDate(mixed $value): ?string
     {
         if ($value instanceof UTCDateTime) {

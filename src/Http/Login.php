@@ -4,14 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http;
 
-/**
- * O portão das telas: formulário com o token, e um cookie assinado depois.
- *
- * O formulário substitui o diálogo nativo do Basic, que só aparece porque um
- * 401 leva WWW-Authenticate. Aqui o 401 leva HTML e nenhum desafio. O POST do
- * formulário volta para a própria tela pedida e é atendido antes de qualquer
- * rota; o 303 de sucesso leva de volta a ela por GET.
- */
 final class Login
 {
     public const FIELD = 'phporto_login';
@@ -37,9 +29,6 @@ final class Login
 
     public static function safeReturn(mixed $uri): string
     {
-        // Só caminho relativo à própria origem: "//host" e "/\host" o
-        // navegador lê como outro site, e controle no meio quebraria o
-        // cabeçalho Location.
         if (!is_string($uri) || preg_match('#^/(?![/\\\\])[^\\\\\x00-\x20\x7f]*$#D', $uri) !== 1) {
             return '/';
         }
@@ -80,8 +69,6 @@ final class Login
     private static function page(AuthDecision $decisao, string $aviso, bool $apagarCookie = false): never
     {
         if ($apagarCookie) {
-            // Cookie que não vale sai do navegador: sem isso, cada tela aberta
-            // com ele contaria mais um erro até o bloqueio.
             setcookie(Auth::COOKIE, '', self::cookieOptions(1));
         }
 
@@ -109,8 +96,6 @@ final class Login
     /** @return array{expires: int, path: string, secure: bool, httponly: bool, samesite: 'Strict'} */
     private static function cookieOptions(int $expires): array
     {
-        // Secure só quando a requisição veio por HTTPS: em http://127.0.0.1
-        // o navegador descartaria um cookie Secure, e ninguém entraria.
         $https = $_SERVER['HTTPS'] ?? '';
 
         return [

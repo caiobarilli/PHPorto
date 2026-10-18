@@ -7,130 +7,24 @@ namespace App\Win;
 use RuntimeException;
 use Throwable;
 
-/**
- * Liga e desliga o PowerShell elevado, e diz se ele está de pé.
- *
- * POR QUE O ESTADO NÃO VAI PARA O flags.json: o flags.json existe para
- * SOBREVIVER a reinício, e aqui se quer o contrário. O marcador guarda o PID
- * do próprio php -S junto com o do worker, e o servidor embutido é um
- * processo só — medido no Windows: nove requisições, cinco em série e quatro
- * simultâneas, todas com o mesmo PID (24584), e PHP_CLI_SERVER_WORKERS não
- * existe aqui. Então o PID é constante enquanto o servidor vive e muda quando
- * ele reinicia, o que invalida o marcador sozinho, sem ninguém precisar
- * limpar nada — a mesma ideia do JSON ilegível virando array vazio.
- *
- * POR QUE DESLIGAR NÃO MATA NINGUÉM: o php -S roda em integridade Média e o
- * worker em Alta. Medido: taskkill /F /T do PHP contra o worker devolve
- * rc=128 e "Acesso negado", e o processo segue vivo. Escrever para baixo
- * passa; matar para cima não. Então desligar é uma ORDEM em arquivo, que o
- * worker lê no próprio laço e obedece — 585 ms medidos entre a ordem e a
- * saída dele.
- *
- * POR QUE HÁ HEARTBEAT: sem ele, "o worker está vivo?" só se responderia
- * gastando ~200 ms de powershell.exe por carregamento de página, ou mentindo
- * até a primeira ação falhar. O worker reescreve um arquivo a cada 500 ms e
- * um filemtime() responde. É o mesmo critério do `wsl -l -q`: a checagem
- * barata que responde a pergunta real.
- */
 final class Elevation
 {
-    /**
-     * Quanto o POST espera pela prova de elevação.
-     *
-     * Medido nesta máquina: 921 ms da chamada à prova, sem nenhuma interação
-     * — porque aqui o ConsentPromptBehaviorAdmin é 0 e a elevação é
-     * silenciosa. Num Windows de fábrica aparece prompt na área segura e o
-     * tempo passa a ser humano: ler e clicar leva de 5 a 20 s. 30 s cobre
-     * isso com folga, e é o mesmo número do piso de timeout do WSL, o que dá
-     * à tela um vocabulário só.
-     */
     public const PROOF_TIMEOUT_S = 30;
 
-    /**
-     * Quanto o POST de desligar espera pela confirmação de que o worker saiu.
-     *
-     * Medido: 585 ms entre a ordem e a saída. 5 s é folga generosa; passado
-     * isso a tela diz que a ordem foi deixada e que o worker sai no próximo
-     * tique, em vez de pendurar a requisição por um processo que ela não pode
-     * matar de qualquer forma.
-     */
     public const SHUTDOWN_WAIT_S = 5;
 
-    /**
-     * Idade máxima do heartbeat para o worker contar como vivo.
-     *
-     * O tique do worker é 500 ms. Dez segundos é vinte tiques de tolerância —
-     * folgado para um disco ocupado, e curto o bastante para a tela não
-     * mentir por muito tempo depois de o worker morrer.
-     */
     public const HEARTBEAT_STALE_S = 10;
 
-    /**
-     * Tempo sem uso depois do qual o worker sai sozinho.
-     *
-     * O nonce fica legível no marcador, então qualquer processo Médio que o
-     * leia consegue mandar job enquanto o worker estiver de pé; sair quando
-     * ninguém usa encurta essa janela. Dez minutos é o timeout padrão de uma
-     * ação (PHPORTO_WINUTIL_TIMEOUT). O valor que vale é o $IDLE_TIMEOUT_S do
-     * worker.ps1; este só mostra o número na tela, e um teste confere os dois.
-     */
     public const IDLE_TIMEOUT_S = 600;
 
-    /**
-     * Margem dada ao limite de execução do PHP, acima do nosso próprio teto.
-     *
-     * MEDIDO, e foi surpresa: o `php -S` roda em SAPI cli-server com
-     * max_execution_time = 30 (o do php.ini), e NÃO com 0 como o CLI. Uma
-     * requisição de 35 s morre aos 30 com fatal — e morrer assim é o pior
-     * resultado possível aqui, porque a página quebra ANTES de o código
-     * conseguir dizer que a permissão não foi concedida e oferecer o "tentar
-     * novamente". Verificado: com PROOF_TIMEOUT_S em 30, o POST voltava 200
-     * com fatal, aviso vazio e nenhum botão de retentativa.
-     *
-     * A guarda do PHP não é removida, só levantada ACIMA da nossa: quem corta
-     * primeiro passa a ser o nosso timeout, que sabe explicar o que houve. Um
-     * laço com defeito ainda morre — só mais tarde, e com fatal, que é o
-     * comportamento certo para um bug nosso.
-     *
-     * Não é set_time_limit(0) de propósito: o php -S é um processo só e atende
-     * em série, então uma requisição que nunca termina congela a ferramenta
-     * inteira, sem volta a não ser matar o processo.
-     */
     public const TIME_LIMIT_MARGIN_S = 15;
 
-    /**
-     * Quanto uma ação sensível espera alguém responder ao prompt de UAC.
-     *
-     * Mais que o PROOF_TIMEOUT_S da ligação: aqui o prompt é sempre humano
-     * (com CPBA = 0 a ação sensível nem chega a abrir prompt, é recusada), e
-     * quem clicou pode estar lendo o que o prompt diz. Passado o prazo o
-     * pedido é apagado, e aceitar o prompt depois não roda nada.
-     */
     public const ONESHOT_CONSENT_S = 60;
 
-    /**
-     * Quanto o PHP espera o PowerShell de uso único dar sinal, depois de o
-     * prompt ser aceito. Ele confere o próprio arquivo e o pedido, prepara a
-     * pasta protegida e escreve ACEITO; numa máquina velha isso passa de
-     * alguns segundos, e 15 s ainda cabem.
-     */
     public const ONESHOT_START_S = 15;
 
-    /**
-     * O prefixo dos arquivos de um uso único em files/: o pedido
-     * (win-oneshot-<id>.json), o recado (.estado) e o lançador
-     * (win-oneshot-launcher-<id>.ps1). Ver OneShot.
-     */
     public const ONESHOT_PREFIX = 'win-oneshot-';
 
-    /**
-     * Nomes do canal.
-     *
-     * O worker.ps1 carrega os MESMOS nomes, e essa duplicação é inerente: um
-     * script PowerShell não compartilha constante com PHP. Ao renomear
-     * qualquer um deles, o worker precisa ser atualizado junto — não há
-     * checagem automática que acuse.
-     */
     public const F_HEARTBEAT = 'win-heartbeat';
 
     public const F_JOB = 'win-job.json';
@@ -143,34 +37,14 @@ final class Elevation
 
     public const F_MANIFESTO = 'win-manifesto.json';
 
-    /**
-     * A pasta, dentro de files/, onde o worker grava os scripts gerados e os
-     * resultados. A ACL dela é do worker: este lado só lê e apaga. Ver
-     * docs/seguranca.md.
-     */
     public const DIR_PROTEGIDA = 'win-protected';
 
-    /**
-     * Os dois .ps1 que o motor precisa em src/Win.
-     *
-     * Estão aqui, e não espalhados, porque as duas coisas que o Elevation faz
-     * com eles precisam concordar: o configProblem() confere que existem, e o
-     * launcherBody() manda o Windows rodar o worker. Se a checagem olhasse um
-     * caminho e o lançamento outro, a tela diria que está tudo bem antes de
-     * uma elevação que não sobe.
-     */
     public const SCRIPT_WORKER = 'worker.ps1';
 
     public const SCRIPT_BOOTSTRAP = 'bootstrap.ps1';
 
     /**
-     * @param string $winDir pasta src/Win, onde vivem o worker e o bootstrap
-     *
-     * O $winDir vem por parâmetro, e não de __DIR__, pelo mesmo motivo do
-     * $filesDir e do $storageDir: quem monta a aplicação decide onde as coisas
-     * estão, e um teste consegue apontar para uma árvore incompleta para ver a
-     * tela explicar o problema. Não é configuração — não sai do .env, e não há
-     * o que ajustar numa instalação.
+     * @param string $winDir
      */
     public function __construct(
         private readonly string $filesDir,
@@ -179,14 +53,6 @@ final class Elevation
     ) {
     }
 
-    /**
-     * O estado agora.
-     *
-     * NÃO APAGA marcador inválido, e isso é escolha: leitura sem efeito
-     * colateral. Marcador de outra execução do servidor já lê como
-     * desligado, então deixá-lo no disco não engana ninguém — e o enable()
-     * sobrescreve na próxima vez que alguém ligar.
-     */
     public function state(): ElevationState
     {
         $blocked = $this->configProblem();
@@ -202,8 +68,6 @@ final class Elevation
         }
 
         if ($marcador['php_pid'] !== getmypid()) {
-            // O servidor reiniciou desde que isto foi gravado. É o mecanismo
-            // funcionando, não uma falha.
             return new ElevationState(on: false);
         }
 
@@ -228,18 +92,6 @@ final class Elevation
         );
     }
 
-    /**
-     * Abre o PowerShell elevado e espera a prova.
-     *
-     * Devolve null quando ligou, ou a frase que vai para a tela quando não.
-     *
-     * UMA TENTATIVA, e não três: três tentativas somam dentro de uma
-     * requisição HTTP, e num Windows com prompt seriam três prompts em fila
-     * para quem cancelou o primeiro de propósito. Quem decide tentar de novo
-     * é quem viu o prompt — o botão "tentar novamente" na tela é a
-     * retentativa, e ela vem com token novo, o que preserva o "um token, uma
-     * execução".
-     */
     public function enable(): ?string
     {
         $blocked = $this->configProblem();
@@ -251,13 +103,11 @@ final class Elevation
         $nonce = bin2hex(random_bytes(8));
         $prova = $this->path($this->filesDir, 'win-prova-' . $nonce . '.txt');
 
-        // Sobras de uma tentativa anterior confundiriam a espera abaixo.
         $this->cleanupChannel();
 
         $launcher = $this->path($this->filesDir, 'win-launcher.ps1');
 
         try {
-            // O manifesto é tirado agora, uma vez por ligação: ver WinManifest.
             $manifesto = WinManifest::write($this->winDir, $this->path($this->filesDir, self::F_MANIFESTO));
             PsScriptBuilder::write($launcher, $this->launcherBody($nonce, $manifesto));
         } catch (Throwable $e) {
@@ -266,17 +116,9 @@ final class Elevation
 
         $runner = new PsRunner($this->filesDir);
 
-        // ANTES do lançador, e não depois: ver TIME_LIMIT_MARGIN_S. Com o UAC
-        // no padrão (CPBA = 5), o Start-Process -Verb RunAs BLOQUEIA enquanto
-        // o prompt está na tela, e no Windows o max_execution_time conta tempo
-        // de relógio. Levantado só depois, um prompt respondido aos ~28 s
-        // derrubava a requisição com fatal antes de ela dizer o que houve.
         set_time_limit(self::PROOF_TIMEOUT_S + self::TIME_LIMIT_MARGIN_S);
 
         try {
-            // Com CPBA = 0 o lançador dispara o Start-Process e sai na hora;
-            // com prompt, ele volta quando a pessoa responde. A espera pela
-            // prova, logo abaixo, é a que vale.
             $r = $runner->run($launcher, self::PROOF_TIMEOUT_S);
         } catch (RuntimeException $e) {
             return 'Não foi possível chamar o powershell.exe: ' . $e->getMessage();
@@ -305,8 +147,6 @@ final class Elevation
         if ($bruto === null) {
             @unlink($prova);
 
-            // A saída do lançador é o que diz se o UAC foi recusado: um
-            // Start-Process -Verb RunAs cancelado devolve erro por ali.
             $extra = trim($r->output);
 
             return 'A permissão de Administrador não foi concedida'
@@ -314,8 +154,6 @@ final class Elevation
                 . ($extra === '' ? '' : ' O PowerShell disse: ' . $extra);
         }
 
-        // O worker subiu elevado e recusou continuar: manifesto que não bate
-        // ou pasta protegida suspeita. O motivo veio na prova.
         if (str_starts_with($bruto, 'ERRO=')) {
             @unlink($prova);
 
@@ -332,9 +170,6 @@ final class Elevation
         }
 
         if (!$this->writeMarker($psPid, $nonce)) {
-            // O worker está de pé e o PHP não consegue gravar o marcador.
-            // Sem marcador ninguém acha esse processo depois, então a ordem
-            // de desligar vai agora, enquanto o nome do arquivo é conhecido.
             $this->order(self::F_ORDEM_DESLIGAR);
 
             return 'Não foi possível gravar ' . $this->markerPath()
@@ -344,19 +179,10 @@ final class Elevation
         return null;
     }
 
-    /**
-     * Manda o worker sair e devolve a frase para a tela.
-     *
-     * O marcador é apagado ANTES da espera: a tela precisa mostrar desligado
-     * mesmo que o worker demore a obedecer, porque o estado que a pessoa
-     * pediu é esse.
-     */
     public function disable(): string
     {
         $marcador = $this->readMarker();
 
-        // is_file() antes: desligar sem nada ligado é caminho normal, e o
-        // unlink emitiria warning nele.
         if (is_file($this->markerPath())) {
             @unlink($this->markerPath());
         }
@@ -385,19 +211,15 @@ final class Elevation
             return 'PowerShell desligado' . ($pid === null ? '' : ' (PID ' . $pid . ')') . '.';
         }
 
-        // Não é falha: o PHP não pode matar processo de integridade Alta, então
-        // o encerramento depende do próximo tique do worker.
         return 'Ordem de desligar deixada. O PowerShell elevado sai no próximo tique — '
             . 'o PHP não pode encerrá-lo direto, porque roda em integridade menor.';
     }
 
-    /** Caminho do arquivo de trabalho, para quem for enfileirar um job. */
     public function jobPath(): string
     {
         return $this->path($this->filesDir, self::F_JOB);
     }
 
-    /** Nonce em vigor, ou null. Quem monta um job precisa carimbá-lo. */
     public function nonce(): ?string
     {
         return $this->readMarker()['nonce'] ?? null;
@@ -408,29 +230,11 @@ final class Elevation
         return $this->path($this->storageDir, self::F_MARCADOR);
     }
 
-    /** Escreve uma ordem para o worker. O conteúdo não importa; a presença sim. */
     public function order(string $nome): bool
     {
         return @file_put_contents($this->path($this->filesDir, $nome), "1\n") !== false;
     }
 
-    /**
-     * O que impede até de tentar ligar, ou null.
-     *
-     * ANTES ISTO OLHAVA O .env. Havia uma chave, PHPORTO_WINUTIL_PATH, que
-     * apontava para um projeto externo, e a maioria dos problemas daqui era
-     * alguém não tê-la preenchido. As ações moram neste repositório desde a
-     * migração, então não há mais nada a configurar — e o que sobrou de
-     * verificável é o checkout.
-     *
-     * Não é checagem inútil por isso: `git clone` parcial, sparse-checkout, um
-     * .gitignore mal escrito ou um deploy que copiou só o que o autoloader
-     * conhece deixam src/Win sem os .ps1. Sem esta mensagem, o sintoma seria
-     * uma elevação que sobe e sai em silêncio, ou um job que nunca conclui.
-     *
-     * Pública porque a ação sensível (OneShot) não depende do PowerShell
-     * elevado longo, mas depende do mesmo checkout.
-     */
     public function configProblem(): ?string
     {
         foreach ([self::SCRIPT_WORKER, self::SCRIPT_BOOTSTRAP] as $nome) {
@@ -450,29 +254,18 @@ final class Elevation
         return null;
     }
 
-    /** Caminho de um dos .ps1 do motor. */
     private function scriptPath(string $nome): string
     {
         return rtrim($this->winDir, '\\/') . DIRECTORY_SEPARATOR . $nome;
     }
 
     /**
-     * O marcador, ou null quando ausente, ilegível ou incompleto.
-     *
-     * JSON ilegível vira null, e null significa desligado — a falha cai para
-     * o lado seguro por construção, não por tratamento de erro. É a mesma
-     * regra do Flags, e aqui o lado seguro é não afirmar que existe um
-     * processo elevado de pé.
-     *
      * @return array{php_pid: int, ps_pid: int, nonce: string, provado_em: string}|null
      */
     private function readMarker(): ?array
     {
         $caminho = $this->markerPath();
 
-        // is_file() antes de ler: marcador ausente é o estado NORMAL (nada
-        // ligado), e o file_get_contents emitiria warning num caminho que não
-        // é excepcional — o "@" não o silencia sob o error handler do PHPUnit.
         if (!is_file($caminho)) {
             return null;
         }
@@ -525,13 +318,10 @@ final class Elevation
         return @file_put_contents($this->markerPath(), $json . "\n", LOCK_EX) !== false;
     }
 
-    /** Idade do heartbeat em segundos, ou null quando não há arquivo. */
     private function heartbeatAge(): ?int
     {
         $caminho = $this->path($this->filesDir, self::F_HEARTBEAT);
 
-        // Sem clearstatcache o filemtime devolve o valor da primeira leitura
-        // da requisição, e a espera do disable() nunca veria o arquivo sumir.
         clearstatcache(true, $caminho);
 
         if (!is_file($caminho)) {
@@ -543,7 +333,6 @@ final class Elevation
         return is_int($mt) ? max(0, time() - $mt) : null;
     }
 
-    /** Apaga sobras do canal, para uma tentativa não ler resposta da anterior. */
     private function cleanupChannel(): void
     {
         foreach ([self::F_ORDEM_DESLIGAR, self::F_ORDEM_CANCELAR, self::F_JOB, self::F_HEARTBEAT, self::F_MANIFESTO] as $nome) {
@@ -554,28 +343,11 @@ final class Elevation
             @unlink($antiga);
         }
 
-        // Sobras de um uso único cuja requisição morreu antes do finally.
         foreach (glob($this->filesDir . DIRECTORY_SEPARATOR . self::ONESHOT_PREFIX . '*') ?: [] as $antiga) {
             @unlink($antiga);
         }
     }
 
-    /**
-     * O corpo do lançador.
-     *
-     * NÃO DÁ PARA REDIRECIONAR a saída de um processo elevado: medido,
-     * Start-Process -Verb RunAs junto de -RedirectStandardOutput devolve
-     * "o conjunto de parâmetros não pode ser resolvido". É por isso que a
-     * prova de que o worker subiu chega por ARQUIVO, e não por pipe.
-     *
-     * O -ArgumentList VAI COMO UMA STRING SÓ. Como array, o Start-Process do
-     * 5.1 junta os itens com espaço e SEM aspas, e um projeto em
-     * "C:\Meus Projetos" chegava ao powershell.exe partido em dois argumentos.
-     * Na string, os caminhos vão entre aspas duplas; o resto é número, nonce
-     * e hash, que não têm espaço. A string inteira entra como literal de
-     * apóstrofo simples: dentro dele o PowerShell não interpola nada, então
-     * nem um caminho com $ ou crase vira código.
-     */
     private function launcherBody(string $nonce, string $manifestoSha256): string
     {
         $argLine = implode(' ', [
@@ -594,13 +366,6 @@ final class Elevation
         );
     }
 
-    /**
-     * Um caminho entre aspas duplas, para uma linha de comando do Windows.
-     *
-     * Sem barra no fim: na linha de comando do Windows, \" é aspa escapada, e
-     * "C:\files\" engoliria a aspa que fecha. Caminho do Windows não tem aspa
-     * dupla dentro, então não há o que escapar.
-     */
     private static function quoted(string $caminho): string
     {
         return '"' . rtrim($caminho, '\\/') . '"';

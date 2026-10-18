@@ -6,23 +6,13 @@ namespace App\Win;
 
 use RuntimeException;
 
-/**
- * Leitura dos JSON de src/Win/config, os mesmos que as ações do PowerShell leem.
- */
 final class WinConfig
 {
-    /** Valores de Type que, no tweaks.json, são controles da janela do WinUtil e não tweaks. */
     public const NOT_TWEAK_TYPES = ['Button', 'Combobox'];
 
     /**
-     * Os pacotes APPX que a ação debloat remove, na ordem do arquivo.
-     *
-     * Recebe, opcionalmente, outra pasta de config (para teste). Devolve a
-     * lista de nomes de pacote.
-     *
      * @return list<string>
-     *
-     * @throws RuntimeException se o arquivo faltar ou não for uma lista de nomes
+     * @throws RuntimeException
      */
     public static function debloat(?string $dir = null): array
     {
@@ -46,8 +36,6 @@ final class WinConfig
     }
 
     /**
-     * O rótulo e o texto de cada opção de DNS da tela: as chaves do dns.json e o DHCP.
-     *
      * @var array<string, array{0: string, 1: string}>
      */
     public const DNS_TEXTS = [
@@ -64,13 +52,8 @@ final class WinConfig
     ];
 
     /**
-     * Os provedores de DNS do dns.json, na ordem do arquivo.
-     *
-     * Recebe, opcionalmente, outra pasta de config. Devolve as chaves.
-     *
      * @return list<string>
-     *
-     * @throws RuntimeException se o arquivo faltar ou não for um mapa de provedores
+     * @throws RuntimeException
      */
     public static function dnsProviders(?string $dir = null): array
     {
@@ -84,16 +67,8 @@ final class WinConfig
     }
 
     /**
-     * Os tweaks que a tela oferece, na ordem do tweaks.json.
-     *
-     * Recebe, opcionalmente, outra pasta de config. Devolve um item por
-     * entrada cujo Type não é Button nem Combobox, com a chave, o Content, a
-     * Description, o category sem o prefixo de ordenação "z__", se o category
-     * pede cuidado, e se o script do tweak avisa o Explorer.
-     *
      * @return list<array{key: string, content: string, description: string, category: string, caution: bool, explorer: bool}>
-     *
-     * @throws RuntimeException se o arquivo faltar ou não for um mapa de tweaks
+     * @throws RuntimeException
      */
     public static function tweaks(?string $dir = null): array
     {
@@ -140,18 +115,10 @@ final class WinConfig
         return $itens;
     }
 
-    /** O arquivo de tradução dos tweaks, do projeto, ao lado do tweaks.json. */
     public const TWEAKS_TRANSLATION = 'tweaks.pt-BR';
 
     /**
-     * Os tweaks com o rótulo, a descrição e a categoria em português.
-     *
-     * Recebe os tweaks de tweaks() e, opcionalmente, outra pasta de config.
-     * Cada texto sem tradução, ou o arquivo inteiro ausente ou ilegível, fica
-     * como veio do tweaks.json. Chave, caution e explorer não mudam.
-     *
      * @param list<array{key: string, content: string, description: string, category: string, caution: bool, explorer: bool}> $tweaks
-     *
      * @return list<array{key: string, content: string, description: string, category: string, caution: bool, explorer: bool}>
      */
     public static function translateTweaks(array $tweaks, ?string $dir = null): array
@@ -159,7 +126,6 @@ final class WinConfig
         try {
             $dados = self::json($dir, self::TWEAKS_TRANSLATION);
         } catch (RuntimeException) {
-            // Decisão: sem tradução legível, os textos ficam como vieram do tweaks.json.
             return $tweaks;
         }
 
@@ -188,14 +154,8 @@ final class WinConfig
     }
 
     /**
-     * As chaves dos tweaks que a tela oferece.
-     *
-     * Recebe, opcionalmente, outra pasta de config. Devolve as chaves na ordem
-     * do tweaks.json.
-     *
      * @return list<string>
-     *
-     * @throws RuntimeException se o tweaks.json não puder ser lido
+     * @throws RuntimeException
      */
     public static function tweakKeys(?string $dir = null): array
     {
@@ -203,15 +163,8 @@ final class WinConfig
     }
 
     /**
-     * Os presets do preset.json, cada um reduzido às chaves que existem no tweaks.json.
-     *
-     * Recebe, opcionalmente, outra pasta de config. Devolve o nome do preset
-     * em minúsculas, como a WinAction o aceita, apontando para a lista de
-     * chaves na ordem do preset.json.
-     *
      * @return array<string, list<string>>
-     *
-     * @throws RuntimeException se um dos dois arquivos não puder ser lido
+     * @throws RuntimeException
      */
     public static function presets(?string $dir = null): array
     {
@@ -244,13 +197,7 @@ final class WinConfig
     }
 
     /**
-     * O nome do preset que uma seleção de tweaks reproduz.
-     *
-     * Recebe as chaves marcadas e os presets já reduzidos por presets().
-     * Devolve o nome do preset cujo conjunto é igual ao da seleção, "custom"
-     * quando nenhum é, e string vazia para seleção vazia.
-     *
-     * @param list<string>                $selecao
+     * @param list<string> $selecao
      * @param array<string, list<string>> $presets
      */
     public static function matchPreset(array $selecao, array $presets): string
@@ -274,13 +221,6 @@ final class WinConfig
         return 'custom';
     }
 
-    /**
-     * Escapa os caracteres de controle crus que aparecem dentro de strings JSON.
-     *
-     * Recebe o texto do arquivo. Devolve o mesmo texto com cada byte abaixo de
-     * 0x20 que está dentro de uma string trocado pelo escape \uXXXX; fora das
-     * strings, nada muda.
-     */
     public static function escapeControlChars(string $texto): string
     {
         $saida    = '';
@@ -314,12 +254,7 @@ final class WinConfig
     }
 
     /**
-     * Lê e decodifica um JSON de config pelo nome.
-     *
-     * Recebe a pasta (ou null para src/Win/config) e o nome sem extensão.
-     * Devolve o valor decodificado.
-     *
-     * @throws RuntimeException se o arquivo faltar ou não for JSON válido
+     * @throws RuntimeException
      */
     private static function json(?string $dir, string $nome): mixed
     {

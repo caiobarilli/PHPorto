@@ -2,28 +2,12 @@
 
 declare(strict_types=1);
 
-/**
- * Gera o token de acesso do PHPorto e grava em PHPORTO_AUTH_TOKEN no .env.
- *
- * Rode na raiz do projeto:  php token.php
- *
- * Imprime o token na tela. Se o .env já tem um token, avisa e pede
- * confirmação antes de trocar — trocar derruba o acesso de quem estava dentro.
- *
- * É O ÚNICO LUGAR DO PROJETO QUE ESCREVE NO .env, e a exceção confirma a
- * regra: quem escreve é este script de linha de comando, rodado por quem é
- * dono da máquina. O processo web nunca escreve no .env. Isto não é permissão
- * para uma tela fazer o mesmo.
- */
-
 use App\Config\EnvFile;
 
 require __DIR__ . '/vendor/autoload.php';
 
-/** A chave do .env. */
 const PHPORTO_TOKEN_KEY = 'PHPORTO_AUTH_TOKEN';
 
-/** Bytes aleatórios do token; em hexadecimal, o dobro de caracteres. */
 const PHPORTO_TOKEN_BYTES = 32;
 
 if (PHP_SAPI !== 'cli') {
@@ -63,8 +47,6 @@ if ($atual !== null && $atual !== '') {
 
 $token = bin2hex(random_bytes(PHPORTO_TOKEN_BYTES));
 
-// Troca por arquivo temporário e rename: uma escrita interrompida no meio não
-// deixa o .env, que guarda credencial de banco, pela metade.
 $temporario = $arquivo . '.tmp-' . bin2hex(random_bytes(4));
 
 if (file_put_contents($temporario, EnvFile::with($conteudo, PHPORTO_TOKEN_KEY, $token)) === false

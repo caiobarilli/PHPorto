@@ -8,16 +8,6 @@ use Closure;
 use InvalidArgumentException;
 use RuntimeException;
 
-/**
- * O arquivo enviado pelo card de anexos, do formulário até o WSL.
- *
- * O PHP guarda o envio numa pasta temporária dele, que o WSL não enxerga. Por
- * isso o arquivo passa para a pasta de trabalho (files/, a mesma do cmd.sh,
- * que o WSL já lê por /mnt/<letra>/...) e de lá o cp do anexo copia para o
- * destino. A cópia temporária sai no finally, com sucesso ou falha.
- *
- * O registro guarda nome, tamanho e destino. Nunca o conteúdo.
- */
 final class Upload
 {
     public const MAX_BYTES = 25 * 1024 * 1024;
@@ -29,7 +19,7 @@ final class Upload
     private const NAME_MAX_BYTES = 255;
 
     /**
-     * @param Closure(string): bool         $isUploaded
+     * @param Closure(string): bool $isUploaded
      * @param Closure(string, string): bool $move
      */
     public function __construct(
@@ -126,7 +116,7 @@ final class Upload
     }
 
     /**
-     * @throws InvalidArgumentException com a frase que vai para quem mandou
+     * @throws InvalidArgumentException
      */
     public static function destination(mixed $raw): string
     {
@@ -143,8 +133,7 @@ final class Upload
 
     /**
      * @return array{name: string, size: int, tmp: string}
-     *
-     * @throws InvalidArgumentException com a frase que vai para quem mandou
+     * @throws InvalidArgumentException
      */
     public function accept(mixed $file, int $limit): array
     {
@@ -199,10 +188,9 @@ final class Upload
     }
 
     /**
-     * @param array{name: string, size: int, tmp: string}                 $file
-     * @param Closure(string, array<string, string>): RunResult          $run
-     *
-     * @throws RuntimeException se a pasta de trabalho não aceitar o arquivo
+     * @param array{name: string, size: int, tmp: string} $file
+     * @param Closure(string, array<string, string>): RunResult $run
+     * @throws RuntimeException
      */
     public function copy(array $file, string $destination, Closure $run): RunResult
     {

@@ -6,38 +6,11 @@ namespace App\Win;
 
 use Closure;
 
-/**
- * A política do UAC desta máquina, lida do registro, e o que ela permite.
- *
- * POR QUE EXISTE: a ação sensível só vale a pena porque cada execução pede um
- * prompt. Com o UAC silencioso (ConsentPromptBehaviorAdmin = 0) ou desligado
- * (EnableLUA = 0) não há prompt nenhum, e rodar mesmo assim daria a impressão
- * de uma proteção que não existe. Nesses casos a ação sensível é RECUSADA, com
- * a correção na frase. Política que não deu para ler também recusa: o lado
- * fechado é o padrão.
- *
- * NÃO É TRANCA, e isto fica escrito para ninguém ler como se fosse: a leitura
- * é feita em integridade Média, então um processo Médio consegue forjá-la. Não
- * importa: com CPBA = 0 ou EnableLUA = 0 esse processo eleva sozinho de
- * qualquer jeito. A checagem existe para a tela não mentir e para empurrar a
- * máquina de volta ao padrão. A tranca é o próprio UAC, mais o worker longo
- * recusando as sensíveis.
- *
- * QUEM MUDA O CPBA É A PESSOA, À MÃO (secpol.msc ou reg add num prompt
- * elevado). Uma ação do PHPorto que escrevesse política de UAC seria ruim de
- * raiz. Ver docs/seguranca.md.
- *
- * reg.exe, e não powershell.exe: um processo de dezenas de ms contra ~200 ms.
- * Roda só quando alguém precisa saber (a /config e o despacho sensível), uma
- * vez por requisição.
- */
 final class UacPolicy
 {
     public const REG_KEY = 'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System';
 
     /**
-     * O valor que o Windows usa quando a chave não existe no registro.
-     *
      * @var array<string, int>
      */
     public const DEFAULTS = [
@@ -47,20 +20,16 @@ final class UacPolicy
         'ConsentPromptBehaviorUser'  => 3,
     ];
 
-    /** A correção do UAC silencioso, colável num prompt elevado. */
     public const FIX_CPBA = 'reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"'
         . ' /v ConsentPromptBehaviorAdmin /t REG_DWORD /d 5 /f';
 
-    /** O cabeçalho que o reg.exe imprime antes dos valores, em qualquer idioma. */
     private const REG_HEADER = 'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System';
 
-    /** @var array<string, int>|null|false false = ainda não lido */
+    /** @var array<string, int>|null|false */
     private array|false|null $values = false;
 
     /**
-     * @param (Closure(): ?string)|null $query devolve a saída do reg.exe, ou
-     *                                         null quando falhou; injetável
-     *                                         para teste
+     * @param (Closure(): ?string)|null $query
      */
     public function __construct(
         private readonly ?Closure $query = null,
@@ -68,11 +37,6 @@ final class UacPolicy
     }
 
     /**
-     * Os valores lidos, com os padrões no lugar dos ausentes, ou null.
-     *
-     * Lidos uma vez por instância: a política não muda no meio de uma
-     * requisição, e cada leitura é um processo.
-     *
      * @return array<string, int>|null
      */
     public function values(): ?array
@@ -90,11 +54,6 @@ final class UacPolicy
         return self::judge($this->values());
     }
 
-    /**
-     * Por que uma ação sensível não pode rodar agora, ou null quando pode.
-     *
-     * Cada frase diz o que fazer. Nada foi executado em nenhum dos casos.
-     */
     public function blockingReason(): ?string
     {
         return match ($this->verdict()) {
@@ -117,7 +76,6 @@ final class UacPolicy
         };
     }
 
-    /** Uma linha para a /config: em que pé o UAC está, e o que isso faz com as ações sensíveis. */
     public function summary(): string
     {
         $cpba = $this->values()['ConsentPromptBehaviorAdmin'] ?? null;
@@ -135,12 +93,6 @@ final class UacPolicy
     }
 
     /**
-     * Os valores DWORD da saída do reg.exe, com os padrões no lugar dos
-     * ausentes, ou null quando a saída não é a da chave.
-     *
-     * O cabeçalho com o nome da chave é a âncora: o reg.exe o imprime em
-     * qualquer idioma do Windows, e saída sem ele é erro ou lixo.
-     *
      * @return array<string, int>|null
      */
     public static function parse(string $saida): ?array
@@ -180,11 +132,6 @@ final class UacPolicy
         };
     }
 
-    /**
-     * A saída do reg.exe, ou null quando falhou ou não é Windows.
-     *
-     * A linha de comando é fixa: nenhum texto de fora entra nela.
-     */
     private static function queryRegistry(): ?string
     {
         if (PHP_OS_FAMILY !== 'Windows') {

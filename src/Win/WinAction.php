@@ -8,35 +8,6 @@ use App\Domain\WinStateScope;
 use InvalidArgumentException;
 use RuntimeException;
 
-/**
- * As dezessete ações do Windows, e a allowlist do lado PHP.
- *
- * ESTA NÃO É A TRANCA. A tranca é a allowlist do worker.ps1, que roda em
- * integridade Alta e é a última a validar antes de executar. Esta classe é a
- * primeira barreira: recusa no servidor o que o formulário mandou errado, com
- * mensagem que a pessoa entende, em vez de deixar o worker recusar em silêncio
- * do outro lado de um arquivo.
- *
- * As duas listas são deliberadamente redundantes. Quem escrever no arquivo de
- * trabalho sem passar por aqui — que é exatamente o cenário que a allowlist do
- * worker existe para cobrir — não é barrado por esta classe.
- *
- * REDUNDANTE NÃO É AUTOMÁTICO: nada no PHP obriga o $ALLOWLIST do worker a
- * acompanhar este enum, e uma ação que entre só de um lado fica pela metade —
- * aceita aqui e recusada lá, ou o contrário. Quem acusa isso é o teste de
- * paridade em tests/Unit/WinActionTest.php, que lê o worker.ps1 e compara as
- * duas listas.
- *
- * A ORDEM DOS CASOS É A DO MENU, de [1] a [15], e a tela repete essa ordem nas
- * seções dela. As duas últimas, hyperv e hyperv-vm, são fora do menu: atendem a
- * rota /hyperv, e por isso vêm depois, sem seção na /win.
- *
- * Os nomes dos parâmetros devolvidos por validate() são os nomes EXATOS dos
- * parâmetros das ações (Preset, Provider, PrimaryDNS...), e não nomes próprios
- * traduzidos: o bootstrap.ps1 faz splatting direto neles, então renomear no
- * meio do caminho obrigaria a manter um mapa em algum lugar, e mapa é onde uma
- * ponta fica para trás.
- */
 enum WinAction: string
 {
     case Audit = 'audit';
@@ -55,43 +26,17 @@ enum WinAction: string
     case Rdp = 'rdp';
     case Sunshine = 'sunshine';
 
-    /**
-     * A décima sexta é FORA DO MENU da /win: ela atende a rota própria /hyperv,
-     * que lista as máquinas virtuais. Está no enum porque é ação do Windows como
-     * as outras — passa pela allowlist do worker e pelo despachante —, mas não
-     * tem seção na tela /win, e por isso vem depois da ordem de [1] a [15].
-     */
     case Hyperv = 'hyperv';
 
-    /**
-     * A décima sétima, também fora do menu: liga, desliga ou reinicia UMA VM
-     * da /hyperv, achada pelo VMId (GUID) e nunca pelo nome. Toda subação é
-     * sensível (ver SENSITIVE): cada clique abre o próprio prompt de UAC.
-     */
     case HypervVm = 'hyperv-vm';
 
-    /**
-     * Teto de bytes de qualquer campo de texto livre.
-     *
-     * Existe porque o arquivo de trabalho é lido por um processo elevado: um
-     * campo sem teto é um jeito de fazer o worker gastar memória com algo que
-     * nenhum parâmetro do winutil aceitaria. 4 KB é folgado para uma lista de
-     * IDs do winget ou de nomes de processo — os usos reais ficam em dezenas
-     * de bytes.
-     */
     public const MAX_PARAM_BYTES = 4096;
 
-    /** Provider que o Invoke-DNS aceita além das chaves do dns.json: devolve o DNS ao automático. */
     public const DNS_EXTRA = ['DHCP'];
 
     public const TWEAK_PRESETS = ['standard', 'minimal', 'advanced'];
 
     /**
-     * Os principais que a tela oferece como caixa no install, por ID do winget.
-     *
-     * Cada ID foi conferido com winget show --id --exact na fonte winget. As
-     * caixas só somam ao campo livre, que continua aceitando qualquer ID.
-     *
      * @var array<string, string>
      */
     public const INSTALL_SUGGESTIONS = [
@@ -108,53 +53,18 @@ enum WinAction: string
 
     public const EXPORTER_SUBACTIONS = ['install', 'status', 'start', 'stop', 'metrics', 'firewall'];
 
-    /** O gpu troca o firewall do exporter por uninstall. Conferido no Invoke-GPU. */
     public const GPU_SUBACTIONS = ['install', 'status', 'start', 'stop', 'metrics', 'uninstall'];
 
-    /**
-     * O gdid não instala nem para nada: ele liga e desliga um pipeline inteiro.
-     *
-     * Daí o conjunto não se parecer com o do exporter nem com o do gpu. E
-     * `disable` bloqueia domínios de notificação no hosts, o que é efeito
-     * amplo e recuperável apenas rodando `enable` — por isso o gdid não entra
-     * em preset nenhum: é ação escolhida a dedo, nunca efeito colateral.
-     */
     public const GDID_SUBACTIONS = ['status', 'disable', 'enable'];
 
-    /**
-     * O rdp lê e liga/desliga o acesso remoto, e liga/reverte o vídeo H.264/UDP.
-     *
-     * status só lê; on/off valem na hora (Applied); h264-on/h264-off só valem
-     * depois de reiniciar (PendingReboot). Ver stateChange().
-     */
     public const RDP_SUBACTIONS = ['status', 'on', 'off', 'h264-on', 'h264-off'];
 
-    /**
-     * O sunshine lê, instala pelo winget, sobe e para o serviço, abre/fecha a
-     * porta no firewall, grava as credenciais da Web UI e pareia um Moonlight.
-     *
-     * set-creds e pair são as duas que levam texto da pessoa (usuário, senha,
-     * PIN, nome do dispositivo); as outras seis recusam esses campos. O PIN é
-     * PEDIDO na tela, mas nunca GUARDADO: ver SECRET_PARAMS. Só start e stop
-     * mexem no estado do serviço; ver stateChange().
-     */
     public const SUNSHINE_SUBACTIONS = ['status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close', 'set-creds', 'pair'];
 
-    /** As subações do sunshine que levam credencial. As outras recusam os campos dela. */
     public const SUNSHINE_CRED_SUBACTIONS = ['set-creds', 'pair'];
 
-    /** Os campos de texto que só set-creds e pair aceitam, mais a caixa SetCreds. */
     public const SUNSHINE_CRED_FIELDS = ['User', 'Password', 'Pin', 'DeviceName', 'SetCreds'];
 
-    /**
-     * Os tetos das credenciais do sunshine, em BYTES (strlen), como o
-     * MAX_PARAM_BYTES. O worker.ps1 repete os mesmos números na allowlist
-     * dele, e o teste de paridade confere.
-     *
-     * A senha mínima de 8 é nossa: o Sunshine não exige mínimo, e é a senha da
-     * tela que controla quem transmite esta máquina. O nome do dispositivo para
-     * em 128 porque é o limite do próprio Sunshine.
-     */
     public const SUNSHINE_USER_MAX = 64;
 
     public const SUNSHINE_PASSWORD_MIN = 8;
@@ -163,60 +73,21 @@ enum WinAction: string
 
     public const SUNSHINE_DEVICE_MAX = 128;
 
-    /** O nome com que o Moonlight aparece no Sunshine, quando o campo vem vazio. */
     public const SUNSHINE_DEVICE_DEFAULT = 'notebook';
 
-    /**
-     * Parâmetros que NUNCA aparecem em claro fora do caminho da execução.
-     *
-     * O rótulo do histórico (Pages::describe) troca o valor deles por ***, na
-     * gravação normal e no recolhimento de órfãs. O worker.ps1 faz o mesmo no
-     * win-done-<id>.json com o $SEGREDOS dele. O que sobra em claro é o pedido
-     * em files/ enquanto o UAC está na tela (até ~75 s), apagado em todo
-     * caminho — ver docs/seguranca.md.
-     */
     public const SECRET_PARAMS = ['Password', 'Pin'];
 
-    /**
-     * O hyperv-vm: start liga (ou retoma a pausada), stop pede o desligamento
-     * ao sistema da VM, restart reinicia. O Invoke-HypervVm confere o estado
-     * da VM na hora e recusa o que não cabe nele.
-     */
     public const HYPERV_VM_SUBACTIONS = ['start', 'stop', 'restart'];
 
-    /**
-     * O VmId é o GUID do VMId no formato 8-4-4-4-12, 36 bytes. O worker.ps1
-     * repete o padrão e o tamanho na allowlist dele, e o teste de paridade
-     * confere.
-     */
     public const HYPERV_VM_ID_PATTERN = '\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z';
 
     public const HYPERV_VM_ID_BYTES = 36;
 
-    /** run gera a auditoria; open abre a pasta do log no Explorer. Sem subação, run. */
     public const AUDIT_SUBACTIONS = ['run', 'open'];
 
-    /** on ativa o plano de desempenho máximo; off volta ao Balanceado. Sem State, on. */
     public const PERFORMANCE_STATES = ['on', 'off'];
 
     /**
-     * As execuções que só rodam com UAC próprio, pelo worker de uso único.
-     *
-     * São as que abrem a máquina para a rede (rdp on, as portas do firewall),
-     * instalam programa ou serviço (install, sunshine install, exporter
-     * install), registram tarefa SYSTEM (gpu install), trocam a senha de
-     * administração do Sunshine (sunshine set-creds), autorizam um
-     * dispositivo novo a ver e controlar a tela (sunshine pair, da mesma classe
-     * do rdp on) ou ligam, desligam e reiniciam uma VM (hyperv-vm, toda
-     * subação). Com o PowerShell elevado longo de pé,
-     * quem lesse o nonce do marcador rodaria qualquer uma delas sem prompt;
-     * por isso o worker longo as RECUSA, e cada uma abre o próprio prompt do
-     * Windows (ver OneShot).
-     *
-     * '*' = toda execução da ação; lista = só essas subações. Esta tabela
-     * ROTEIA. A tranca é o $SENSIVEIS do worker.ps1, e o teste de paridade em
-     * tests/Unit/WinActionTest.php confere as duas, como faz com as allowlists.
-     *
      * @var array<string, '*'|list<string>>
      */
     public const SENSITIVE = [
@@ -233,25 +104,15 @@ enum WinAction: string
     public const NETWORK_DURATION_MAX = 3600;
 
     /**
-     * Valida o que veio do formulário e devolve os parâmetros do winutil.
-     *
-     * Devolve array vazio para as ações que não têm parâmetro — e isso é
-     * resposta válida, não ausência de resposta.
-     *
-     * @param array<string, string> $input campos crus do POST
-     *
+     * @param array<string, string> $input
      * @return array<string, string|int|bool>
-     *
-     * @throws InvalidArgumentException com a frase que vai para a tela
+     * @throws InvalidArgumentException
      */
     public function validate(array $input): array
     {
         return match ($this) {
             self::Memory,
             self::Processes,
-            // O hyperv só lista, e a lista não tem parâmetro: como memory e
-            // processes, devolve vazio. A tranca contra parâmetro inventado é
-            // o allowlist do worker, que declara 'hyperv' sem nenhum campo.
             self::Hyperv => [],
 
             self::Audit       => $this->opcional($input, 'SubAction', self::AUDIT_SUBACTIONS),
@@ -262,8 +123,6 @@ enum WinAction: string
             self::Dns       => $this->dns($input),
             self::Install   => $this->install($input),
             self::Network   => $this->network($input),
-            // Conjuntos diferentes: o exporter tem firewall, o gpu tem
-            // uninstall. Conferido nos dois Invoke-*.
             self::Exporter  => ['SubAction' => $this->pick($input, 'SubAction', self::EXPORTER_SUBACTIONS, obrigatorio: true)],
             self::Gpu       => ['SubAction' => $this->pick($input, 'SubAction', self::GPU_SUBACTIONS, obrigatorio: true)],
             self::Gdid      => ['SubAction' => $this->pick($input, 'SubAction', self::GDID_SUBACTIONS, obrigatorio: true)],
@@ -275,11 +134,6 @@ enum WinAction: string
     }
 
     /**
-     * Diz se esta execução só roda com UAC próprio (ver SENSITIVE).
-     *
-     * Recebe os parâmetros JÁ validados: a subação chega na grafia da lista, e
-     * a comparação pode ser exata.
-     *
      * @param array<string, string|int|bool> $params
      */
     public function isSensitive(array $params): bool
@@ -294,46 +148,7 @@ enum WinAction: string
     }
 
     /**
-     * O que uma execução BEM-SUCEDIDA desta ação significa para o estado.
-     *
-     * Devolve null para as ações que não afirmam nada sobre estado — as nove
-     * que não são reversíveis, e os `status` do gdid e do rdp, que só relatam.
-     * Null NÃO é "não aplicado": quem recebe null não mexe no que está
-     * guardado. Ver WinStateChange.
-     *
-     * SEIS AÇÕES SÃO REVERSÍVEIS, e cada uma diz a reversão de um jeito:
-     *
-     *   tweaks    -Undo com a lista dos tweaks a reverter (-Items) ou um
-     *             -Preset. O payload guarda as chaves aplicadas; ver
-     *             mergeState().
-     *   optimize  -Undo, e ele NÃO precisa de parâmetro: o Invoke-Optimize lê
-     *             o próprio runtime/optimize-state.json e recusa sem ele. O
-     *             payload guarda o preset só para a tela poder dizer o que
-     *             será revertido.
-     *   gdid      'disable' aplica e 'enable' reverte — não há -Undo, são duas
-     *             subações. O estado real também vive em
-     *             runtime/gdid-state.json, escrito pela própria ação.
-     *   performance  -State on aplica, -State off reverte ao Balanceado.
-     *   rdp       'on'/'off' ligam e desligam o acesso remoto no Applied,
-     *             valendo na hora; 'h264-on'/'h264-off' ligam e revertem o vídeo
-     *             H.264/UDP no PendingReboot, valendo só depois de reiniciar.
-     *             Duas dimensões, dois escopos, cada subação movendo o seu.
-     *   sunshine  'start' sobe o serviço e 'stop' o para, no Applied. install,
-     *             firewall, status, set-creds e pair não afirmam estado: o
-     *             set-creds devolve o serviço a Running, mas quem afirma isso é
-     *             o start.
-     *
-     * POR QUE O ESTADO NÃO É LIDO DA MÁQUINA, apesar de optimize e gdid
-     * guardarem arquivo próprio e o plano de energia ser consultável por
-     * powercfg: ler custaria um processo por carregamento de página, e é
-     * exatamente o custo que o heartbeat da elevação existe para não pagar
-     * (~200 ms de powershell.exe contra um filemtime()). Além disso, dois dos
-     * quatro arquivos ficam em C:\WinUtil, que é escrito por processo elevado,
-     * e o tweaks não tem arquivo nenhum. O que esta ferramenta guarda é o que
-     * ELA fez — e a nota no WinStateScope diz que mexer por fora deixa a linha
-     * desatualizada, que é o custo aceito.
-     *
-     * @param array<string, string|int|bool> $params os já validados por validate()
+     * @param array<string, string|int|bool> $params
      */
     public function stateChange(array $params): ?WinStateChange
     {
@@ -350,8 +165,6 @@ enum WinAction: string
                 payload: isset($params['Preset']) ? ['Preset' => $params['Preset']] : [],
             ),
 
-            // 'status' não muda nem afirma: devolve null para o chamador deixar
-            // a linha como está.
             self::Gdid => match ($params['SubAction'] ?? '') {
                 'disable' => new WinStateChange(applied: true),
                 'enable'  => new WinStateChange(applied: false),
@@ -359,13 +172,9 @@ enum WinAction: string
             },
 
             self::Performance => new WinStateChange(
-                // Ausente é 'on': é o default declarado no Invoke-Performance.
                 applied: ($params['State'] ?? 'on') !== 'off',
             ),
 
-            // 'status' só relata: devolve null. As outras quatro movem UM escopo
-            // cada — ligar/desligar o acesso remoto vale na hora (Applied); o
-            // vídeo H.264/UDP só vale depois de reiniciar (PendingReboot).
             self::Rdp => match ($params['SubAction'] ?? '') {
                 'on'       => new WinStateChange(applied: true),
                 'off'      => new WinStateChange(applied: false),
@@ -374,8 +183,6 @@ enum WinAction: string
                 default    => null,
             },
 
-            // Só o estado do serviço vira 'aplicado': start liga, stop esquece.
-            // install, firewall, status, set-creds e pair não afirmam nada.
             self::Sunshine => match ($params['SubAction'] ?? '') {
                 'start' => new WinStateChange(applied: true),
                 'stop'  => new WinStateChange(applied: false),
@@ -387,20 +194,8 @@ enum WinAction: string
     }
 
     /**
-     * O payload aplicado que fica guardado depois de uma mudança de estado.
-     *
-     * Recebe o payload guardado antes (null se não havia linha), a mudança e
-     * os presets reduzidos por WinConfig::presets(). Devolve o payload a
-     * gravar, ou null para esquecer a linha.
-     *
-     * Nos tweaks o aplicado é um CONJUNTO de chaves: aplicar soma ao que
-     * estava guardado, reverter subtrai, e o conjunto vazio esquece a linha.
-     * Um Preset, guardado ou vindo da mudança, conta como as chaves dele. Nas
-     * outras ações a mudança substitui o guardado.
-     *
      * @param array<string, string|int|bool>|null $antes
-     * @param array<string, list<string>>         $presets
-     *
+     * @param array<string, list<string>> $presets
      * @return array<string, string|int|bool>|null
      */
     public function mergeState(?array $antes, WinStateChange $mudanca, array $presets): ?array
@@ -420,15 +215,8 @@ enum WinAction: string
     }
 
     /**
-     * As chaves de tweak que um payload dos tweaks guarda.
-     *
-     * Recebe o payload (null se não há linha) e os presets reduzidos por
-     * WinConfig::presets(). Devolve as chaves de Items, ou as do Preset, ou
-     * lista vazia.
-     *
      * @param array<string, string|int|bool>|null $payload
-     * @param array<string, list<string>>         $presets
-     *
+     * @param array<string, list<string>> $presets
      * @return list<string>
      */
     public static function tweakKeysOf(?array $payload, array $presets): array
@@ -449,11 +237,6 @@ enum WinAction: string
     }
 
     /**
-     * Diz se o botão dos tweaks reverte.
-     *
-     * Recebe as caixas marcadas e as chaves aplicadas. Devolve true quando há
-     * caixa marcada e todas estão entre as aplicadas.
-     *
      * @param list<string> $marcadas
      * @param list<string> $aplicadas
      */
@@ -464,7 +247,6 @@ enum WinAction: string
 
     /**
      * @param array<string, string> $input
-     *
      * @return array<string, string|bool>
      */
     private function tweaks(array $input): array
@@ -490,15 +272,7 @@ enum WinAction: string
     }
 
     /**
-     * Valida os pacotes do debloat.
-     *
-     * Recebe os campos do POST. Sem Packages, devolve vazio, e a ação remove
-     * os pacotes do debloat.json inteiro. Com o campo PackagesForm, que só o
-     * formulário da tela envia, uma lista vazia é recusada em vez de virar
-     * "todos".
-     *
      * @param array<string, string> $input
-     *
      * @return array<string, string>
      */
     private function debloat(array $input): array
@@ -517,17 +291,9 @@ enum WinAction: string
     }
 
     /**
-     * Valida uma lista separada por vírgula contra os itens permitidos.
-     *
-     * Recebe os campos do POST, o nome do campo, o rótulo do item para a
-     * mensagem e quem fornece os itens permitidos. Devolve os itens na grafia
-     * da lista permitida, unidos por vírgula, ou string vazia se o campo veio
-     * vazio.
-     *
-     * @param array<string, string>  $input
+     * @param array<string, string> $input
      * @param callable(): list<string> $permitidos
-     *
-     * @throws InvalidArgumentException com a frase que vai para a tela
+     * @throws InvalidArgumentException
      */
     private function lista(array $input, string $campo, string $rotulo, callable $permitidos): string
     {
@@ -576,7 +342,6 @@ enum WinAction: string
 
     /**
      * @param array<string, string> $input
-     *
      * @return array<string, string>
      */
     private function dns(array $input): array
@@ -590,8 +355,6 @@ enum WinAction: string
         $provider = $this->pick($input, 'Provider', $providers, obrigatorio: true);
         $params   = ['Provider' => $provider];
 
-        // O Invoke-DNS recusa custom sem primário; recusar aqui evita gastar
-        // uma elevação e uma linha no log para uma mensagem de erro.
         if (strcasecmp($provider, 'Custom') === 0) {
             $params['PrimaryDNS'] = $this->ip($input, 'PrimaryDNS', obrigatorio: true);
 
@@ -605,23 +368,7 @@ enum WinAction: string
     }
 
     /**
-     * O campo de apps é TEXTO LIVRE, com teto.
-     *
-     * Lista curada envelheceria em semanas: o catálogo do winget é aberto, e
-     * qualquer recorte nosso viraria uma lista desatualizada que recusa o que
-     * o winget aceita. A consequência ampla do install é decisão registrada —
-     * a allowlist limita a SINTAXE, não o alcance.
-     *
-     * Não há validação de formato de ID de propósito: quem decide o que é ID
-     * válido é o winget, e um regex nosso recusaria nome legítimo que ninguém
-     * previu. O valor nunca entra em linha de comando (ver PsScriptBuilder),
-     * então texto livre aqui não é execução de código em nenhum lugar.
-     *
-     * As caixas dos principais (AppsMarcados, IDs de INSTALL_SUGGESTIONS) só
-     * SOMAM ao campo: o ID marcado que o campo ainda não tem entra no fim.
-     *
      * @param array<string, string> $input
-     *
      * @return array<string, string>
      */
     private function install(array $input): array
@@ -629,9 +376,6 @@ enum WinAction: string
         $apps     = $this->texto($input, 'Apps', obrigatorio: false);
         $marcados = $this->lista($input, 'AppsMarcados', 'App', static fn (): array => array_keys(self::INSTALL_SUGGESTIONS));
 
-        // O Invoke-Install parte por vírgula e descarta vazios; uma entrada
-        // que só tem vírgulas passaria por aqui e morreria lá com mensagem
-        // pior que esta.
         $itens = array_values(array_filter(array_map('trim', explode(',', $apps)), static fn (string $i): bool => $i !== ''));
 
         if ($marcados === '') {
@@ -661,21 +405,7 @@ enum WinAction: string
     }
 
     /**
-     * Valida o sunshine: a subação e, em set-creds e pair, as credenciais.
-     *
-     * As seis subações antigas RECUSAM os campos de credencial, em vez de
-     * ignorá-los: parâmetro sobrando nunca chega ao worker, e um PIN digitado
-     * num pedido que não o usa vira erro na tela em vez de ir para o disco.
-     * Pelo mesmo motivo set-creds recusa Pin e DeviceName.
-     *
-     * A SENHA NÃO SOFRE TRIM: espaço nas pontas é senha. O usuário, o PIN e o
-     * nome sofrem. As mensagens citam o NOME do campo, nunca o valor.
-     *
-     * A COMBINAÇÃO é conferida aqui e de novo no Invoke-Sunshine, como o
-     * Invoke-DNS faz com Custom: o worker só confere cada campo sozinho.
-     *
      * @param array<string, string> $input
-     *
      * @return array<string, string|bool>
      */
     private function sunshine(array $input): array
@@ -715,8 +445,6 @@ enum WinAction: string
             throw new InvalidArgumentException('Preencha Pin.');
         }
 
-        // Sem /u de propósito: \d com /u casaria dígito de outra escrita, e o
-        // Sunshine só aceita 0-9.
         if (preg_match('/\A[0-9]{4}\z/', $pin) !== 1) {
             throw new InvalidArgumentException('Pin deve ter 4 dígitos, de 0 a 9.');
         }
@@ -744,7 +472,6 @@ enum WinAction: string
 
         self::semControle('User', $user, self::SUNSHINE_USER_MAX);
 
-        // O cabeçalho Basic separa usuário e senha no PRIMEIRO dois-pontos.
         if (str_contains($user, ':')) {
             throw new InvalidArgumentException("User não pode ter ':'.");
         }
@@ -792,12 +519,7 @@ enum WinAction: string
     }
 
     /**
-     * Confere UTF-8 válido, teto em bytes e ausência de caractere de controle.
-     *
-     * UTF-8 inválido é recusado aqui porque o pedido é JSON: o json_encode do
-     * OneShot falharia mais adiante com uma frase que não diz qual campo.
-     *
-     * @throws InvalidArgumentException citando o campo, nunca o valor
+     * @throws InvalidArgumentException
      */
     private static function semControle(string $campo, string $valor, int $teto): void
     {
@@ -816,7 +538,6 @@ enum WinAction: string
 
     /**
      * @param array<string, string> $input
-     *
      * @return array<string, string>
      */
     private function hypervVm(array $input): array
@@ -837,14 +558,10 @@ enum WinAction: string
 
     /**
      * @param array<string, string> $input
-     *
      * @return array<string, string|int>
      */
     private function network(array $input): array
     {
-        // A interface é OBRIGATÓRIA aqui. Sem ela o Invoke-Network cai num
-        // Read-Host (linha 44), e num worker -NonInteractive isso falha com
-        // erro que não explica nada para quem clicou.
         $params = ['Interface' => $this->texto($input, 'Interface', obrigatorio: true)];
 
         $bruto = trim($input['Duration'] ?? '');
@@ -874,7 +591,6 @@ enum WinAction: string
 
     /**
      * @param array<string, string> $input
-     *
      * @return array<string, string|bool>
      */
     private function optimize(array $input): array
@@ -900,9 +616,6 @@ enum WinAction: string
             $params['Undo'] = true;
         }
 
-        // Sem preset, sem lista e sem undo, o Invoke-Optimize não tem o que
-        // fazer — e uma execução que não faz nada vira uma linha no log que
-        // parece falha.
         if (!isset($params['Preset']) && !isset($params['Kill']) && !isset($params['Undo'])) {
             throw new InvalidArgumentException(
                 'Escolha um preset, uma lista de processos, ou marque restaurar (-Undo).'
@@ -913,14 +626,8 @@ enum WinAction: string
     }
 
     /**
-     * Valida um campo opcional de conjunto fechado.
-     *
-     * Recebe os campos do POST, o nome do campo e os valores permitidos.
-     * Devolve [campo => valor] na grafia da lista, ou vazio se o campo não veio.
-     *
      * @param array<string, string> $input
-     * @param list<string>          $permitidos
-     *
+     * @param list<string> $permitidos
      * @return array<string, string>
      */
     private function opcional(array $input, string $campo, array $permitidos): array
@@ -932,7 +639,7 @@ enum WinAction: string
 
     /**
      * @param array<string, string> $input
-     * @param list<string>          $permitidos
+     * @param list<string> $permitidos
      */
     private function pick(array $input, string $campo, array $permitidos, bool $obrigatorio): string
     {
@@ -952,8 +659,6 @@ enum WinAction: string
 
         foreach ($permitidos as $permitido) {
             if (strcasecmp($valor, $permitido) === 0) {
-                // Devolve a forma da LISTA, não a que veio no POST: assim o
-                // que chega ao worker e ao log é sempre a mesma grafia.
                 return $permitido;
             }
         }
@@ -1006,8 +711,6 @@ enum WinAction: string
     }
 
     /**
-     * Checkbox: presente e igual a "1" liga; qualquer outra coisa não liga.
-     *
      * @param array<string, string> $input
      */
     private function flag(array $input, string $campo): bool

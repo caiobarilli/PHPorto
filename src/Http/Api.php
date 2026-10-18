@@ -16,35 +16,11 @@ use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 
-/**
- * A API JSON. Só existe quando PHPORTO_API_ENABLED está ligada, e ela nasce
- * DESLIGADA: quem clona não ganha uma superfície de execução por HTTP sem ter
- * pedido.
- *
- *   GET  /api/executions   lista os registros
- *   POST /api/executions   executa
- *
- * POR QUE A API EXECUTA. Uma API que só lista não justificaria uma flag: seria
- * espelho somente-leitura de uma tabela que a tela já mostra. A capacidade que
- * justifica existir é exatamente a execução — o problema que a ferramenta
- * resolve é que quem está do outro lado, inclusive um agente que só fala HTTP,
- * não tem como abrir um shell dentro da distro.
- *
- * AS DUAS TRAVAS, e por que o CORS sozinho não é uma delas:
- *
- *   O CORS NÃO IMPEDE A REQUISIÇÃO DE SAIR. Ele impede a RESPOSTA de ser LIDA.
- *
- * Exigir Content-Type: application/json é a trava de verdade, porque esse
- * cabeçalho torna a requisição "não simples" e obriga o navegador a fazer
- * preflight — e é o preflight que o CORS barra, antes de qualquer efeito. Um
- * formulário HTML não consegue mandar esse Content-Type. A checagem de Origin
- * é a segunda camada, para o caso de um cliente não-navegador anunciar origem.
- */
 final class Api
 {
     /**
      * @param array{root: string, distro: string, timeout: int} $wsl
-     * @param Closure(): ExecutionLogService                    $makeService
+     * @param Closure(): ExecutionLogService $makeService
      */
     public function __construct(
         private readonly array $wsl,
@@ -186,12 +162,8 @@ final class Api
         $note     = null;
 
         try {
-            // O retorno traz o created_at atribuído pelo banco; sem ele o
-            // cliente precisaria de uma segunda chamada só para a data.
             $execution = ($this->makeService)()->record($execution);
         } catch (Throwable $e) {
-            // A execução ACONTECEU. Devolver 500 aqui faria o cliente achar que
-            // nada rodou, e ele tentaria de novo — executando duas vezes.
             $recorded = false;
             $note     = 'A execução ocorreu, mas o registro falhou: ' . $e->getMessage();
         }

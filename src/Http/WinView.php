@@ -7,59 +7,33 @@ namespace App\Http;
 use App\Domain\Execution;
 use App\Win\ElevationState;
 
-/**
- * A tela /win: as quinze seções das ações do Windows.
- *
- * QUINZE, e a contagem tem história: a tela nasceu com doze porque o README do
- * winutil-cli listava onze e o código tinha gpu — a tela seguiu o código. A
- * décima terceira é o gdid, que existia em src/Win/actions desde a migração mas
- * só passou a ser alcançável quando entrou nas DUAS allowlists. A décima quarta
- * e a décima quinta são o rdp e o sunshine, que nasceram aqui, na aba Acesso
- * Remoto.
- *
- * $blocked é o que impede executar agora, e tem mais de uma causa: o checkout
- * pode estar sem os .ps1 de src/Win, ou o PowerShell elevado pode estar
- * desligado. A tela precisa dizer qual das duas é, porque uma se resolve
- * refazendo o clone e a outra num clique na /config.
- *
- * A primeira causa já foi outra: até a migração, era uma chave do .env
- * apontando para um projeto externo. Não há mais o que configurar.
- *
- * $rows e $result vêm FILTRADOS por tipo Windows. O painel mostra sempre o
- * registro mais recente do banco, e o filtro é o que impede a última execução
- * do WSL de aparecer aqui logo depois de alguém rodar uma ação do Windows —
- * exatamente o momento em que a tela precisa ser confiável.
- */
 final readonly class WinView
 {
     /**
-     * @param list<Execution> $rows           execuções do tipo Windows, mais recentes primeiro
-     * @param Execution|null  $result         a mais recente, para o painel de saída
-     * @param string|null     $blocked        o que impede executar agora
-     * @param ElevationState  $win            estado do PowerShell elevado
-     * @param int             $timeout        segundos até uma ação ser cancelada
-     * @param string          $tz             fuso das datas exibidas
-     * @param int             $maxOutputBytes teto de saída de uma execução
-     * @param int             $maxParamBytes  teto de um campo de texto livre
-     * @param list<string>    $debloatPackages os pacotes APPX do config/debloat.json
-     * @param string|null     $debloatProblem  por que a lista não pôde ser lida
-     * @param list<string>    $debloatChecked  os pacotes que nascem marcados
-     * @param list<array{key: string, content: string, description: string, category: string, caution: bool, explorer: bool}> $tweaks os tweaks oferecidos
-     * @param array<string, list<string>> $tweakPresets os presets, reduzidos às chaves existentes
-     * @param list<string>    $tweaksChecked   os tweaks que nascem marcados
-     * @param string          $tweaksMatch     o preset que a seleção reproduz, "custom", ou vazio
-     * @param string|null     $tweaksProblem   por que os tweaks não puderam ser lidos
-     * @param list<string>    $tweaksApplied   os tweaks no estado aplicado
-     * @param list<string>    $appliedActions  as ações com estado aplicado guardado
-     * @param list<string>    $pendingRebootActions as ações com mudança que só vale depois de reiniciar
-     * @param list<array{key: string, label: string, text: string}> $dnsProviders as opções de DNS
-     * @param array<string, string> $dnsChosen   a última escolha de DNS guardada
-     * @param string|null     $dnsProblem      por que a lista de DNS não pôde ser lida
-     * @param WinTab          $tab             a aba aberta
-     * @param string|null     $sensitiveBlocked por que as ações sensíveis (as que
-     *                                          abrem o próprio UAC) não podem
-     *                                          rodar, ou null; elas não dependem
-     *                                          do PowerShell elevado longo
+     * @param list<Execution> $rows
+     * @param Execution|null $result
+     * @param string|null $blocked
+     * @param ElevationState $win
+     * @param int $timeout
+     * @param string $tz
+     * @param int $maxOutputBytes
+     * @param int $maxParamBytes
+     * @param list<string> $debloatPackages
+     * @param string|null $debloatProblem
+     * @param list<string> $debloatChecked
+     * @param list<array{key: string, content: string, description: string, category: string, caution: bool, explorer: bool}> $tweaks
+     * @param array<string, list<string>> $tweakPresets
+     * @param list<string> $tweaksChecked
+     * @param string $tweaksMatch
+     * @param string|null $tweaksProblem
+     * @param list<string> $tweaksApplied
+     * @param list<string> $appliedActions
+     * @param list<string> $pendingRebootActions
+     * @param list<array{key: string, label: string, text: string}> $dnsProviders
+     * @param array<string, string> $dnsChosen
+     * @param string|null $dnsProblem
+     * @param WinTab $tab
+     * @param string|null $sensitiveBlocked
      */
     public function __construct(
         public array $rows,
