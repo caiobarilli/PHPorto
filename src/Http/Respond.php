@@ -41,6 +41,7 @@ final class Respond
 
             return $data->setTimezone(new \DateTimeZone($tz))->format('d/m/Y H:i:s');
         } catch (\Exception) {
+            // Decisão: o log é prova, e o valor estranho vale mais que uma data inventada.
             return $utcIso;
         }
     }
