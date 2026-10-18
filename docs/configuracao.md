@@ -17,8 +17,8 @@ rodado à mão na linha de comando.
 
 ### `PHPORTO_AUTH_TOKEN`
 
-O token de acesso, enviado no campo de senha do HTTP Basic pelo navegador e pela
-API.
+O token de acesso, colado no formulário de entrada das telas e enviado no campo
+de senha do HTTP Basic pela API.
 
 - **Formato:** texto. O `php token.php` gera 32 bytes aleatórios em hexadecimal
   (64 caracteres), grava aqui e imprime. Se já houver um valor, pede

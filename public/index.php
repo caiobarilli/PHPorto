@@ -28,17 +28,20 @@ declare(strict_types=1);
  * e no Windows como Administrador. O token não muda isso: o Basic manda o token
  * em base64, que é codificação e não cifra. Acesso remoto é pelo túnel SSH.
  *
- * O PORTÃO DE TOKEN vem antes de qualquer rota, e vale igual para as telas e
- * para /api/*. Sem PHPORTO_AUTH_TOKEN nada é servido (503). Sem credencial, ou
- * com a errada, a resposta é 401 — exceção deliberada à regra do 404: as
+ * O PORTÃO DE TOKEN vem antes de qualquer rota, nas telas e em /api/*, com o
+ * mesmo token e o mesmo contador de erros. Sem PHPORTO_AUTH_TOKEN nada é
+ * servido (503). Nas telas, sem cookie válido, a resposta é 401 com o
+ * formulário de entrada; em /api/*, o token vai no Basic e a recusa é 401 em
+ * texto. Nenhum dos dois leva WWW-Authenticate, que é o que abre o diálogo
+ * nativo do navegador. O 401 é exceção deliberada à regra do 404: as
  * superfícies desligadas respondem 404 para não confirmar que existem, mas
- * aqui a pessoa precisa ser solicitada, e só o 401 com WWW-Authenticate abre
- * o diálogo do navegador. Um 403 não abre diálogo nenhum.
+ * aqui a pessoa precisa ser solicitada.
  */
 
 use App\Http\Api;
 use App\Http\Auth;
 use App\Http\AuthOutcome;
+use App\Http\Login;
 use App\Http\Pages;
 use App\Http\Respond;
 use App\Services\ExecutionLogService;
@@ -79,17 +82,6 @@ $config = $app['config'];
 
 date_default_timezone_set($config['tz']);
 
-// --- Portão de token ---------------------------------------------------------
-$senha    = $_SERVER['PHP_AUTH_PW'] ?? null;
-$decisao  = (new Auth(
-    $config['auth_token'],
-    dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . Auth::COUNTER_FILE,
-))->check(is_string($senha) ? $senha : null);
-
-if ($decisao->outcome !== AuthOutcome::Allowed) {
-    Respond::authRefused($decisao);
-}
-
 // O router já resolveu e validou o caminho; o fallback existe para quem
 // executar o index.php diretamente (outro servidor, ou teste).
 $path = $_SERVER['PHPORTO_PATH'] ?? null;
@@ -106,6 +98,23 @@ if (!is_string($path) || $path === '') {
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $method = is_string($method) ? strtoupper($method) : 'GET';
+
+// --- Portão de token ---------------------------------------------------------
+$auth = new Auth(
+    $config['auth_token'],
+    dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . Auth::COUNTER_FILE,
+);
+
+if (str_starts_with($path, '/api/')) {
+    $senha   = $_SERVER['PHP_AUTH_PW'] ?? null;
+    $decisao = $auth->check(is_string($senha) ? $senha : null);
+
+    if ($decisao->outcome !== AuthOutcome::Allowed) {
+        Respond::authRefused($decisao);
+    }
+} else {
+    Login::guard($auth, $method);
+}
 
 $filesDir    = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'files';
 $distro      = new Distro($config['wsl']['distro']);

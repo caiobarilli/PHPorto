@@ -14,7 +14,8 @@ php -S 127.0.0.1:4001 -t public public/router.php
 ```
 
 Nunca `0.0.0.0`, o IP da rede ou um proxy que o exponha. O token de acesso não
-muda isso: ele viaja em HTTP Basic, que é base64 — codificação, não cifra.
+muda isso: ele viaja em texto puro no formulário e no HTTP Basic da API (base64
+é codificação, não cifra).
 Quem enxergar o tráfego lê o token e, com ele, ganha execução de comando na
 máquina.
 
@@ -54,12 +55,22 @@ Toda requisição, telas e API, passa por um portão único antes do roteamento.
 - **Geração:** `php token.php` cria 32 bytes aleatórios em hexadecimal, imprime
   e grava em `PHPORTO_AUTH_TOKEN` no `.env`. Trocar um token existente pede
   confirmação. O script roda só na linha de comando e mora fora de `public/`.
-- **Entrada:** HTTP Basic. No navegador, o próprio diálogo de login; o token vai
-  no campo de senha e o usuário é ignorado. Pela API, `curl -u :TOKEN`.
+- **Entrada nas telas:** um formulário do próprio PHPorto, com o token num campo
+  de senha, CSRF e o mesmo limite de tentativas. Nenhuma resposta leva
+  `WWW-Authenticate`, então o diálogo nativo do navegador não aparece.
+- **Cookie de sessão:** `phporto_auth`, `HttpOnly`, `SameSite=Strict`, `Path=/`,
+  válido por sete dias. `Secure` só quando a requisição chega por HTTPS. O valor
+  é `prazo.hmac`: HMAC-SHA256 de um rótulo fixo com o prazo, com o próprio token
+  como chave. O token nunca vai no cookie, e trocar o token invalida todos os
+  cookies. Cookie com assinatura errada conta como erro e é apagado; cookie
+  vencido só pede o token de novo.
+- **Entrada na API:** HTTP Basic, com o token no campo de senha e o usuário
+  ignorado: `curl -u :TOKEN`. O 401 da API também vem sem `WWW-Authenticate`.
 - **Comparação:** `hash_equals`, em tempo constante.
 - **Sem token configurado:** a aplicação responde 503 a tudo, com credencial ou
   sem. A falha cai para o lado fechado.
-- **Sem logout:** o HTTP Basic não tem. Para sair, feche o navegador.
+- **Sem logout:** para sair, apague o cookie `phporto_auth` do navegador ou
+  troque o token com `php token.php`.
 
 ## Limite de tentativas
 
@@ -67,7 +78,8 @@ Cinco tokens errados seguidos bloqueiam o acesso por quinze minutos. O bloqueio
 responde 429, com `Retry-After` e o tempo que falta.
 
 - Só erro conta: requisição sem credencial não conta, porque a primeira de todo
-  navegador vem sem ela. Um acerto zera o contador.
+  navegador vem sem ela. Um acerto zera o contador. Durante o bloqueio, nem o
+  cookie válido passa.
 - Durante o bloqueio, nem o token certo passa.
 - O contador é um só, não por IP: tudo chega do loopback.
 - O contador fica em `storage/auth-falhas.json` e guarda a impressão SHA-256 do

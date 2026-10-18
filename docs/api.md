@@ -17,15 +17,16 @@ Ver [configuracao.md](configuracao.md).
 
 ## Autenticação
 
-Toda requisição passa pelo mesmo portão das telas: HTTP Basic, com o token no
-campo de senha e o usuário vazio.
+Toda requisição passa pelo mesmo portão das telas, com o mesmo token e o mesmo
+contador de erros. Na API ele vai no HTTP Basic, no campo de senha, com o
+usuário vazio; o formulário e o cookie são só das telas.
 
 ```bash
 curl -u :SEU_TOKEN http://127.0.0.1:4001/api/executions
 ```
 
-Sem credencial a resposta é 401, inclusive com a API desligada; o 404 dela só
-aparece depois do token. Cinco tokens errados seguidos bloqueiam por quinze
+Sem credencial a resposta é 401 em texto, sem `WWW-Authenticate`, inclusive com
+a API desligada; o 404 dela só aparece depois do token. Cinco tokens errados seguidos bloqueiam por quinze
 minutos (429). Ver [seguranca.md](seguranca.md).
 
 ## `GET /api/executions`
