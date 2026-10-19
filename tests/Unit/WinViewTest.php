@@ -341,9 +341,11 @@ it('sem JavaScript, o link da aba recarrega posicionado no menu, que tem o id da
 
 it('o JavaScript das abas é segunda camada e mantém a aba na URL com replaceState', function () {
     $html = winHtml();
-    $js   = substr($html, (int) strpos($html, '// ---- Abas:'), 1500);
+    $ini  = strpos($html, "ev.target.closest('#abas a[data-aba]')");
+    $js   = substr($html, (int) $ini, 1500);
 
-    expect($js)->toContain('SEGUNDA CAMADA, PARA CONFORTO')
+    expect($ini)->not->toBeFalse()
+        ->and($js)->toContain('if (!link || !window.history || !history.replaceState) { return; }')
         ->and($js)->toContain("history.replaceState(null, '', link.getAttribute('href'))")
         ->and($js)->toContain('ev.preventDefault()');
 });

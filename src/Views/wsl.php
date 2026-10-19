@@ -3,12 +3,6 @@
 declare(strict_types=1);
 
 /**
- * A tela /wsl: o console (saída em cima, prompt embaixo), anexos e registros.
- *
- * O estado "executando" aparece no PRIMEIRO clique, com contador de segundos e
- * o aviso do custo de acordar a VM. Sem isso, os ~4,5 s do primeiro comando do
- * dia são tela parada, e tela parada faz a pessoa clicar de novo.
- *
  * @var \App\Http\WslView $view
  */
 
@@ -35,11 +29,6 @@ $corta = static function (string $texto, int $maxLinhas = 12, int $maxChars = 12
     return $cortou ? rtrim($curto) . "\n[... truncado ...]" : $curto;
 };
 
-/**
- * Os registros que os botões de copiar entregam, como JSON. Vão num atributo
- * data-logs da seção, e não numa variável do script: depois de uma ação sem
- * reload o miolo é trocado e o atributo chega fresco, o script não.
- */
 $logs = (string) json_encode(
     array_map(static fn (\App\Domain\Execution $e): array => [
         'kind'        => $e->kind->value,
@@ -188,11 +177,6 @@ $logs = (string) json_encode(
 </div>
 
 <script>
-/*
- * Os formulários desta tela vão pelo script comum do layout, sem reload: o
- * miolo é trocado depois de cada ação, então tudo aqui é por delegação no
- * document, e os registros para copiar vêm do data-logs, fresco a cada troca.
- */
 (function () {
   'use strict';
 
@@ -211,7 +195,7 @@ $logs = (string) json_encode(
         navigator.clipboard.writeText(text).catch(function () { legacy(text); });
         return;
       }
-    } catch (e) { /* segue para o fallback */ }
+    } catch (e) { }
     legacy(text);
   }
 
@@ -226,7 +210,7 @@ $logs = (string) json_encode(
       ta.select();
       document.execCommand('copy');
       document.body.removeChild(ta);
-    } catch (e) { /* silencio */ }
+    } catch (e) { }
   }
 
   function flash(btn) {
@@ -235,10 +219,6 @@ $logs = (string) json_encode(
     setTimeout(function () { btn.textContent = old; }, 900);
   }
 
-  // O estado de trabalho entra no PRIMEIRO clique: acordar a VM do WSL custa
-  // alguns segundos, e tela parada faz a pessoa clicar de novo. O botão e a
-  // trava são do script comum; aqui fica o aviso da VM, e o cronômetro para
-  // quando o miolo é trocado.
   document.addEventListener('submit', function (ev) {
     var form = ev.target;
     var estado = form.id === 'form-cmd' ? 'estado-cmd' : (form.id === 'form-anexo' ? 'estado-anexo' : null);
@@ -263,8 +243,6 @@ $logs = (string) json_encode(
     if (veioDoConsole) { document.getElementById('input').focus(); }
   });
 
-  // O campo parece uma linha: Enter envia pelo botão, Shift+Enter quebra a
-  // linha e o campo cresce até um teto, sem virar outra caixa.
   document.addEventListener('keydown', function (ev) {
     if (ev.target.id !== 'input' || ev.key !== 'Enter' || ev.shiftKey || ev.isComposing) { return; }
     ev.preventDefault();
@@ -304,8 +282,6 @@ $logs = (string) json_encode(
     if (zona && !zona.contains(ev.relatedTarget)) { zona.classList.remove('arrastando'); }
   });
 
-  // Soltar põe o arquivo no próprio campo de arquivo, como se tivesse sido
-  // escolhido: o envio continua sendo só o Enviar.
   document.addEventListener('drop', function (ev) {
     var zona = zonaDe(ev);
     if (!zona) { return; }
@@ -336,7 +312,6 @@ $logs = (string) json_encode(
     'btn-copiar': function (b) { copy(document.getElementById('output').textContent); flash(b); },
     'btn-copiar-json': function (b) { var l = logs(); copy(JSON.stringify(l.length ? l[0] : null, null, 2)); flash(b); },
     'btn-json': function (b) { copy(JSON.stringify(logs(), null, 2)); flash(b); },
-    // Destrutivo e sem desfazer: confirma antes.
     'btn-apagar': function () {
       if (confirm('Apagar os registros do WSL? Os do Windows ficam. Não tem como desfazer.')) {
         var form = document.getElementById('form-apagar');

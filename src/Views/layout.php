@@ -3,10 +3,6 @@
 declare(strict_types=1);
 
 /**
- * O documento. Claro, escuro ou o do sistema, sem framework, sem CDN: CSS e JS embutidos e
- * servidos pelo próprio PHP — a ferramenta não tem nenhum arquivo estático, e
- * é isso que permite o router ser lista de permissão.
- *
  * @var \App\Http\LayoutView $view
  */
 
@@ -24,7 +20,7 @@ use App\Http\Respond;
     localStorage.removeItem('phporto.wsl.console.tema');
     var t = localStorage.getItem('phporto.tema');
     if (t === 'claro' || t === 'escuro') { document.documentElement.setAttribute('data-tema', t); }
-  } catch (e) { /* sem armazenamento, fica o do sistema */ }
+  } catch (e) { }
 })();
 </script>
 <title><?= Respond::e($view->title) ?></title>
@@ -82,9 +78,6 @@ use App\Http\Respond;
     --ohl-cursor:      #4F525D;
     color-scheme: light dark;
   }
-  /* Escuro: o mesmo conjunto de nomes com outros valores. Vale pelo
-     data-tema="escuro" no <html> ou, sem o atributo, pelo sistema. Os dois
-     blocos precisam ficar iguais. */
   html[data-tema="claro"] { color-scheme: light; }
   html[data-tema="escuro"] {
     --ink:   #e6e8eb;
@@ -165,7 +158,6 @@ use App\Http\Respond;
   }
   a { color: inherit; }
 
-  /* ---- home ---- */
   .home {
     min-height: 100%;
     display: flex;
@@ -210,23 +202,13 @@ use App\Http\Respond;
     pointer-events: none;
   }
 
-  /* ---- Botão só de ícone -------------------------------------------------
-     A engrenagem se lê sem legenda; WIN e WSL não. O min-width de 132px do
-     .btn deixaria o ícone sozinho perdido no meio de um botão largo, então
-     este modificador o solta e deixa o botão quadrado. O nome fica no
-     aria-label, que é o que o leitor de tela anuncia. */
   .btn-icone { min-width: 0; padding: 13px; }
   .btn-icone svg { width: 21px; height: 21px; }
 
-  /* A home pode ter mais de um botão desabilitado, e cada um por um motivo
-     diferente — o WSL por não achar a distro, o WIN por não haver PowerShell
-     elevado. Uma nota por motivo, e não um parágrafo só tentando dizer os
-     dois. */
   .home-notas { display: flex; flex-direction: column; gap: 7px; align-items: center; margin: 0; padding: 0; list-style: none; }
   .home-notas li { color: var(--mut); font-size: 13px; max-width: 52ch; }
   .home-notas strong { color: var(--ink); font-weight: 600; }
 
-  /* ---- páginas internas ---- */
   .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
   .topbar { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
   .topbar h1 { font-size: 17px; margin: 0; font-weight: 600; }
@@ -276,10 +258,6 @@ use App\Http\Respond;
   .vm-parada { color: var(--mut); }
   .vm-ip { font: 12px var(--mono); }
 
-  /* ---- Ações por VM na /hyperv ------------------------------------------
-     Ícone só, com o nome no aria-label. A cor vem do currentColor: verde
-     liga, vermelho desliga, âmbar reinicia. Desabilitado pelo estado fica
-     apagado e sem cursor de espera. */
   .c-vm-acoes { width: 132px; }
   .vm-acoes { white-space: nowrap; }
   .vm-form { display: inline-block; margin: 0 2px 0 0; }
@@ -324,11 +302,6 @@ use App\Http\Respond;
   .grupo.cuidado { border-color: var(--cuidado-borda); background: var(--cuidado-bg); }
   .grupo.cuidado legend { color: var(--amber); font-weight: 600; }
 
-  /* ---- Console da /wsl -------------------------------------------------
-     Segue o modo do site: escuro é One Half Dark (--oh-*), claro é One Half
-     Light (--ohl-*). O modo vem de data-tema no <html>, que a troca sem
-     reload não toca; sem o atributo vale o do sistema. Barra e bordas não
-     têm token na paleta e saem misturadas dela. */
   .term {
     --t-bg: var(--oh-bg); --t-fg: var(--oh-fg); --t-mut: var(--oh-brightblack);
     --t-ok: var(--oh-green); --t-bad: var(--oh-red); --t-cursor: var(--oh-cursor);
@@ -404,10 +377,6 @@ use App\Http\Respond;
   .anexo-destino { display: block; margin: 0 0 12px; }
   .anexo-destino label { display: block; width: auto; margin-bottom: 6px; }
 
-  /* ---- Interruptor da /config -------------------------------------------
-     Um checkbox de verdade por baixo: o rótulo continua clicável, o teclado
-     continua funcionando e o formulário continua enviando sem JS. O visual
-     é só a pintura do :checked. */
   .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
   .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
   .switch .trilho {
@@ -428,10 +397,6 @@ use App\Http\Respond;
   .nota-estado { color: var(--mut); font-size: 12px; margin: 10px 0 0; }
   .nota-estado strong { color: var(--ink); font-weight: 600; }
 
-  /* ---- Modal ------------------------------------------------------------
-     <dialog> nativo em vez de confirm(): o confirm() do navegador não cabe
-     texto de risco, não aceita uma segunda opção dentro dele, e trava a
-     página inteira enquanto está aberto. */
   dialog {
     border: 1px solid var(--line); border-radius: 12px; padding: 0;
     max-width: 460px; width: calc(100% - 32px); color: var(--ink); background: var(--bg);
@@ -451,10 +416,6 @@ use App\Http\Respond;
   .modal-opcao span { color: var(--mut); display: block; margin-top: 3px; font-size: 12px; }
   .modal-acoes { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 20px 20px; }
 
-  /* ---- Aviso no rodapé ----------------------------------------------------
-     Depois de uma ação sem reload a página fica onde estava, e o aviso do topo
-     pode estar fora da vista. A faixa repete o aviso embaixo, e o aria-live
-     faz o leitor de tela anunciar. */
   .aviso-rodape {
     position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
     width: min(720px, calc(100% - 32px)); display: flex; gap: 12px; align-items: flex-start;
@@ -475,24 +436,9 @@ use App\Http\Respond;
 </div>
 
 <script>
-/*
- * Ações sem reload ("PRG por fetch"). O servidor não muda: o formulário
- * marcado com data-sem-reload manda o MESMO POST, recebe o MESMO 303, e quem
- * segue o 303 é este script. O HTML que volta já traz o aviso, o token novo,
- * os painéis e o histórico, desenhados pelo PHP — daqui só se troca o miolo
- * (o .wrap dentro do #conteudo). Os <dialog> e os <script> das telas ficam
- * fora do .wrap e não são trocados; as telas ligam os eventos por delegação
- * e ouvem "phporto:trocou" para repintar o que for preciso.
- *
- * Sem fetch/DOMParser (navegador muito velho), não faz nada: o envio nativo
- * segue igual a antes. Em erro de rede NUNCA reenvia o POST: faz um GET da
- * tela para conferir o que aconteceu.
- */
 (function () {
   'use strict';
 
-  // Cancelar em qualquer modal fecha o modal, e só isso: nada é enviado.
-  // O último botão clicado fica guardado para o navegador sem ev.submitter.
   var ultimoBotao = null;
   document.addEventListener('click', function (ev) {
     var fechar = ev.target.closest('dialog [data-fechar]');
@@ -516,15 +462,11 @@ use App\Http\Respond;
 
   function miolo(raiz) { return raiz.querySelector('#conteudo .wrap'); }
 
-  // Na falha, a página é recarregada por GET, nunca pelo POST: não se sabe se
-  // a ação rodou, e o histórico é quem conta.
   function conferir() {
     mostrarAviso('Não deu para saber se a ação terminou. Recarregando a página para conferir…');
     location.replace(location.pathname + location.search);
   }
 
-  // Um envio por vez: o token é um só por página, e um segundo envio seria
-  // recusado de qualquer jeito. O botão clicado conta o tempo.
   function travar(form, botao) {
     document.querySelectorAll('#conteudo button:not([type=button]), #conteudo input[type=submit]').forEach(function (b) { b.disabled = true; });
     if (!botao || botao.tagName !== 'BUTTON') { botao = form.querySelector('button:not([type=button])'); }
@@ -533,8 +475,6 @@ use App\Http\Respond;
     var uac = botao.hasAttribute('data-uac') || form.querySelector('option[data-uac]:checked') !== null;
     var texto = uac ? 'aguardando o UAC… ' : 'executando… ';
     var t0 = Date.now();
-    // Botão só de ícone guarda o ícone: o relógio vai para o [data-pendente]
-    // da mesma célula, quando houver.
     var alvo = botao.classList.contains('btn-icone') ? (botao.closest('td') || form).querySelector('[data-pendente]') : null;
     if (alvo) { alvo.hidden = false; botao.setAttribute('aria-busy', 'true'); } else { alvo = botao; }
     alvo.textContent = texto + '0 s';
@@ -556,14 +496,11 @@ use App\Http\Respond;
     document.title = doc.title;
     history.replaceState(null, '', url);
 
-    // O token velho foi queimado: todo campo de token da página, inclusive os
-    // de dentro de <dialog> fora do miolo, recebe o novo.
     var token = novo.querySelector('input[name="' + CAMPO + '"]');
     if (token) {
       document.querySelectorAll('input[name="' + CAMPO + '"]').forEach(function (i) { i.value = token.value; });
     }
 
-    // Segredo não fica em campo depois da resposta, mesmo fora do miolo.
     document.querySelectorAll('input[type=password], [data-segredo]').forEach(function (i) { i.value = ''; });
 
     var nota = novo.querySelector('[data-aviso]');
@@ -578,9 +515,6 @@ use App\Http\Respond;
     document.dispatchEvent(new CustomEvent('phporto:trocou'));
   }
 
-  // Ouve no document, então vale também para formulários que acabaram de ser
-  // trocados. As telas que confirmam em modal cancelam o submit antes
-  // (preventDefault) e chamam requestSubmit() depois da confirmação.
   document.addEventListener('submit', function (ev) {
     var form = ev.target;
     if (ev.defaultPrevented || !form.hasAttribute('data-sem-reload') || form.method.toLowerCase() !== 'post') { return; }
@@ -590,7 +524,6 @@ use App\Http\Respond;
 
     var botao = ev.submitter || (ultimoBotao && ultimoBotao.form === form && ultimoBotao.type === 'submit' ? ultimoBotao : null);
     var dados = new FormData(form);
-    // O valor do botão que enviou (o "Tentar novamente" manda ps_enabled=1 por ele).
     if (botao && botao.name) { dados.append(botao.name, botao.value); }
 
     document.querySelectorAll('dialog[open]').forEach(function (d) { d.close(); });
@@ -601,8 +534,6 @@ use App\Http\Respond;
 
     fetch(form.action, {
       method: 'POST',
-      // Formulário com arquivo vai como multipart, com o FormData inteiro; os
-      // outros seguem urlencoded, como sempre foram.
       body: form.enctype === 'multipart/form-data' ? dados : new URLSearchParams(dados),
       credentials: 'same-origin',
       mode: 'same-origin',
@@ -610,8 +541,6 @@ use App\Http\Respond;
       headers: { 'X-PHPorto-Sem-Reload': '1' }
     }).then(function (r) {
       var html = (r.headers.get('Content-Type') || '').indexOf('text/html') === 0;
-      // 401, 404 de superfície desligada, 429, outra origem: navegação normal
-      // por GET, e o navegador faz o que faria sem este script.
       if (!r.ok || !html || new URL(r.url).origin !== location.origin) {
         location.assign(r.url || location.href);
         return null;

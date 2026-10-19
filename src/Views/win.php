@@ -3,34 +3,19 @@
 declare(strict_types=1);
 
 /**
- * A tela /win: as quinze ações do Windows, uma seção cada.
- *
- * Quatro partes, nesta ordem: a última execução; as três ações de um clique
- * (auditoria, memória, processos) na mesma linha; o menu de abas com as outras
- * doze; e o histórico. Os cinco painéis são desenhados, só o da aba aberta
- * visível, e o menu são links para /win?aba=<nome>#abas. Cada formulário posta
- * para a URL da página, que carrega a aba, e o 303 volta para ela.
- *
- * Cada seção é um FORMULÁRIO PRÓPRIO, e não um formulário só com um seletor
- * de ação: o token vale por UMA execução, e formulários separados mandam só o
- * que a ação usa.
- *
  * @var \App\Http\WinView $view
  */
 
 use App\Http\Respond;
 use App\Http\WinTab;
 
-/** Abre uma seção com o título e a descrição dela. */
 $secao = static function (string $titulo, string $descricao): string {
     return '<h2>' . Respond::e($titulo) . '</h2>'
         . '<p class="dica" style="margin-top:0">' . Respond::e($descricao) . '</p>';
 };
 
-/** Os nomes dos presets dos ajustes, e da seleção que não é nenhum deles. */
 $presetRotulos = ['standard' => 'padrão', 'minimal' => 'mínimo', 'advanced' => 'avançado', 'custom' => 'personalizada'];
 
-/** As subações, em português; o valor enviado continua sendo o da ação. */
 $subRotulos = [
     'install'   => 'instalar',
     'status'    => 'ver o estado',
@@ -46,18 +31,10 @@ $subRotulos = [
 $travado = $view->blocked !== null;
 $dis     = $travado ? ' disabled' : '';
 
-// As ações sensíveis abrem o próprio UAC e não dependem do PowerShell elevado
-// longo: só o checkout (ou o banco fora do ar) as trava. Ver App\Win\OneShot.
 $disSens   = $view->sensitiveBlocked !== null ? ' disabled' : '';
 $sensivel  = static fn (string $acao, string $campo, string $valor): bool => \App\Win\WinAction::from($acao)->isSensitive([$campo => $valor]);
 $avisoUac  = ' · abre o UAC';
 
-/**
- * Uma opção de subação: o rótulo em português, com o valor da ação ao lado.
- *
- * Num select que mistura as duas espécies (exporter, gpu), a opção sensível
- * diz que abre o UAC, e cada opção trava pelo bloqueio do caminho dela.
- */
 $opcao = static function (string $valor, string $acao = '') use ($subRotulos, $sensivel, $dis, $disSens, $avisoUac): string {
     $sens = $acao !== '' && $sensivel($acao, 'SubAction', $valor);
 
@@ -65,12 +42,6 @@ $opcao = static function (string $valor, string $acao = '') use ($subRotulos, $s
         . Respond::e(($subRotulos[$valor] ?? $valor) . ' (' . $valor . ')' . ($sens ? $avisoUac : '')) . '</option>';
 };
 
-/**
- * Um formulário de um botão só, com um campo oculto.
- *
- * Recebe a ação, o nome e o valor do campo, o rótulo e se o botão é
- * secundário. Devolve o HTML do formulário.
- */
 $botao = static function (string $acao, string $campo, string $valor, string $rotulo, bool $secundario) use ($view, $dis, $disSens, $sensivel, $avisoUac): string {
     $sens = $sensivel($acao, $campo, $valor);
 
@@ -82,7 +53,6 @@ $botao = static function (string $acao, string $campo, string $valor, string $ro
         . Respond::e($rotulo . ($sens ? $avisoUac : '')) . '</button></form>';
 };
 
-/** Abre o painel de uma aba; o da aba que não está aberta nasce escondido. */
 $painel = static function (WinTab $aba) use ($view): string {
     return '<div class="painel" id="painel-' . $aba->value . '" role="tabpanel"'
         . ($aba === $view->tab ? '' : ' hidden') . '>';
@@ -130,7 +100,6 @@ foreach ($view->tweaks as $tw) {
     </div>
   <?php endif; ?>
 
-  <!-- ---------------------------------------------------------------- saída -->
   <section>
     <h2>Última execução do Windows</h2>
 
@@ -169,7 +138,6 @@ foreach ($view->tweaks as $tw) {
     </p>
   </section>
 
-  <!-- ------------------------------------------------------ principais -->
   <div class="principais">
     <section id="acao-audit">
       <?= $secao('Auditoria', 'Gera o log completo do sistema em C:\log\DD.MM.AAAA — oito blocos.') ?>
@@ -210,7 +178,6 @@ foreach ($view->tweaks as $tw) {
     </section>
   </div>
 
-  <!-- ------------------------------------------------------------- abas -->
   <nav class="abas" id="abas" aria-label="Grupos de ações">
     <?php foreach (WinTab::cases() as $aba): ?>
       <a href="<?= Respond::e($aba->url()) ?>#abas" data-aba="<?= Respond::e($aba->value) ?>"<?= $aba === $view->tab ? ' class="ativa" aria-current="page"' : '' ?>><?= Respond::e($aba->label()) ?></a>
@@ -628,7 +595,6 @@ foreach ($view->tweaks as $tw) {
     </section>
   </div>
 
-  <!-- ------------------------------------------------------------- histórico -->
   <section>
     <h2>Histórico do Windows</h2>
 
@@ -686,13 +652,6 @@ foreach ($view->tweaks as $tw) {
   </p>
 </div>
 
-<!-- ------------------------------------------------------ modais do optimize -->
-<!--
-  Cada preset ganha o SEU modal, nomeando a consequência exata em vez de um
-  aviso genérico. Aviso genérico ensina a clicar sem ler; dizer "o botão WSL
-  vai apagar" e "o explorer desta sessão vai morrer" é o que faz a pessoa
-  parar e pensar.
--->
 <dialog id="modal-ssh">
   <div class="modal-corpo">
     <h3>O preset <code>ssh</code> desabilita o WslService</h3>
@@ -743,17 +702,9 @@ foreach ($view->tweaks as $tw) {
 </dialog>
 
 <script>
-/*
- * Os formulários desta tela vão pelo script comum do layout, sem reload: o
- * miolo é trocado depois de cada ação, então tudo aqui é por delegação no
- * document, e o que a tela já aplicou vem do data-aplicados, fresco a cada
- * troca. A trava contra duplo envio também é do script comum.
- */
 (function () {
   'use strict';
 
-  // ---- DNS: os campos de IP só aparecem no DNS próprio -------------------
-  // Sem JavaScript eles ficam sempre à vista, e o DNS próprio continua usável.
   function pintarDns() {
     var dnsForm = document.getElementById('form-dns');
     if (!dnsForm) { return; }
@@ -761,7 +712,6 @@ foreach ($view->tweaks as $tw) {
     document.getElementById('dns-custom').hidden = !marcado || marcado.value.toLowerCase() !== 'custom';
   }
 
-  // ---- Tweaks: o preset marca as caixas, e a seleção diz o nome ---------
   var PRESETS = <?= json_encode((object) $view->tweakPresets, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
   var ROTULOS = <?= json_encode($presetRotulos, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
@@ -776,7 +726,6 @@ foreach ($view->tweaks as $tw) {
     return 'custom';
   }
 
-  // O botão só diz Reverter quando todas as marcadas estão aplicadas.
   function pintarTw(formTw) {
     var aplicados = JSON.parse(formTw.getAttribute('data-aplicados') || '[]');
     var marcadas = [];
@@ -809,7 +758,6 @@ foreach ($view->tweaks as $tw) {
   pintarDns();
   document.addEventListener('phporto:trocou', pintarDns);
 
-  // ---- Optimize: cada preset tem o seu aviso -----------------------------
   document.addEventListener('submit', function (ev) {
     var form = ev.target;
     if (form.id !== 'form-optimize') { return; }
@@ -820,7 +768,6 @@ foreach ($view->tweaks as $tw) {
     if (preset === 'ssh') { modal = document.getElementById('modal-ssh'); }
     if (preset === 'kill-rdp') { modal = document.getElementById('modal-killrdp'); }
 
-    // -Undo é o botão de socorro: restaurar não precisa de aviso.
     if (modal && !document.getElementById('opt-undo').checked) {
       ev.preventDefault();
       modal.showModal();
@@ -837,11 +784,6 @@ foreach ($view->tweaks as $tw) {
     if (formOpt.requestSubmit) { formOpt.requestSubmit(); } else { formOpt.submit(); }
   });
 
-  // ---- Abas: troca o painel sem recarregar -------------------------------
-  // SEGUNDA CAMADA, PARA CONFORTO: sem JavaScript, o link /win?aba=<nome>#abas
-  // recarrega a página já posicionada no menu. Aqui o clique só mostra o painel
-  // e troca a URL com replaceState, porque os formulários postam para a URL da
-  // página e o 303 volta para a aba que ela carrega.
   document.addEventListener('click', function (ev) {
     var link = ev.target.closest('#abas a[data-aba]');
     if (!link || !window.history || !history.replaceState) { return; }

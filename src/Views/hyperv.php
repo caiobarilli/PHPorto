@@ -3,30 +3,12 @@
 declare(strict_types=1);
 
 /**
- * A tela /hyperv: a faixa do hospedeiro e a tabela de máquinas virtuais.
- *
- * A FAIXA DECIDE SE HÁ TABELA. Bloqueio (PowerShell elevado desligado),
- * leitura cancelada no teto, saída fora do formato, ou hospedeiro fora — com o
- * motivo real: recurso desligado, serviço parado ou outro erro —: em qualquer
- * um a faixa é a tela inteira e a tabela não aparece. Só o recurso desligado
- * manda reiniciar; os outros não pedem uma ação cara sem motivo. Só com o hospedeiro ligado vem a lista —
- * ou, sem nenhuma VM, uma frase no lugar dela.
- *
- * A COLUNA AÇÕES liga, desliga e reinicia uma VM pelo id dela, cada botão um
- * POST do hyperv-vm com UAC próprio. O estado lido decide o que fica
- * habilitado; o Invoke-HypervVm confere de novo na hora. Desligar e reiniciar
- * pedem confirmação num <dialog>; ligar não. Linha sem id não tem botão.
- *
  * @var \App\Http\HypervView $view
  */
 
 use App\Http\Respond;
 use App\Win\HypervListing;
 
-/**
- * Os estados do Get-VM em português leigo; o desconhecido cai na grafia
- * original. "Salva" sozinho não diz nada para quem não conhece Hyper-V.
- */
 $estados = [
     'Running'       => 'rodando',
     'Off'           => 'desligada',
@@ -42,12 +24,9 @@ $estados = [
     'Hibernated'    => 'hibernada',
 ];
 
-/** Parada de vez: cinza. Rodando é verde; o resto (transitório) fica neutro. */
 $paradas = ['Off', 'Saved', 'FastSaved', 'Hibernated'];
 
 $permite = static function (string $estado): array {
-    // Pausada liga retomando; salva e hibernada ligam voltando de onde
-    // pararam; o resto (transitório) não deixa nada.
     return [
         'start'   => in_array($estado, ['Off', 'Saved', 'FastSaved', 'Hibernated', 'Paused'], true),
         'stop'    => $estado === 'Running',
@@ -114,8 +93,6 @@ $tempo = static function (int $segundos): string {
 };
 
 $celulaIp = static function (\App\Win\HypervVm $vm): string {
-    // O HTML fica literal, com o recuo da tabela, para a célula sair igual à
-    // que estava no laço; o buffer só tira o aninhamento de dentro do foreach.
     $uteis  = $vm->usefulIps();
     $ip     = $uteis[0] ?? null;
     $outros = array_slice($uteis, 1);
@@ -274,12 +251,6 @@ $listing = $view->listing;
 </dialog>
 
 <script>
-/*
- * Desligar e reiniciar confirmam num <dialog> antes do POST; ligar não. O
- * submit é cancelado aqui, antes do sem-reload do layout, e o botão do modal
- * envia de novo com requestSubmit(). O modal fica fora do .wrap, que a troca
- * sem reload substitui, e os eventos vão por delegação.
- */
 (function () {
   'use strict';
 
@@ -317,11 +288,6 @@ $listing = $view->listing;
   });
 })();
 
-/*
- * "copiar" ao lado do IP. Só no navegador, sem requisição: em 127.0.0.1 o
- * navigator.clipboard funciona; fora de contexto seguro, seleciona o texto
- * para o Ctrl+C. Sem JavaScript o botão nem aparece.
- */
 (function () {
   'use strict';
 
