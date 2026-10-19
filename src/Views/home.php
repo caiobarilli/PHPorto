@@ -3,24 +3,6 @@
 declare(strict_types=1);
 
 /**
- * A home: o nome, e quatro botões.
- *
- * RÓTULO NO WSL, NO WIN E NO HYPER-V, SÓ ÍCONE NA ENGRENAGEM. A engrenagem se lê
- * sem legenda; "WSL", "WIN" e "Hyper-V" não se leem a partir de um desenho, e o
- * estado desabilitado precisa de palavra para dizer O QUE está desligado — um
- * ícone apagado sozinho não diz.
- *
- * OS DOIS BOTÕES DESABILITAM POR MOTIVOS DIFERENTES, e isso é a razão de
- * haver uma nota por botão em vez de um parágrafo só:
- *
- *   O WSL desabilita quando o WSL não está instalado ou a distro do .env não
- *   existe — nunca porque a VM está dormindo. A VM dormir é normal, ela sobe
- *   sozinha no primeiro comando, e desabilitar por isso mentiria.
- *
- *   O WIN NASCE desabilitado, sempre. Subir o servidor não eleva nada: o que
- *   o habilita é o interruptor da /config, e o estado morre com o servidor.
- *   Não é defeito nem falta de configuração — é o padrão.
- *
  * @var \App\Http\HomeView $view
  */
 
@@ -93,8 +75,6 @@ use App\Http\Respond;
   </div>
 
   <?php
-  // Painel ligado com o PowerShell elevado desligado: o botão fica ativo (é
-  // decisão persistente), mas a tela só teria a faixa de bloqueio. Avisa antes.
   $hypervSemPs = $view->hypervEnabled && !$view->winEnabled;
 ?>
   <?php if (!$view->wslEnabled || !$view->winEnabled || !$view->hypervEnabled): ?>

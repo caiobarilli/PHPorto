@@ -3,10 +3,6 @@
 declare(strict_types=1);
 
 /**
- * A entrada das telas: um campo de senha para o token, no lugar do diálogo
- * nativo do Basic. Sem data-sem-reload: o login é navegação comum, e o 303
- * que volta leva para a tela pedida.
- *
  * @var \App\Http\LoginView $view
  */
 

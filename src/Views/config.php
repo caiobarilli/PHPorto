@@ -3,12 +3,6 @@
 declare(strict_types=1);
 
 /**
- * A tela /config: o banco ativo, as chaves que a tela pode alternar, e o
- * restaurar de fábrica.
- *
- * O .env continua sendo lido e nunca escrito. O que muda aqui vai para
- * storage/flags.json — ver a nota em App\Config\Flags.
- *
  * @var \App\Http\ConfigView $view
  */
 
@@ -86,7 +80,6 @@ use App\Http\Respond;
           <span class="trilho"></span>
           <span class="rotulo" id="ps-rotulo"><?= $view->win->on ? 'Ligado' : 'Desligado' ?></span>
         </label>
-        <?php /* Desligado, salvar só pode ligar: e ligar espera o UAC. */ ?>
         <button type="submit" class="btn btn-sm" id="btn-salvar-ps"<?= $view->win->on ? '' : ' data-uac' ?>
                 <?= $view->win->canTry() ? '' : 'disabled' ?>>Salvar</button>
 
@@ -271,12 +264,6 @@ use App\Http\Respond;
 </dialog>
 
 <script>
-/*
- * Os formulários desta tela vão pelo script comum do layout, sem reload: o
- * miolo é trocado depois de cada ação, então tudo aqui é por delegação no
- * document, e o estado ("já estava ligada?") vem dos atributos data-* do
- * formulário, que chegam frescos em cada troca.
- */
 (function () {
   'use strict';
 
@@ -311,7 +298,7 @@ use App\Http\Respond;
     if (fixo) { raiz.setAttribute('data-tema', modo); } else { raiz.removeAttribute('data-tema'); }
     try {
       if (fixo) { localStorage.setItem(TEMA, modo); } else { localStorage.removeItem(TEMA); }
-    } catch (e) { /* sem armazenamento, vale só até sair da página */ }
+    } catch (e) { }
     pintarTema();
   }
 
@@ -331,9 +318,6 @@ use App\Http\Respond;
   document.addEventListener('click', function (ev) {
     if (ev.target.closest('#btn-fabrica')) { document.getElementById('modal-fabrica').showModal(); }
 
-    // O "tentar novamente" envia ps_enabled=1 pelo próprio botão, com o
-    // interruptor ainda desligado — e não passa pelo modal, porque quem
-    // clica nele já leu o aviso na tentativa anterior.
     if (ev.target.closest('#btn-retentar')) { document.getElementById('form-ps').setAttribute('data-confirmado', ''); }
 
     if (ev.target.closest('#btn-confirmar-api')) {
@@ -347,10 +331,6 @@ use App\Http\Respond;
     }
   });
 
-  // Só LIGAR pergunta, na API e no PowerShell: desligar reduz superfície, e
-  // confirmar seria cerimônia sem risco do outro lado. Ligar o PowerShell
-  // abre um processo elevado, e o modal dele diz isso com essas palavras. O
-  // Hyper-V não pergunta: a própria ação confere o recurso e recusa com aviso.
   document.addEventListener('submit', function (ev) {
     var form = ev.target;
     if (form.hasAttribute('data-confirmado')) { form.removeAttribute('data-confirmado'); return; }
