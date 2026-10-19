@@ -33,7 +33,6 @@ it('ExecutionKind cai em Comando para valor ausente ou desconhecido', function (
 })->with([null, '', 'coisa-que-nao-existe', 123]);
 
 it('os tipos do WSL são todos os casos menos o do Windows', function () {
-    // Tipo novo do lado WSL que não entrar aqui some da /wsl sem aviso.
     $esperado = array_values(array_filter(ExecutionKind::cases(), static fn (ExecutionKind $k): bool => $k !== ExecutionKind::Windows));
 
     expect(ExecutionKind::WSL)->toBe($esperado);

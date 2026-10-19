@@ -8,16 +8,6 @@ use App\Wsl\RunResult;
 use App\Wsl\ScriptBuilder;
 use App\Wsl\Upload;
 
-/**
- * O envio do card de anexos, sem servidor e sem WSL.
- *
- * A rota sai por exit, então aqui ficam as peças que ela chama: o limite, a
- * conferência do arquivo recebido, o destino e a cópia temporária. O
- * is_uploaded_file e o move_uploaded_file só valem dentro de um POST de
- * verdade, então entram falsos; o WSL entra como um run falso que devolve o
- * RunResult. O script do cp é exercitado num bash local, fora do Windows.
- */
-
 function uploadDir(): string
 {
     $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto-upload-' . bin2hex(random_bytes(4));
@@ -53,8 +43,6 @@ function uploadLimpa(string $dir): void
     }
     @rmdir($dir);
 }
-
-// ---- Limite -------------------------------------------------------------------
 
 it('o limite é o menor entre 25 MB, upload_max_filesize e post_max_size', function (string $upload, string $post, int $esperado) {
     expect(Upload::limit($upload, $post))->toBe($esperado);
@@ -100,8 +88,6 @@ it('a /wsl confere o estouro antes do token, e o token antes do anexo', function
         ->and($token)->toBeLessThan($anexo);
 });
 
-// ---- Token --------------------------------------------------------------------
-
 it('o anexo sem token é recusado, mesmo com arquivo e destino', function () {
     Csrf::token();
     $_POST  = ['acao' => 'anexo', 'destino' => '~/notas.txt'];
@@ -115,8 +101,6 @@ it('o anexo sem token é recusado, mesmo com arquivo e destino', function () {
     $_POST  = [];
     $_FILES = [];
 });
-
-// ---- Destino ------------------------------------------------------------------
 
 it('o destino passa pela mesma validação de antes: preenchido e até 4.096 bytes', function () {
     expect(Upload::destination('  ~/pasta/notas.txt '))->toBe('~/pasta/notas.txt')
@@ -132,8 +116,6 @@ it('o destino vazio, que não é texto ou acima do teto é recusado', function (
     'lista'      => [['~/x'], 'Preencha o destino do anexo.'],
     'acima'      => [str_repeat('a', 4097), 'Destino passou do teto de 4096 bytes (tem 4097).'],
 ]);
-
-// ---- Arquivo recebido ---------------------------------------------------------
 
 it('aceita um arquivo que veio de envio e cabe no limite', function () {
     $dir = uploadDir();
@@ -194,8 +176,6 @@ it('o registro leva nome, tamanho e destino, e nunca o conteúdo', function () {
             . '  destino (PHPORTO_DST): ~/notas.txt');
 });
 
-// ---- Cópia temporária para o WSL ----------------------------------------------
-
 it('a cópia vai pela pasta de trabalho, com o caminho visto do WSL, e a temporária some no fim', function () {
     $dir = uploadDir();
     $files = $dir . DIRECTORY_SEPARATOR . 'files';
@@ -239,8 +219,6 @@ it('a temporária some também quando o WSL falha', function () {
 
     uploadLimpa($dir);
 });
-
-// ---- O script do cp, num bash de verdade --------------------------------------
 
 function uploadBash(string $root, string $src, string $dst): array
 {

@@ -8,8 +8,6 @@ use App\Http\WinView;
 use App\Win\ElevationState;
 
 /**
- * Monta a /win com o estado aplicado e a aba dados e devolve o HTML.
- *
  * @param list<string> $marcados
  * @param list<string> $aplicados
  * @param list<string> $acoes
@@ -60,7 +58,6 @@ function winHtml(
     ));
 }
 
-/** A seção de uma ação, pelo id dela; vazio se ela não está na página. */
 function winSecao(string $html, string $acao): string
 {
     $ini = strpos($html, '<section id="acao-' . $acao . '">');
@@ -146,7 +143,6 @@ it('o que os botões de Reverter mandam passa pela validação e reverte o estad
     }
 });
 
-/** Os ids de seção de ação que aparecem no HTML, na ordem. */
 function winAcoes(string $html): array
 {
     preg_match_all('/<section id="acao-([a-z]+)">/', $html, $m);
@@ -164,7 +160,6 @@ it('a página tem quatro partes, nesta ordem: saída, principais, abas, históri
         ->and($ordem[0] < $ordem[1] && $ordem[1] < $ordem[2] && $ordem[2] < $ordem[3])->toBeTrue();
 });
 
-/** O HTML do painel de uma aba, da abertura até o próximo painel ou o histórico. */
 function winPainel(string $html, WinTab $aba): string
 {
     $ini = (int) strpos($html, '<div class="painel" id="painel-' . $aba->value . '"');
@@ -202,9 +197,6 @@ it('os cinco painéis vêm na página, e só o da aba aberta está visível', fu
 })->with(WinTab::cases());
 
 it('as quinze ações do menu aparecem uma vez só na página, e as da /hyperv não', function () {
-    // hyperv e hyperv-vm são as ações fora do menu: atendem a rota /hyperv e
-    // não têm seção na /win. Então a página traz as quinze do menu, nunca a
-    // décima sexta nem a décima sétima — e este teste guarda essa fronteira.
     $todas = winAcoes(winHtml());
     sort($todas);
 
@@ -283,7 +275,6 @@ it('sunshine oferece instalar, iniciar/parar, firewall e o link da Web UI', func
         ->and($s)->not->toContain('O PHPorto não faz esse passo');
 });
 
-/** O formulário de credenciais e pareamento do sunshine. */
 function sunForm(string $secao): string
 {
     $ini = (int) strpos($secao, '<form method="post" data-sem-reload id="sun-parear"');
@@ -302,7 +293,6 @@ it('sunshine tem o formulário de pareamento: POST, senha em type=password, sem 
         ->and($f)->toContain('name="User" autocomplete="username"')
         ->and($f)->toContain('placeholder="notebook"')
         ->and($f)->toContain('<input type="checkbox" name="SetCreds" value="1">')
-        // Nenhum campo de texto do formulário nasce com valor.
         ->and(preg_match('~name="(User|Password|Pin|DeviceName)"[^>]*\svalue=~', $f))->toBe(0)
         ->and($f)->not->toContain('method="get"');
 });
@@ -321,7 +311,6 @@ it('com o caminho sensível travado, o formulário do sunshine nasce desabilitad
 });
 
 it('o sem-reload limpa senha e PIN depois da resposta', function () {
-    // O PIN é type=text (numérico); quem o limpa é o data-segredo.
     expect((string) file_get_contents(dirname(__DIR__, 2) . '/src/Views/layout.php'))->toContain("document.querySelectorAll('input[type=password], [data-segredo]').forEach(function (i) { i.value = ''; });");
 });
 
@@ -365,8 +354,6 @@ it('subação aparece em português, com o valor da ação ao lado e no envio', 
         ->and($html)->not->toMatch('/<option value="([a-z]+)">\1<\/option>/');
 });
 
-// ---------------------------------------------------------------- sensíveis
-
 it('a ação sensível diz que abre o UAC, e a comum não', function () {
     $html = winHtml(aba: WinTab::AcessoRemoto);
 
@@ -384,7 +371,6 @@ it('COM O WORKER LONGO DESLIGADO, a sensível segue clicável e a comum trava', 
         ->and($html)->toMatch('/<button type="submit" class="btn btn-sm[^"]*" data-uac>Ligar acesso remoto · abre o UAC/')
         ->and($html)->toMatch('/<button type="submit" class="btn btn-sm[^"]*" disabled>Desligar acesso remoto</')
         ->and(winSecao($html, 'install'))->not->toContain(' disabled')
-        // No select misto, cada opção trava pelo caminho dela.
         ->and($html)->toContain('<option value="install" data-uac>instalar (install) · abre o UAC</option>')
         ->and($html)->toContain('<option value="status" disabled>ver o estado (status)</option>');
 });
@@ -398,8 +384,6 @@ it('com o checkout incompleto, a sensível também trava', function () {
         ->and(winSecao($html, 'install'))->toContain(' disabled')
         ->and($html)->toContain('<select id="exp-sub" name="SubAction" disabled>');
 });
-
-// ---- Sem reload (fase 1) ----------------------------------------------------
 
 it('sem reload: todo formulário POST da /win é marcado, e o aviso também', function () {
     $html = winHtml();

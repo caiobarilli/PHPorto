@@ -6,15 +6,6 @@ use App\Http\Pages;
 use App\Win\PsResult;
 use App\Win\WinAction;
 
-/**
- * O POST da /hyperv e a recusa do hyperv-vm na /win.
- *
- * As rotas saem por exit, então o que se testa aqui são as peças puras que
- * elas chamam, e a costura é conferida no texto do Pages.php, como no
- * WinTabTest: exercitar por HTTP subiria o php -S e recolheria as órfãs do
- * files/ desta máquina.
- */
-
 const POST_VM_ID = '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c';
 
 function pagesFonte(): string

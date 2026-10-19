@@ -6,7 +6,6 @@ use App\Http\HomeView;
 use App\Http\Respond;
 use App\Wsl\DistroStatus;
 
-/** A home com o WIN e o painel do Hyper-V dados; o WSL fica sempre usável. */
 function homeHtml(bool $win, bool $hyperv): string
 {
     return Respond::render('home.php', new HomeView(

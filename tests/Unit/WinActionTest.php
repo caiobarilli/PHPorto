@@ -4,48 +4,21 @@ declare(strict_types=1);
 
 use App\Win\WinAction;
 
-/**
- * A allowlist do lado PHP.
- *
- * Ela NÃO é a tranca — a tranca é a allowlist do worker.ps1, que roda em
- * integridade Alta. Estes testes cobrem a primeira barreira: recusar no
- * servidor, com mensagem que a pessoa entende, o que o formulário mandou
- * errado.
- */
-
 it('tem as dezessete ações: as quinze do menu em ordem, e as duas da /hyperv fora dele', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
             'gdid', 'rdp', 'sunshine',
-            // Fora do menu da /win: atendem a rota /hyperv, e por isso no fim.
             'hyperv', 'hyperv-vm',
         ]);
 });
 
-/**
- * A PARIDADE ENTRE AS DUAS ALLOWLISTS.
- *
- * As duas listas são redundantes de propósito, mas a redundância não é
- * automática: nada obriga o $ALLOWLIST do worker.ps1 a acompanhar este enum.
- * Uma ação que entre só de um lado fica pela metade — aceita aqui e recusada
- * lá com "acao fora da allowlist", ou executável por quem escrever no arquivo
- * de trabalho sem que a tela sequer a ofereça.
- *
- * Este teste lê o worker.ps1 como TEXTO, e é o único jeito: PHP não executa
- * PowerShell para perguntar, e um teste do Pester não enxerga o enum. Ler o
- * arquivo é grosseiro, mas é o que fecha a única costura entre as duas
- * linguagens que ninguém mais confere.
- */
 it('as duas allowlists conhecem exatamente as mesmas ações', function () {
     $worker = file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
 
     expect($worker)->toBeString();
 
-    // Recorta o bloco $ALLOWLIST = @{ ... } e pega as chaves de primeiro nível,
-    // que são as linhas 'nome' = @{ — as chaves de parâmetro vêm indentadas
-    // mais fundo e não casam.
     expect(preg_match('/\$ALLOWLIST\s*=\s*@\{(.*?)\n\}/s', $worker, $bloco))->toBe(1);
     expect(preg_match_all("/^    '([a-z-]+)'\s*=/m", $bloco[1], $achadas))->toBeGreaterThan(0);
 
@@ -82,8 +55,6 @@ it('performance off reverte o estado aplicado', function () {
         ->and(WinAction::Performance->stateChange(['State' => 'on'])?->applied)->toBeTrue();
 });
 
-// ---------------------------------------------------------------- audit
-
 it('audit aceita as subações run e open', function (string $sub) {
     expect(WinAction::Audit->validate(['SubAction' => $sub]))->toBe(['SubAction' => $sub]);
 })->with(['run', 'open']);
@@ -95,8 +66,6 @@ it('audit recusa subação que não existe', function () {
 it('audit open não afirma nada sobre estado', function () {
     expect(WinAction::Audit->stateChange(['SubAction' => 'open']))->toBeNull();
 });
-
-// ---------------------------------------------------------------- tweaks
 
 it('tweaks exige preset ou itens', function () {
     WinAction::Tweaks->validate([]);
@@ -127,8 +96,6 @@ it('tweaks por itens leva o Undo junto', function () {
     expect(WinAction::Tweaks->validate(['Items' => 'WPFTweaksTelemetry', 'Undo' => '1']))
         ->toBe(['Items' => 'WPFTweaksTelemetry', 'Undo' => true]);
 });
-
-// --------------------------------------------------------------- debloat
 
 it('debloat sem lista devolve vazio: a ação remove o arquivo inteiro', function () {
     expect(WinAction::Debloat->validate([]))->toBe([]);
@@ -167,8 +134,6 @@ it('tweaks só inclui Undo quando o checkbox veio marcado', function () {
         ->and(WinAction::Tweaks->validate(['Preset' => 'minimal', 'Undo' => '0']))
         ->toBe(['Preset' => 'minimal']);
 });
-
-// ---------------------------------------------------------------- dns
 
 it('dns aceita cada chave do dns.json e o DHCP', function (string $provider) {
     $params = $provider === 'Custom' ? ['Provider' => $provider, 'PrimaryDNS' => '192.168.1.1'] : ['Provider' => $provider];
@@ -226,15 +191,11 @@ it('dns custom omite o secundário quando vem vazio', function () {
     ]))->toBe(['Provider' => 'Custom', 'PrimaryDNS' => '9.9.9.9']);
 });
 
-// ---------------------------------------------------------------- install
-
 it('install exige apps', function () {
     WinAction::Install->validate([]);
 })->throws(InvalidArgumentException::class);
 
 it('install aceita TEXTO LIVRE, sem curar o catálogo do winget', function () {
-    // Lista curada envelheceria em semanas. O valor nunca entra em linha de
-    // comando — vai como literal dentro do script gerado pelo worker.
     expect(WinAction::Install->validate(['Apps' => 'Git.Git,Microsoft.VSCode,Docker.DockerDesktop']))
         ->toBe(['Apps' => 'Git.Git,Microsoft.VSCode,Docker.DockerDesktop'])
         ->and(WinAction::Install->validate(['Apps' => 'Publisher.App-With_Odd.Name+2']))
@@ -289,8 +250,6 @@ it('install recusa quando a soma passa do teto', function () {
     ]);
 })->throws(InvalidArgumentException::class, 'Apps passou do teto de 4096 bytes.');
 
-// ---------------------------------------------------------------- network
-
 it('network exige a interface, porque sem ela a ação recusa', function () {
     WinAction::Network->validate(['Duration' => '30']);
 })->throws(InvalidArgumentException::class);
@@ -311,8 +270,6 @@ it('network recusa duração fora da faixa', function (string $d) {
 it('network recusa duração que não é número', function () {
     WinAction::Network->validate(['Interface' => 'Ethernet', 'Duration' => '30; shutdown']);
 })->throws(InvalidArgumentException::class);
-
-// ---------------------------------------------------------------- exporter / gpu
 
 it('exporter e gpu têm conjuntos DIFERENTES de subações', function () {
     expect(WinAction::EXPORTER_SUBACTIONS)->toContain('firewall')
@@ -339,8 +296,6 @@ it('gpu aceita as próprias e recusa a do exporter', function () {
         ->toThrow(InvalidArgumentException::class);
 });
 
-// ---------------------------------------------------------------- gdid
-
 it('gdid exige subação', function () {
     WinAction::Gdid->validate([]);
 })->throws(InvalidArgumentException::class);
@@ -350,7 +305,6 @@ it('gdid aceita as três subações', function (string $sub) {
 })->with(['status', 'disable', 'enable']);
 
 it('gdid não compartilha subação com exporter nem com gpu', function () {
-    // Ele liga e desliga um pipeline; não instala nem para processo.
     foreach (['install', 'start', 'stop', 'metrics', 'firewall', 'uninstall'] as $alheia) {
         expect(static fn () => WinAction::Gdid->validate(['SubAction' => $alheia]))
             ->toThrow(InvalidArgumentException::class);
@@ -362,13 +316,9 @@ it('gdid devolve a grafia da LISTA, não a que veio no POST', function () {
 });
 
 it('gdid não entra em preset nenhum do optimize nem dos tweaks', function () {
-    // Bloquear domínio de notificação é efeito amplo: tem de ser escolhido a
-    // dedo, nunca herdado de quem pediu outra coisa.
     expect(WinAction::TWEAK_PRESETS)->not->toContain('gdid')
         ->and(WinAction::OPTIMIZE_PRESETS)->not->toContain('gdid');
 });
-
-// ---------------------------------------------------------------- rdp
 
 it('rdp exige subação', function () {
     WinAction::Rdp->validate([]);
@@ -398,15 +348,11 @@ it('rdp on/off movem o Applied, valendo na hora', function () {
 });
 
 it('rdp h264-on/h264-off movem o PendingReboot, não o Applied', function () {
-    // O vídeo H.264/UDP só vale depois de reiniciar: vai para outro escopo, e é
-    // assim que aplicado e pendente ficam excludentes para o mesmo item.
     expect(WinAction::Rdp->stateChange(['SubAction' => 'h264-on'])?->applied)->toBeTrue()
         ->and(WinAction::Rdp->stateChange(['SubAction' => 'h264-on'])?->scope)->toBe(\App\Domain\WinStateScope::PendingReboot)
         ->and(WinAction::Rdp->stateChange(['SubAction' => 'h264-off'])?->applied)->toBeFalse()
         ->and(WinAction::Rdp->stateChange(['SubAction' => 'h264-off'])?->scope)->toBe(\App\Domain\WinStateScope::PendingReboot);
 });
-
-// ---------------------------------------------------------------- sunshine
 
 it('sunshine exige subação', function () {
     WinAction::Sunshine->validate([]);
@@ -439,15 +385,11 @@ it('sunshine: install, firewall, status, set-creds e pair não afirmam nada sobr
     expect(WinAction::Sunshine->stateChange(['SubAction' => $sub]))->toBeNull();
 })->with(['status', 'install', 'firewall-open', 'firewall-close', 'set-creds', 'pair']);
 
-// ------------------------------------------------- sunshine: credenciais e PIN
-
-/** Um POST válido do pair, com o que se quiser trocar. */
 function sunPair(array $troca = []): array
 {
     return array_merge(['SubAction' => 'pair', 'User' => 'admin', 'Password' => 'segredo123', 'Pin' => '1234'], $troca);
 }
 
-/** Um POST válido do set-creds, com o que se quiser trocar. */
 function sunCreds(array $troca = []): array
 {
     return array_merge(['SubAction' => 'set-creds', 'User' => 'admin', 'Password' => 'segredo123'], $troca);
@@ -487,7 +429,6 @@ it('senha com menos de 8 bytes é recusada; acento conta 2', function () {
     expect(fn () => WinAction::Sunshine->validate(sunCreds(['Password' => '1234567'])))
         ->toThrow(InvalidArgumentException::class, 'Password precisa de pelo menos 8 bytes.');
 
-    // Quatro letras acentuadas = 8 bytes: passa.
     expect(WinAction::Sunshine->validate(sunCreds(['Password' => 'ãéíõ']))['Password'])->toBe('ãéíõ');
 });
 
@@ -599,8 +540,6 @@ it('Password e Pin são os segredos', function () {
     expect(WinAction::SECRET_PARAMS)->toBe(['Password', 'Pin']);
 });
 
-// ---------------------------------------------------------------- hyperv
-
 it('hyperv não tem parâmetro: listar devolve vazio, como memory e processes', function () {
     expect(WinAction::Hyperv->validate([]))->toBe([]);
 });
@@ -608,8 +547,6 @@ it('hyperv não tem parâmetro: listar devolve vazio, como memory e processes', 
 it('hyperv é só leitura: não afirma nada sobre estado', function () {
     expect(WinAction::Hyperv->stateChange([]))->toBeNull();
 });
-
-// ------------------------------------------------------------- hyperv-vm
 
 it('hyperv-vm aceita <sub> com um VmId GUID, e guarda o id em minúsculas', function (string $sub) {
     expect(WinAction::HypervVm->validate(['SubAction' => strtoupper($sub), 'VmId' => ' 6C1E2A4B-0D3F-4E5A-9B8C-7D6E5F4A3B2C ']))
@@ -667,11 +604,7 @@ it('a allowlist do hyperv-vm no worker tem as mesmas subações, o mesmo padrão
         ->and($campos['VmId'])->toContain('min = ' . WinAction::HYPERV_VM_ID_BYTES);
 });
 
-// ---------------------------------------------------------------- optimize
-
 it('optimize recusa chamada que não faria nada', function () {
-    // Sem preset, sem lista e sem undo o Invoke-Optimize não tem o que fazer,
-    // e a execução viraria uma linha no log parecendo falha.
     WinAction::Optimize->validate([]);
 })->throws(InvalidArgumentException::class);
 
@@ -713,8 +646,6 @@ it('optimize recusa lista acima do teto de bytes', function () {
     WinAction::Optimize->validate(['Kill' => str_repeat('x', WinAction::MAX_PARAM_BYTES + 1)]);
 })->throws(InvalidArgumentException::class);
 
-// ---------------------------------------------------------------- sensíveis
-
 it('a ação sensível é reconhecida pelo SubAction validado', function (WinAction $acao, array $params, bool $esperado) {
     expect($acao->isSensitive($params))->toBe($esperado);
 })->with([
@@ -748,10 +679,6 @@ it('a ação sensível é reconhecida pelo SubAction validado', function (WinAct
 ]);
 
 it('as duas listas de sensíveis são a mesma, a do PHP e a $SENSIVEIS do worker', function () {
-    // Mesmo motivo da paridade da allowlist: a lista do PHP só escolhe o
-    // caminho, e a do worker é a tranca. Uma ação que só o PHP achasse
-    // sensível abriria prompt à toa; uma que só o worker achasse seria
-    // recusada pelo worker longo sem a tela oferecer o caminho do UAC.
     $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
 
     expect(preg_match('/\$SENSIVEIS\s*=\s*@\{(.*?)\r?\n\}/s', $worker, $bloco))->toBe(1);
@@ -799,9 +726,6 @@ it('toda subação sensível existe na lista de subações da ação', function 
 });
 
 it('a allowlist do sunshine no worker tem os mesmos campos, subações e tetos que a WinAction', function () {
-    // A paridade de ações não enxerga campo: um campo novo só do lado PHP seria
-    // recusado pelo worker depois do UAC aceito, e um teto diferente aceitaria
-    // aqui o que lá é recusado.
     $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
 
     expect(preg_match("/^    'sunshine'\\s*=\\s*@\\{\\r?\\n(.*?)\\r?\\n    \\}/ms", $worker, $bloco))->toBe(1);
@@ -840,9 +764,6 @@ it('os segredos do worker ($SEGREDOS) são os mesmos da WinAction', function () 
     expect($nomes[1])->toBe(WinAction::SECRET_PARAMS);
 });
 
-// ------------------------------------------------- histórico: segredo sai como ***
-
-/** O rótulo do histórico, pelo método privado do Pages. */
 function rotulo(WinAction $acao, array $params): string
 {
     return (string) (new ReflectionMethod(App\Http\Pages::class, 'describe'))->invoke(null, $acao, $params);
@@ -863,8 +784,6 @@ it('o histórico do set-creds não leva a senha', function () {
 });
 
 it('a órfã recolhida com *** do worker continua ***', function () {
-    // O win-done já chega mascarado pelo $SEGREDOS do worker; o describe não
-    // pode "desmascarar" nem duplicar.
     expect(rotulo(WinAction::Sunshine, ['SubAction' => 'pair', 'User' => 'admin', 'Password' => '***', 'Pin' => '***']))
         ->toBe('sunshine -SubAction pair -User admin -Password *** -Pin ***');
 });

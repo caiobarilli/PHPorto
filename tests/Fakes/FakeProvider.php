@@ -10,27 +10,18 @@ use App\Domain\WinState;
 use App\Domain\WinStateScope;
 use App\Providers\DatabaseProviderInterface;
 
-/**
- * Provider em memória para os testes de unidade do ExecutionLogService.
- *
- * Implementa o mesmo contrato dos providers reais sem nenhuma dependência de
- * rede ou banco, e guarda o que recebeu para inspeção.
- */
 final class FakeProvider implements DatabaseProviderInterface
 {
-    /** @var list<Execution> na ordem em que chegaram */
+    /** @var list<Execution> */
     public array $inserted = [];
 
     public int $clearCalls = 0;
 
     /**
-     * O estado da /win, indexado pela chave composta, como nos providers reais.
-     *
      * @var array<string, WinState>
      */
     public array $winState = [];
 
-    /** Carimba o created_at como um banco faria, para o teste ver o retorno. */
     public function insert(Execution $execution): Execution
     {
         $stored = new Execution(
@@ -48,11 +39,6 @@ final class FakeProvider implements DatabaseProviderInterface
         return $stored;
     }
 
-    /**
-     * Filtra ANTES de aplicar o limite, como os providers reais fazem na
-     * query. Um fake que limitasse primeiro e filtrasse depois passaria em
-     * teste e esconderia justamente o defeito que o filtro no banco evita.
-     */
     public function recent(int $limit = 100, ?array $kinds = null): array
     {
         $todas = array_reverse($this->inserted);
@@ -67,12 +53,6 @@ final class FakeProvider implements DatabaseProviderInterface
         return array_slice($todas, 0, $limit);
     }
 
-    /**
-     * NÃO TOCA NO winState, e é justamente o que este fake precisa provar:
-     * limpar histórico e mudar o que a tela afirma sobre a máquina são coisas
-     * diferentes. Um fake que apagasse os dois deixaria o teste passar e
-     * esconderia o defeito.
-     */
     public function clear(?array $kinds = null): int
     {
         $this->clearCalls++;
@@ -93,7 +73,6 @@ final class FakeProvider implements DatabaseProviderInterface
         return $antes - count($this->inserted);
     }
 
-    /** Carimba o updated_at como um banco faria, e sobrescreve a chave. */
     public function putWinState(WinState $state): WinState
     {
         $stored = new WinState(

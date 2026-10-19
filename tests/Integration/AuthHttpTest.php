@@ -6,14 +6,6 @@ use App\Http\Auth;
 use App\Http\Login;
 use Tests\Support\PhpServer;
 
-/*
- * O portão de token pelo php -S de verdade, na frente de todas as rotas.
- *
- * Cada servidor tem storage/ temporário próprio: o contador de erros que estes
- * testes enchem não é o desta máquina. Os dois bloqueios têm servidor só
- * deles, para não contaminar os outros casos.
- */
-
 const AUTH_HTTP_TOKEN = 'token-do-teste-http';
 
 beforeAll(function () {
@@ -34,7 +26,6 @@ afterAll(function () {
 
 /**
  * @param list<string> $cabecalhos
- *
  * @return array<string, string>
  */
 function cookiesDe(array $cabecalhos): array

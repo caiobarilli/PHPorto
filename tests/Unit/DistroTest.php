@@ -4,10 +4,6 @@ declare(strict_types=1);
 
 use App\Wsl\Distro;
 
-/*
- * Os bytes são os medidos nesta máquina, com Debian e docker-desktop de pé.
- */
-
 it('lê a listagem -q em UTF-8, como o WSL_UTF8=1 entrega', function () {
     $bruto = hex2bin('44656269616e0d0a646f636b65722d6465736b746f700d0a');
 

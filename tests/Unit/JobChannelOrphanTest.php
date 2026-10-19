@@ -6,31 +6,15 @@ use App\Domain\OutputCap;
 use App\Win\Elevation;
 use App\Win\JobChannel;
 
-/**
- * O recolhimento de execução órfã.
- *
- * POR QUE ISTO EXISTE, e não é hipótese: a espera da tela é síncrona, e quem
- * grava a linha é a requisição que espera. Se ela morrer, o trabalho terminou
- * do outro lado e o registro não aconteceu. O `files/win-worker.log` guarda o
- * caso real — duas execuções de `tweaks` que mexeram no registro e nos
- * serviços do Windows e não existem no histórico.
- *
- * NADA AQUI ELEVA NADA: o worker é simulado escrevendo à mão o par de arquivos
- * que ele deixaria. É o mesmo método do JobChannelTest, e é o que permite
- * cobrir a fila sem um prompt de UAC.
- */
-
 beforeEach(function () {
     $this->files = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto_orfa_' . bin2hex(random_bytes(6));
     mkdir($this->files, 0o775, true);
-    // O worker grava os resultados aqui; o job e as ordens ficam em files/.
     $this->protegida = $this->files . DIRECTORY_SEPARATOR . Elevation::DIR_PROTEGIDA;
     mkdir($this->protegida);
     $this->canal = new JobChannel($this->files);
 });
 
 afterEach(function () {
-    // Duas pastas agora: files/ e a protegida dentro dela.
     if (is_string($this->files) && is_dir($this->files)) {
         foreach ([$this->protegida, $this->files] as $pasta) {
             foreach (glob($pasta . '/*') ?: [] as $f) {
@@ -42,9 +26,6 @@ afterEach(function () {
 });
 
 /**
- * Deixa no disco um par ÓRFÃO: saída e conclusão, com a ação, os parâmetros e
- * a hora de fim que o worker passou a escrever.
- *
  * @param array<string, string|int|bool> $params
  */
 function deixarOrfa(
@@ -78,16 +59,12 @@ function deixarOrfa(
     file_put_contents($dir . DIRECTORY_SEPARATOR . 'win-done-' . $id . '.json', (string) json_encode($dados));
 }
 
-/** Escreve uma conclusão crua, para os casos que o worker não produz. */
 function deixarConclusaoCrua(object $ctx, string $id, string $conteudo): void
 {
     file_put_contents((string) $ctx->protegida . DIRECTORY_SEPARATOR . 'win-done-' . $id . '.json', $conteudo);
 }
 
-// ---------------------------------------------------------------- a fila
-
 it('pasta sem par nenhum não recolhe nada', function () {
-    // É o caso NORMAL: job registrado apagou o par, então não sobrou fila.
     expect($this->canal->collectOrphans())->toBe([]);
 });
 
@@ -103,7 +80,6 @@ it('par completo vira uma órfã, com ação, parâmetros e hora de FIM', functi
     expect($orfa->id)->toBe('aaa111000000')
         ->and($orfa->acao)->toBe('tweaks')
         ->and($orfa->params)->toBe(['Preset' => 'advanced', 'Undo' => true])
-        // A hora é a que o worker gravou, e não "agora".
         ->and($orfa->finishedAt)->toBe('2026-09-09 13:04:14')
         ->and($orfa->result->durationMs)->toBe(116000)
         ->and($orfa->result->exitCode)->toBe(0)
@@ -121,9 +97,6 @@ it('a saída da órfã ABRE com a nota de que foi recuperada depois do fato', fu
 });
 
 it('win-out SEM win-done não é recolhido: é trabalho em andamento', function () {
-    // O worker cria a saída antes de largar o filho, e a conclusão é o único
-    // sinal de fim. Recolher só a saída registraria como terminado algo que
-    // está rodando com privilégio de Administrador.
     file_put_contents($this->protegida . DIRECTORY_SEPARATOR . 'win-out-ccc333.txt', 'meio do caminho');
 
     expect($this->canal->collectOrphans())->toBe([]);
@@ -138,10 +111,6 @@ it('win-done SEM win-out não é recolhido: o par tem de estar completo', functi
 });
 
 it('órfã de OUTRA execução do servidor é recolhida — nonce não filtra aqui', function () {
-    // O nonce é guarda de obsolescência para job de ENTRADA. Na saída, o órfão
-    // que interessa é justamente o da execução anterior do servidor: é ele que
-    // perdeu o registro. A conclusão nem carrega nonce, e é isso que este
-    // teste trava — se alguém passar a exigi-lo, ele quebra.
     deixarOrfa($this, 'eee555000000', "de ontem\n");
 
     $bruto = json_decode(
@@ -154,11 +123,7 @@ it('órfã de OUTRA execução do servidor é recolhida — nonce não filtra aq
         ->and($this->canal->collectOrphans())->toHaveCount(1);
 });
 
-// ---------------------------------------------------------------- as notas
-
 it('a interrupção do worker vira órfã com código NULO, e não é timeout', function () {
-    // O caminho medido: o php -S saiu, o worker matou o filho e deixou sinal
-    // de fim. Não houve código de saída — nulo é "não se sabe", e não zero.
     deixarOrfa($this, 'fff666000000', "parcial\n", 'tweaks', ['Preset' => 'advanced'], null, 'interrompido');
 
     $orfa = $this->canal->collectOrphans()[0];
@@ -174,7 +139,6 @@ it('órfã cancelada por timeout chega marcada como timedOut', function () {
 });
 
 it('recusa da allowlist do worker chega sem ação, para o rótulo não inventar nome', function () {
-    // O worker recusa ANTES de ter algo validado, então não há ação a gravar.
     deixarOrfa($this, '999555000000', "[phporto] job recusado\n", '', [], 126, 'recusado');
 
     $orfa = $this->canal->collectOrphans()[0];
@@ -184,8 +148,6 @@ it('recusa da allowlist do worker chega sem ação, para o rótulo não inventar
         ->and($orfa->result->exitCode)->toBe(126);
 });
 
-// ---------------------------------------------------------------- os limites
-
 it('saída de órfã acima do teto é cortada, como em qualquer outra leitura', function () {
     $gigante = str_repeat('x', OutputCap::MAX_OUTPUT_BYTES + 4096);
     deixarOrfa($this, '222888000000', $gigante);
@@ -193,14 +155,10 @@ it('saída de órfã acima do teto é cortada, como em qualquer outra leitura', 
     $orfa = $this->canal->collectOrphans()[0];
 
     expect($orfa->result->truncated)->toBeTrue()
-        // O teto vale na LEITURA do arquivo. A nota de recuperação é escrita
-        // por nós depois, como as outras linhas [phporto].
         ->and(strlen($orfa->result->output))->toBeLessThan(OutputCap::MAX_OUTPUT_BYTES + 2048);
 });
 
 it('conclusão sem a hora de fim ainda é recolhida, com finishedAt nulo', function () {
-    // Conclusão escrita por um worker anterior a esta mudança. Perder a hora é
-    // menos grave que perder a execução: o banco carimba o agora.
     deixarOrfa($this, '333999000000', "velha\n", 'audit', [], 0, '', null);
 
     $orfa = $this->canal->collectOrphans()[0];
@@ -247,8 +205,6 @@ it('lista de itens do worker volta como texto separado por vírgula', function (
         ->toBe(['Items' => 'WPFTweaksTelemetry,WPFTweaksServices', 'Undo' => true]);
 });
 
-// ---------------------------------------------------------------- o descarte
-
 it('discardOrphan apaga os dois arquivos, e só os do id pedido', function () {
     deixarOrfa($this, '666222000000', "a\n");
     deixarOrfa($this, '777333000000', "b\n");
@@ -262,8 +218,6 @@ it('discardOrphan apaga os dois arquivos, e só os do id pedido', function () {
 });
 
 it('recolher NÃO apaga nada por si: quem apaga é quem gravou', function () {
-    // A separação é o que impede uma falha de banco de virar perda definitiva
-    // da execução — que é exatamente o problema que isto resolve.
     deixarOrfa($this, '888444000000', "fica\n");
 
     $this->canal->collectOrphans();
@@ -286,8 +240,6 @@ it('duas órfãs no disco viram duas', function () {
     expect($acoes)->toBe(['debloat', 'tweaks']);
 });
 
-// ------------------------------------------------- conclusão forjada
-
 it('o id só vale no formato que o worker gera', function (string $id, bool $valido) {
     expect(JobChannel::validId($id))->toBe($valido);
 })->with([
@@ -309,7 +261,6 @@ it('conclusão com id fora do formato é ignorada, sem montar caminho', function
 });
 
 it('conclusão cujo nome não é o do id é ignorada', function () {
-    // Sem isto, um win-done qualquer apontaria para o par de outra execução.
     deixarOrfa($this, 'bbb222000000', "de outro\n");
     unlink($this->protegida . DIRECTORY_SEPARATOR . 'win-done-bbb222000000.json');
     deixarConclusaoCrua($this, 'aaa111000000', (string) json_encode([
@@ -320,8 +271,6 @@ it('conclusão cujo nome não é o do id é ignorada', function () {
 });
 
 it('discardOrphan com id forjado não apaga nada fora da pasta protegida', function () {
-    // O alvo fica em files/, fora da pasta protegida. As duas pastas tornam o
-    // caminho resolvível aqui; no Windows o .. já é resolvido no texto.
     $fora = $this->files . DIRECTORY_SEPARATOR . 'phporto_alvo_' . bin2hex(random_bytes(6));
     mkdir($this->protegida . DIRECTORY_SEPARATOR . 'win-done-..');
     mkdir($this->protegida . DIRECTORY_SEPARATOR . 'win-out-..');
@@ -329,8 +278,6 @@ it('discardOrphan com id forjado não apaga nada fora da pasta protegida', funct
     file_put_contents($fora . '.json', 'nao apagar');
 
     try {
-        // 'win-done-..' come o primeiro '..', o segundo volta para a pasta
-        // protegida e o terceiro sai dela.
         $this->canal->discardOrphan('../../../' . basename($fora));
 
         expect(is_file($fora . '.txt'))->toBeTrue()
@@ -344,8 +291,6 @@ it('discardOrphan com id forjado não apaga nada fora da pasta protegida', funct
 });
 
 it('conclusão forjada em files/, fora da pasta protegida, nem é olhada', function () {
-    // files/ é gravável por qualquer processo do usuário; o worker grava na
-    // protegida, e é só lá que este lado procura.
     $dados = ['id' => 'ccc333000000', 'exit' => 0, 'ms' => 1, 'nota' => '', 'acao' => 'audit', 'params' => new stdClass()];
     file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-done-ccc333000000.json', (string) json_encode($dados));
     file_put_contents($this->files . DIRECTORY_SEPARATOR . 'win-out-ccc333000000.txt', "forjada\n");

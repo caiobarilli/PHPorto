@@ -8,23 +8,6 @@ use App\Domain\WinState;
 use App\Domain\WinStateScope;
 use App\Providers\MySQLProvider;
 
-/**
- * Testes de integração do MySQLProvider contra um MySQL de verdade.
- *
- * Sem infraestrutura, sem credencial versionada: a conexão vem das variáveis
- * de ambiente MYSQL_TEST_*, documentadas no .env.example. Se elas não
- * estiverem definidas — ou se o servidor não responder — todos os testes
- * deste arquivo são PULADOS com mensagem clara, em vez de falhar.
- *
- * Ler getenv() aqui é exceção deliberada à regra "só o Config lê env": estas
- * são variáveis do arranjo de teste, não configuração da aplicação. O bootstrap
- * do PHPUnit é o autoload do Composer, não o bootstrap.php, então o phpdotenv
- * não roda nos testes e o .env NÃO é lido — exporte as variáveis no ambiente.
- *
- * Usa uma TABELA ISOLADA ('executions_test'), criada pelo próprio provider e
- * dropada após cada teste — nunca a tabela de MYSQL_TABLE.
- */
-
 const TEST_TABLE = 'executions_test';
 
 function mysqlTestEnv(string $key, string $default = ''): string
@@ -49,7 +32,6 @@ function mysqlTestConfig(): array
     ];
 }
 
-/** Conexão crua para checagem de disponibilidade e limpeza. */
 function rawPdo(): PDO
 {
     $c = mysqlTestConfig();
@@ -84,8 +66,6 @@ beforeEach(function () {
     }
 
     try {
-        // Descarte DELIBERADO do PDO: só queremos saber se a conexão abre.
-        // Se rawPdo() um dia ganhar #[\NoDiscard], esta linha precisa de (void).
         rawPdo();
     } catch (PDOException $e) {
         $this->markTestSkipped('MySQL de teste inacessível: ' . $e->getMessage());
@@ -96,12 +76,8 @@ afterEach(function () {
     try {
         $pdo = rawPdo();
         $pdo->exec('DROP TABLE IF EXISTS `' . TEST_TABLE . '`');
-        // A de estado também: o provider cria as DUAS no mesmo acesso, e
-        // deixar uma para trás faria o teste seguinte herdar linha de estado
-        // do anterior.
         $pdo->exec('DROP TABLE IF EXISTS `' . TEST_TABLE . '_win_state`');
     } catch (PDOException) {
-        // Sem conexão: nada a limpar.
     }
 });
 
@@ -165,17 +141,6 @@ it('clear() esvazia e devolve quantos foram apagados', function () {
         ->and($p->recent())->toBe([]);
 });
 
-/*
-|--------------------------------------------------------------------------
-| Filtro por tipo
-|--------------------------------------------------------------------------
-|
-| Mesmas exigências dos testes do SQLite, contra o driver do MySQL. Só rodam
-| com MYSQL_TEST_* exportado e servidor de pé; sem isso o beforeEach pula
-| tudo neste arquivo. A cobertura real do filtro está no SQLite.
-|
-*/
-
 it('recent() sem filtro devolve todos os tipos, e filtrado devolve só o pedido', function () {
     $p = new MySQLProvider(mysqlTestConfig());
     $p->insert(novaExecucaoMysql('um comando', '', 0, 1, ExecutionKind::Comando));
@@ -220,17 +185,6 @@ it('lista de tipos filtra e apaga só os da lista, e lista vazia é nenhum', fun
         ->and($p->clear(ExecutionKind::WSL))->toBe(2)
         ->and($p->recent()[0]->kind)->toBe(ExecutionKind::Windows);
 });
-
-/*
- * ============================================================
- * ESTADO DA /win
- * ============================================================
- *
- * ESCRITOS E NÃO EXECUTADOS nesta máquina: sem MYSQL_TEST_* e servidor de pé,
- * o beforeEach pula o arquivo inteiro. Existem porque o upsert do MySQL é
- * OUTRO comando — ON DUPLICATE KEY em vez de ON CONFLICT —, e cláusula que
- * ninguém exercita é onde a assimetria entre os drivers se instala.
- */
 
 it('grava o estado aplicado e devolve com o updated_at do banco', function () {
     $p = new MySQLProvider(mysqlTestConfig());

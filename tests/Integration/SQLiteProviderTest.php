@@ -7,13 +7,6 @@ use App\Domain\ExecutionKind;
 use App\Exceptions\StorageException;
 use App\Providers\SQLiteProvider;
 
-/**
- * Testes de integração do SQLiteProvider.
- *
- * Sem skip condicional: SQLite não depende de serviço externo. Cada teste usa
- * um arquivo .sqlite temporário isolado, apagado no afterEach.
- */
-
 beforeEach(function () {
     $this->dbPath = tempnam(sys_get_temp_dir(), 'phporto_test_') ?: '';
 });
@@ -50,8 +43,6 @@ it('cria a tabela e grava uma execução', function () {
 });
 
 it('DUAS EXECUÇÕES IDÊNTICAS GERAM DOIS REGISTROS', function () {
-    // Este teste é o inverso exato do teste de duplicidade que existia antes.
-    // Ele está aqui para derrubar quem reintroduzir um índice UNIQUE.
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
 
     $p->insert(novaExecucao('git status'));
@@ -171,8 +162,6 @@ it('o created_at devolvido pelo insert é o mesmo que o recent() lê', function 
 });
 
 it('insert() devolve o registro certo mesmo com dois idênticos no mesmo segundo', function () {
-    // A leitura de volta é pelo id, não pelo conteúdo: com dois registros
-    // iguais, buscar por comando pegaria o do vizinho.
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
 
     $primeiro = $p->insert(novaExecucao('duplicado', 'saida A'));
@@ -183,21 +172,6 @@ it('insert() devolve o registro certo mesmo com dois idênticos no mesmo segundo
         ->and($p->recent())->toHaveCount(2);
 });
 
-/*
-|--------------------------------------------------------------------------
-| Filtro por tipo
-|--------------------------------------------------------------------------
-|
-| Os três tipos moram na mesma tabela, e cada tela mostra a última execução
-| DELA. Estes testes exigem a separação nos dois sentidos: ler só o tipo
-| pedido, e apagar só o tipo pedido.
-|
-| O SQLite é o único dos três drivers com cobertura real nesta máquina — os
-| de MySQL e Mongo dependem de servidor e são pulados sem ele.
-|
-*/
-
-/** Grava um registro de cada tipo, do mais antigo para o mais novo. */
 function tresTipos(SQLiteProvider $p): void
 {
     $p->insert(novaExecucao('um comando', kind: ExecutionKind::Comando));
@@ -206,8 +180,6 @@ function tresTipos(SQLiteProvider $p): void
 }
 
 it('recent() SEM filtro continua devolvendo todos os tipos', function () {
-    // Guarda de compatibilidade: quem já chamava recent($limit) não pode
-    // mudar de comportamento por causa do parâmetro novo.
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
     tresTipos($p);
 
@@ -230,10 +202,6 @@ it('recent() filtrado devolve só o tipo pedido', function (ExecutionKind $kind,
 ]);
 
 it('recent() FILTRA ANTES DE APLICAR O LIMITE', function () {
-    // Este é o teste que derruba um filtro feito em PHP depois da consulta.
-    // A execução do Windows é a mais ANTIGA, com cinco comandos na frente
-    // dela: quem lesse "as N mais recentes" e filtrasse na memória devolveria
-    // lista VAZIA, existindo registro no banco — e nada na tela explicaria.
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
     $p->insert(novaExecucao('uma acao do windows', kind: ExecutionKind::Windows));
     foreach (range(1, 5) as $i) {
@@ -313,8 +281,6 @@ it('tipo repetido na lista não duplica nem quebra a consulta', function () {
 });
 
 it('LISTA VAZIA É NENHUM: recent() devolve vazio e clear() não apaga nada', function () {
-    // O contrário — lista vazia virando "todos" — faria um clear([]) apagar
-    // o histórico inteiro.
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
     tresTipos($p);
 
@@ -343,25 +309,17 @@ it('grava e relê o tipo windows sem perder o valor', function () {
         ->and($lido->durationMs)->toBe(8123);
 });
 
-// ------------------------------------- created_at explícito (execução órfã)
-
 it('created_at nulo deixa o BANCO carimbar a hora', function () {
-    // Caminho normal: a execução acabou de acontecer, e CURRENT_TIMESTAMP é
-    // mais confiável que o relógio do PHP.
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
 
     $lido = $p->insert(novaExecucao('processes', 'ok', 0, 10, ExecutionKind::Windows));
 
     expect($lido->createdAt)->toBeString()
         ->and($lido->createdAt)->not->toBe('')
-        // Dentro de um minuto do agora, em UTC.
         ->and(abs(time() - (int) strtotime((string) $lido->createdAt . ' UTC')))->toBeLessThan(60);
 });
 
 it('created_at preenchido é GRAVADO como veio, e não substituído pelo agora', function () {
-    // É o recolhimento de execução órfã: a hora tem de ser a de término. Como
-    // a listagem ordena por created_at, o agora poria a linha de ontem no topo
-    // do histórico de hoje.
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
 
     $lido = $p->insert(new Execution(
@@ -374,16 +332,11 @@ it('created_at preenchido é GRAVADO como veio, e não substituído pelo agora',
         createdAt: '2026-09-09 13:04:14',
     ));
 
-    // O instante, e não a grafia: o provider normaliza o created_at para ISO
-    // 8601 na saída, e é assim para toda linha, não só para esta.
     expect($lido->createdAt)->toBeString()
         ->and(strtotime((string) $lido->createdAt))->toBe(strtotime('2026-09-09 13:04:14 UTC'));
 });
 
 it('a órfã recolhida entra na POSIÇÃO cronológica dela, não no topo', function () {
-    // O que torna a hora de fim mais que um detalhe de texto: recent() ordena
-    // por created_at, então a linha antiga vai para o lugar dela mesmo tendo
-    // sido inserida por último.
     $p = new SQLiteProvider(sqliteTestConfig($this->dbPath));
 
     $p->insert(new Execution(

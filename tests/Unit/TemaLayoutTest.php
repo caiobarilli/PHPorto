@@ -17,7 +17,7 @@ function temaCss(): string
     return $m[1] ?? '';
 }
 
-/** @return array<string, string> nome => valor das variáveis declaradas no trecho */
+/** @return array<string, string> */
 function temaTokens(string $bloco): array
 {
     preg_match_all('~(--[\w-]+):\s*([^;]+);~', $bloco, $m);
@@ -25,7 +25,6 @@ function temaTokens(string $bloco): array
     return array_combine($m[1], array_map('trim', $m[2]));
 }
 
-/** O corpo de um bloco pelo seletor exato, até a primeira chave que fecha. */
 function temaBloco(string $css, string $seletor): string
 {
     $i = strpos($css, $seletor . ' {');

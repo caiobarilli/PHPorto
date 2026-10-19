@@ -5,11 +5,6 @@ declare(strict_types=1);
 use App\Exceptions\StorageException;
 use App\Providers\MySQLProvider;
 
-/**
- * O construtor valida o nome da tabela (sanitizeIdentifier) ANTES de abrir
- * qualquer conexão — então estes casos rodam sem precisar de MySQL no ar.
- */
-
 $baseConfig = [
     'host'     => '127.0.0.1',
     'port'     => '3306',
