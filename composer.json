@@ -37,11 +37,13 @@
         "cs-check": "php-cs-fixer fix --dry-run --diff",
         "cs-check-lf": "@php tools/cs-check-lf.php",
         "cs-fix": "php-cs-fixer fix",
+        "sem-comentario": "@php tools/sem-comentario.php",
         "pester": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Invoke-Pester ./tests/Pester -CI\"",
         "gate": [
             "@test",
             "@stan",
             "@cs-check-lf",
+            "@sem-comentario",
             "@pester"
         ]
     },
