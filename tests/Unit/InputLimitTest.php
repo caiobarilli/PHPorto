@@ -20,7 +20,6 @@ it('recusa comando um byte acima do teto, dizendo o tamanho', function () {
 })->throws(InvalidArgumentException::class, 'O comando passou do teto de 65536 bytes (tem 65537).');
 
 it('conta bytes e não caracteres no comando', function () {
-    // "é" são dois bytes em UTF-8: 32769 deles passam de 64 KB com metade dos caracteres.
     InputLimit::command(str_repeat('é', 32769));
 })->throws(InvalidArgumentException::class);
 

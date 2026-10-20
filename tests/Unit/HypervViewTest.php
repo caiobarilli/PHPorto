@@ -6,13 +6,6 @@ use App\Http\HypervView;
 use App\Http\Respond;
 use App\Win\HypervListing;
 
-/**
- * A tela /hyperv montada: a faixa do hospedeiro e a tabela.
- *
- * A regra que estes testes guardam é a da faixa: bloqueio, saída fora do
- * formato e Hyper-V desligado no Windows são faixa de tela inteira, sem tabela.
- * Só o hospedeiro ligado traz a lista — ou uma frase quando não há VM.
- */
 function hypervHtml(
     ?string $blocked = null,
     ?HypervListing $listing = null,
@@ -117,7 +110,6 @@ it('a linha-resumo diz "N de M ligadas" e a hora no fuso do Windows', function (
 
     $html = hypervHtml(listing: HypervListing::fromOutput($json));
 
-    // 12:00 UTC vira 09:00 em America/Sao_Paulo; a data inteira fica no title.
     expect($html)->toContain('<strong>1 de 2 ligadas</strong>')
         ->and($html)->toContain('lido às <span title="28/09/2026 09:00:00">09:00</span>');
 });
@@ -129,7 +121,6 @@ it('uma VM só: "ligada" no singular', function () {
 });
 
 it('as colunas vêm em português claro: Nome, Situação, Memória em uso, Ligada há, Endereço IP, Ações', function () {
-    // A tabela só existe com ao menos uma VM; sem nenhuma, é a frase.
     $json = '{"hyperv":true,"vms":[{"name":"Ubuntu","state":"Running","running":true,"memoryBytes":1073741824,"uptimeSeconds":120,"ip":["10.0.0.1"]}]}';
     $html = hypervHtml(listing: HypervListing::fromOutput($json));
 
@@ -138,7 +129,6 @@ it('as colunas vêm em português claro: Nome, Situação, Memória em uso, Liga
         ['Nome', 'Situação', 'Memória em uso', 'Ligada há', 'Endereço IP', 'Ações']
     );
 
-    // Todas presentes, e cada uma depois da anterior.
     expect($ordem)->not->toContain(false);
 
     for ($i = 1; $i < count($ordem); $i++) {
@@ -231,8 +221,6 @@ it('a VM rodando sem IP legível DIZ que não deu, não deixa em branco', functi
     expect($html)->toContain('não foi possível ler o IP');
 });
 
-// ------------------------------------------------- ações por VM
-
 const VM_ID = '6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c';
 
 function vmJson(string $state, string $id = VM_ID, string $name = 'Ubuntu'): HypervListing
@@ -244,7 +232,7 @@ function vmJson(string $state, string $id = VM_ID, string $name = 'Ubuntu'): Hyp
         . ',"memoryBytes":1,"uptimeSeconds":1,"ip":[]}]}');
 }
 
-/** @return array<string, bool> sub => habilitado */
+/** @return array<string, bool> */
 function vmBotoes(string $html): array
 {
     preg_match_all('#<button type="submit" class="btn btn-ghost btn-icone vm-(start|stop|restart)"[^>]*>#', $html, $m, PREG_SET_ORDER);

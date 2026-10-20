@@ -4,17 +4,6 @@ declare(strict_types=1);
 
 use App\Win\PsScriptBuilder;
 
-/**
- * O encoding dos .ps1, que é a regra INVERSA da do cmd.sh.
- *
- *   cmd.sh (bash)   LF, SEM BOM
- *   .ps1  (PS 5.1)  CRLF, COM BOM
- *
- * Estes testes existem para derrubar quem alinhar uma regra com a outra em
- * nome de consistência: o bash engasga com \r e com BOM, e o PowerShell 5.1
- * sem BOM lê o arquivo como ANSI e estraga a acentuação.
- */
-
 beforeEach(function () {
     $this->dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto_ps_' . bin2hex(random_bytes(6));
 });
@@ -40,7 +29,6 @@ it('converte LF em CRLF', function () {
 });
 
 it('NÃO transforma CRLF que já existe em CR CR LF', function () {
-    // O erro clássico de trocar "\n" por "\r\n" às cegas.
     $saida = PsScriptBuilder::normalize("linha 1\r\nlinha 2\r\n");
 
     expect($saida)->not->toContain("\r\r")
@@ -91,8 +79,6 @@ it('literal DOBRA o apóstrofo, que é o único escape que existe ali', function
 });
 
 it('literal DOBRA cada aspa simples curva, que o PowerShell também fecha', function (string $aspa) {
-    // U+2018 a U+201B fecham literal de apóstrofo no PowerShell como o '.
-    // Sem dobrar, um valor com ’ fechava a string e o resto virava código.
     expect(PsScriptBuilder::literal('a' . $aspa . 'b'))->toBe("'a" . $aspa . $aspa . "b'");
 })->with([
     'U+2018' => "\u{2018}",
@@ -109,9 +95,6 @@ it('literal dobra as cinco aspas juntas, sem sobra para fechar a string', functi
 });
 
 it('literal deixa inerte o que interpolaria em aspas duplas', function (string $valor) {
-    // Dentro de apóstrofo simples o PowerShell não interpola nada: nem
-    // $variavel, nem $(...), nem crase. É isso que permite um valor validado
-    // entrar num script gerado sem poder virar código.
     $saida = PsScriptBuilder::literal($valor);
 
     expect($saida)->toBe("'" . $valor . "'");

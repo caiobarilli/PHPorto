@@ -6,16 +6,11 @@ use App\Http\Csrf;
 use App\Http\LayoutView;
 use App\Http\Respond;
 
-/** O layout com um miolo qualquer, e o script comum que ele carrega. */
 function layoutHtml(string $miolo = '<div class="wrap">x</div>'): string
 {
     return Respond::render('layout.php', new LayoutView('PHPorto', $miolo));
 }
 
-/**
- * O script do sem-reload: todo <script> do <body> do layout, com ou sem
- * atributo. O do <head> é o do tema e tem teste próprio.
- */
 function scripts(string $html): string
 {
     $corpo = substr($html, (int) strpos($html, '</head>'));
@@ -55,7 +50,6 @@ it('o script comum troca o token pelo nome do campo do Csrf', function () {
 it('o script comum nunca reenvia o POST nem guarda nada no navegador', function () {
     $js = scripts(layoutHtml());
 
-    // Na falha, o caminho é um GET da tela (location.replace), e só um fetch existe.
     expect(substr_count($js, 'fetch('))->toBe(1)
         ->and($js)->toContain('location.replace(location.pathname + location.search)')
         ->and($js)->not->toContain('location.reload')

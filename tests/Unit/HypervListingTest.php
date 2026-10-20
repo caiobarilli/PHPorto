@@ -4,14 +4,6 @@ declare(strict_types=1);
 
 use App\Win\HypervListing;
 
-/**
- * A leitura do JSON que o Invoke-Hyperv devolve.
- *
- * É a costura entre o PowerShell e a tela: a saída atravessou o worker e chega
- * como texto, e aqui vira dado tipado ou vira problema — nunca exceção. Testa-se
- * alimentando texto, sem subir PowerShell nenhum.
- */
-
 it('lê o hospedeiro ligado, as VMs e os campos de cada uma', function () {
     $json = '{"hyperv":true,"vms":['
         . '{"name":"Ubuntu","state":"Running","running":true,"memoryBytes":2147483648,"uptimeSeconds":3661,"ip":["192.168.1.5","fe80::1"]},'
@@ -87,8 +79,6 @@ it('hospedeiro ligado sem nenhuma VM: lista vazia, sem problema', function () {
 });
 
 it('RECORTA a nota que o canal do worker prefixa antes do JSON', function () {
-    // O JobChannel pode colar "[phporto] ..." na frente ou atrás da saída. O
-    // recorte do primeiro { ao último } acha o JSON no meio do ruído.
     $sujo = "[phporto] Execução recuperada depois do fato.\n"
         . '{"hyperv":true,"vms":[{"name":"Solo","state":"Running","running":true,"memoryBytes":1073741824,"uptimeSeconds":120,"ip":["10.0.0.1"]}]}'
         . "\n[phporto] fim\n";
@@ -130,11 +120,9 @@ it('campos ausentes ou de tipo errado caem em padrões seguros', function () {
 
     expect($vm->name)->toBe('')
         ->and($vm->state)->toBe('')
-        // "sim" não é o booleano true: running fica falso.
         ->and($vm->running)->toBeFalse()
         ->and($vm->memoryBytes)->toBe(0)
         ->and($vm->uptimeSeconds)->toBe(0)
-        // Só as strings não vazias entram na lista de IP.
         ->and($vm->ip)->toBe(['1.1.1.1']);
 });
 

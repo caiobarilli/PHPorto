@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Win\WinConfig;
 
-/** A tradução do projeto, lida como a tela lê. */
 function traducao(): array
 {
     $arquivo = dirname(__DIR__, 2) . '/src/Win/config/' . WinConfig::TWEAKS_TRANSLATION . '.json';

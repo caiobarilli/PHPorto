@@ -61,7 +61,6 @@ it('não toca no provider quando a entrada é inválida', function () {
     try {
         (new ExecutionLogService($provider))->record(exec_(''));
     } catch (InvalidArgumentException) {
-        // esperado
     }
 
     expect($provider->inserted)->toBe([]);
@@ -107,17 +106,6 @@ it('record() preserva os demais campos no retorno', function () {
         ->and($gravado->exitCode)->toBe(0);
 });
 
-/*
-|--------------------------------------------------------------------------
-| Repasse do filtro por tipo
-|--------------------------------------------------------------------------
-|
-| O serviço é o único caminho das telas até os providers: sem o repasse, o
-| filtro existiria nos três drivers e nenhuma tela alcançaria. Estes testes
-| rodam sempre — não dependem de banco nenhum.
-|
-*/
-
 it('recent() repassa o tipo ao provider e devolve só aquele tipo', function () {
     $provider = new FakeProvider();
     $service  = new ExecutionLogService($provider);
@@ -159,17 +147,6 @@ it('a lista do WSL lê e apaga comando e anexo, e deixa o Windows', function () 
         ->and($service->recent(100)[0]->kind)->toBe(ExecutionKind::Windows);
 });
 
-/*
-|--------------------------------------------------------------------------
-| Estado da /win
-|--------------------------------------------------------------------------
-|
-| O repasse existe porque o serviço é o único caminho das telas até os
-| providers. Sem ele, os três drivers teriam os métodos e nenhuma tela
-| alcançaria — código nascido morto, esperando outro commit para ter sentido.
-|
-*/
-
 it('putWinState repassa e devolve com o updated_at carimbado', function () {
     $provider = new FakeProvider();
     $service  = new ExecutionLogService($provider);
@@ -181,8 +158,6 @@ it('putWinState repassa e devolve com o updated_at carimbado', function () {
 });
 
 it('RECUSA AÇÃO VAZIA antes de chegar ao banco', function () {
-    // Mesmo critério do record() com comando vazio: o que não identifica nada
-    // não é linha de estado, é lixo que a tela leria como ação desconhecida.
     (new ExecutionLogService(new FakeProvider()))
         ->putWinState(new WinState(WinStateScope::Applied, '   '));
 })->throws(InvalidArgumentException::class);
@@ -206,8 +181,6 @@ it('forgetWinState apaga e devolve quantos, e repetir devolve zero', function ()
 });
 
 it('CLEAR NÃO LEVA O ESTADO, nem com tipo nem sem', function () {
-    // O fake é escrito para provar isto: um fake que apagasse os dois deixaria
-    // o teste passar e esconderia o defeito na tela.
     $service = new ExecutionLogService(new FakeProvider());
     $service->record(exec_('uma acao', 12, ExecutionKind::Windows));
     $service->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));

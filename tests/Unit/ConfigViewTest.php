@@ -6,7 +6,6 @@ use App\Http\ConfigView;
 use App\Http\Respond;
 use App\Win\ElevationState;
 
-/** Monta a /config com a API, o PowerShell e o aviso dados e devolve o HTML. */
 function configHtml(
     bool $api = false,
     bool $ps = false,
@@ -93,7 +92,6 @@ it('Hyper-V: texto em uma linha, e o detalhe técnico recolhido', function () {
 
     expect($html)->toContain('Mostra a tela Hyper-V com as máquinas virtuais deste computador. Só leitura.')
         ->and(substr_count($html, 'storage/hyperv.json'))->toBe(1)
-        // O caminho do arquivo só aparece dentro do <details>.
         ->and(strpos($html, '<summary>Como funciona</summary>'))->toBeLessThan(strpos($html, 'storage/hyperv.json'));
 });
 

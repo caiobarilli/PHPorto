@@ -16,7 +16,6 @@ afterEach(function () {
     }
 });
 
-/** Um portão com o token dado e o relógio do teste. */
 function portao(object $t, string $token = 'certo'): Auth
 {
     return new Auth($token, $t->arquivo, static fn (): int => $t->agora);

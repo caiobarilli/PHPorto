@@ -8,18 +8,6 @@ use App\Domain\WinState;
 use App\Domain\WinStateScope;
 use App\Providers\SQLiteProvider;
 
-/**
- * Testes de integração do estado da /win no SQLiteProvider.
- *
- * ARQUIVO PRÓPRIO, e não anexado ao SQLiteProviderTest: o que se testa aqui é
- * a outra tabela, com outra regra de unicidade — lá duas execuções iguais são
- * dois fatos, aqui é uma linha por (escopo, ação) que se substitui. Juntar os
- * dois num arquivo só faria o leitor procurar qual `it` fala de qual tabela.
- *
- * É A ÚNICA COBERTURA REAL dos três drivers: o SQLite é o padrão e não depende
- * de serviço externo. Os mesmos casos existem para o MySQL e são pulados sem
- * MYSQL_TEST_*; o Mongo não tem teste nenhum no projeto.
- */
 beforeEach(function () {
     $this->dbPath = tempnam(sys_get_temp_dir(), 'phporto_state_') ?: '';
 });
@@ -31,9 +19,6 @@ afterEach(function () {
 });
 
 /**
- * Nome próprio para não colidir com o sqliteTestConfig() do outro arquivo: o
- * Pest carrega tudo no mesmo processo, e função global repetida é erro fatal.
- *
  * @return array{path: string, table: string}
  */
 function estadoTestConfig(string $path, string $table = 'executions'): array
@@ -42,9 +27,6 @@ function estadoTestConfig(string $path, string $table = 'executions'): array
 }
 
 it('a tabela de estado nasce no acesso, e banco novo lê estado vazio', function () {
-    // Sem migration de propósito: é o mesmo CREATE TABLE IF NOT EXISTS da
-    // tabela de execuções, e o projeto não tem versionador de schema. Quem já
-    // tem banco ganha a tabela na próxima página que abrir.
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
 
     expect($p->winStates(WinStateScope::Applied))->toBe([]);
@@ -60,9 +42,6 @@ it('grava o estado aplicado e devolve com o updated_at do banco', function () {
 });
 
 it('É UPSERT: gravar duas vezes substitui em vez de duplicar', function () {
-    // Inverso exato do teste das duas execuções idênticas no outro arquivo.
-    // Lá repetir são dois fatos; aqui é uma linha por par, e gravar é
-    // substituir.
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
 
     $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
@@ -75,11 +54,6 @@ it('É UPSERT: gravar duas vezes substitui em vez de duplicar', function () {
 });
 
 it('a MESMA AÇÃO em escopos diferentes são duas linhas independentes', function () {
-    // A chave é composta, e é ESTE caso que obrigou o escopo a ser
-    // obrigatório no winStates(): as duas linhas têm action 'tweaks', então
-    // uma leitura sem filtro indexada por ação fazia uma sobrescrever a outra
-    // e devolvia uma onde havia duas. O teste falhou de verdade antes de a
-    // assinatura mudar.
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
 
     $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
@@ -105,8 +79,6 @@ it('o filtro por escopo está na CONSULTA: não sobra linha do outro escopo', fu
 });
 
 it('os três escopos da mesma ação são três linhas, e a leitura de cada um traz só o seu', function () {
-    // O pendente-de-reinicio entra como terceiro escopo, e a chave composta o
-    // mantém independente do aplicado e da seleção da mesma ação.
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
 
     $p->putWinState(new WinState(WinStateScope::Applied, 'rdp', ['On' => 'true']));
@@ -121,8 +93,6 @@ it('os três escopos da mesma ação são três linhas, e a leitura de cada um t
 });
 
 it('esquecer o pendente-de-reinicio não leva o aplicado da mesma ação, nem o contrário', function () {
-    // Reverter antes de reiniciar desfaz o pendente e deixa o resto: é o
-    // caminho que a tela oferece quando o item ainda espera boot.
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
 
     $p->putWinState(new WinState(WinStateScope::Applied, 'rdp', ['On' => 'true']));
@@ -165,10 +135,6 @@ it('esquecer um escopo NÃO leva o outro', function () {
 });
 
 it('LIMPAR O HISTÓRICO DO WINDOWS NÃO MEXE NO ESTADO', function () {
-    // O teste que mais importa nesta fatia. Um botão rotulado "limpar
-    // histórico" que mudasse o que a tela afirma sobre a máquina passaria a
-    // oferecer "Aplicar" no que continua aplicado — e é justamente por isso
-    // que o estado não se deriva do histórico.
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
 
     $p->insert(new Execution(
@@ -198,9 +164,6 @@ it('limpar TUDO também não mexe no estado', function () {
 });
 
 it('payload vazio volta como mapa vazio, não como lista', function () {
-    // '[]' e '{}' voltam diferentes do json_decode, e a ausência de parâmetros
-    // tem de voltar como mapa. Mesmo cuidado que o JobChannel toma com
-    // "params":{} do outro lado.
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
 
     $p->putWinState(new WinState(WinStateScope::Applied, 'gdid'));
@@ -209,13 +172,9 @@ it('payload vazio volta como mapa vazio, não como lista', function () {
 });
 
 it('LINHA ILEGÍVEL É DESCARTADA, e não derruba a leitura', function (string $scope, string $payload) {
-    // O lado seguro de não saber o que a linha afirma é não afirmar nada — a
-    // mesma regra do flags.json, onde JSON quebrado vira "pergunte ao .env".
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
     $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
 
-    // Estraga a linha por fora, como faria um banco editado à mão ou gravado
-    // por uma versão que guardasse outra coisa.
     $pdo = new PDO('sqlite:' . $this->dbPath);
     $pdo->exec(sprintf(
         'UPDATE executions_win_state SET scope = %s, payload = %s',
@@ -232,9 +191,6 @@ it('LINHA ILEGÍVEL É DESCARTADA, e não derruba a leitura', function (string $
 ]);
 
 it('payload com tipo estranho perde só a chave estranha', function () {
-    // Nulo e aninhado não vêm desta ferramenta — a allowlist só produz string,
-    // inteiro e booleano. Repassar o que não se espera faria o chamador tratar
-    // um tipo que ele não declara.
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath));
     $p->putWinState(new WinState(WinStateScope::Applied, 'tweaks', ['Preset' => 'standard']));
 
@@ -248,9 +204,6 @@ it('payload com tipo estranho perde só a chave estranha', function () {
 });
 
 it('a tabela de estado segue o nome da tabela de execuções', function () {
-    // Derivada com sufixo fixo, e não uma chave nova no .env: quem renomeou a
-    // tabela de execuções ganha esta renomeada junto, sem uma segunda variável
-    // para manter em dia.
     $p = new SQLiteProvider(estadoTestConfig($this->dbPath, 'outro_nome'));
     $p->putWinState(new WinState(WinStateScope::Applied, 'gdid'));
 

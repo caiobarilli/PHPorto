@@ -7,25 +7,15 @@ use App\Win\JobChannel;
 use App\Win\PsResult;
 use App\Win\WinAction;
 
-/**
- * O canal de trabalho com o worker elevado.
- *
- * NADA AQUI ELEVA NADA: o worker é simulado escrevendo à mão os arquivos que
- * ele escreveria. É o que permite cobrir a forma do arquivo de trabalho e o
- * caminho de timeout sem depender de um prompt de UAC.
- */
-
 beforeEach(function () {
     $this->files = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto_job_' . bin2hex(random_bytes(6));
     mkdir($this->files, 0o775, true);
-    // O worker grava os resultados aqui; o job e as ordens ficam em files/.
     $this->protegida = $this->files . DIRECTORY_SEPARATOR . Elevation::DIR_PROTEGIDA;
     mkdir($this->protegida);
     $this->canal = new JobChannel($this->files);
 });
 
 afterEach(function () {
-    // Duas pastas agora: files/ e a protegida dentro dela.
     @chmod((string) $this->protegida, 0o775);
 
     if (is_string($this->files) && is_dir($this->files)) {
@@ -38,13 +28,11 @@ afterEach(function () {
     }
 });
 
-/** Lê o arquivo de trabalho como texto cru. */
 function jobBruto(object $ctx): string
 {
     return (string) file_get_contents((string) $ctx->files . DIRECTORY_SEPARATOR . Elevation::F_JOB);
 }
 
-/** Finge o worker: escreve a saída e a conclusão de um id. */
 function fingirWorker(object $ctx, string $id, string $saida, ?int $exit = 0, string $nota = '', string $acao = ''): void
 {
     $dir = (string) $ctx->protegida;
@@ -61,8 +49,6 @@ function travarProtegida(object $ctx, bool $travar): void
     clearstatcache();
 }
 
-// ---------------------------------------------------------------- send()
-
 it('send() escreve o arquivo de trabalho com nonce, ação e parâmetros', function () {
     $this->canal->send(WinAction::Dns, ['Provider' => 'Cloudflare'], 'nonce-abc');
 
@@ -75,11 +61,6 @@ it('send() escreve o arquivo de trabalho com nonce, ação e parâmetros', funct
 });
 
 it('AÇÃO SEM PARÂMETRO VAI COMO OBJETO, e nunca como lista', function () {
-    // Este teste trava um defeito MEDIDO. Um array PHP vazio virava "[]" no
-    // JSON, e PSObject.Properties de um array vazio no PowerShell expõe Count
-    // e Length — que chegavam à allowlist do worker como parâmetros
-    // inventados e faziam a ação 'audit' ser RECUSADA por
-    // "parametro fora da allowlist: 'Count'".
     $this->canal->send(WinAction::Audit, [], 'n');
 
     expect(jobBruto($this))->toContain('"params":{}')
@@ -87,9 +68,6 @@ it('AÇÃO SEM PARÂMETRO VAI COMO OBJETO, e nunca como lista', function () {
 });
 
 it('send() NÃO VARRE A PASTA PROTEGIDA: par de outra execução fica para o recolhimento', function () {
-    // Varrer tudo antes de mandar apagaria a órfã da /win que ainda não virou
-    // linha no banco. A conclusão velha não volta como resposta porque o
-    // collect() ignora os ids que já existiam no send().
     fingirWorker($this, '0a0000000000', 'saida velha', 0, '', 'tweaks');
 
     $this->canal->send(WinAction::Memory, [], 'n');
@@ -102,8 +80,6 @@ it('send() recusa quando a pasta de trabalho não existe', function () {
     (new JobChannel($this->files . DIRECTORY_SEPARATOR . 'nao-existe'))
         ->send(WinAction::Memory, [], 'n');
 })->throws(RuntimeException::class);
-
-// ---------------------------------------------------------------- collect()
 
 it('collect() devolve a saída e o código de saída que o worker escreveu', function () {
     fingirWorker($this, 'abc123000000', "[ OK ] pronto\n", 0);
@@ -153,7 +129,6 @@ it('collect() explica na saída quando o worker recusou pela allowlist', functio
     expect($r->output)->toContain('acao fora da allowlist')
         ->and($r->output)->toContain('A allowlist do PowerShell elevado recusou')
         ->and($r->exitCode)->toBe(126)
-        // Recusa não é timeout: nada foi cancelado.
         ->and($r->timedOut)->toBeFalse();
 });
 
@@ -167,12 +142,7 @@ it('collect() marca como timeout quando o worker diz que cancelou', function () 
         ->and($r->output)->toContain('cancelada pelo PowerShell elevado');
 });
 
-// ---------------------------------------------------------------- timeout
-
 it('NO TIMEOUT DEIXA A ORDEM DE CANCELAR, e não tenta matar ninguém', function () {
-    // O processo do outro lado está em integridade Alta, e taskkill do PHP
-    // contra ele devolve "Acesso negado" (medido, rc=128). Quem mata o filho
-    // é o worker, a pedido deste arquivo.
     $r = $this->canal->collect(1);
 
     expect($r->timedOut)->toBeTrue()
@@ -183,8 +153,6 @@ it('NO TIMEOUT DEIXA A ORDEM DE CANCELAR, e não tenta matar ninguém', function
 });
 
 it('no timeout aproveita a conclusão do cancelamento se ela chegar', function () {
-    // O worker obedece no laço de 500 ms — medido em 975 ms. Aqui a conclusão
-    // já está no disco, então o caminho de graça a encontra na primeira volta.
     fingirWorker($this, 'abc130000000', "cortada no meio\n", null, 'cancelado');
 
     $r = $this->canal->collect(10);
@@ -192,8 +160,6 @@ it('no timeout aproveita a conclusão do cancelamento se ela chegar', function (
     expect($r->timedOut)->toBeTrue()
         ->and($r->output)->toContain('cortada no meio');
 });
-
-// ---------------------------------------------------------------- por id
 
 it('collect() com id espera só aquela conclusão, e ignora a de outro id', function () {
     fingirWorker($this, 'aaa000000001', "a de outro\n");
@@ -222,12 +188,7 @@ it('NO TIMEOUT COM ID, a ordem de cancelar é a daquele id, e não a do worker l
         ->and(is_file($this->files . DIRECTORY_SEPARATOR . Elevation::F_ORDEM_CANCELAR))->toBeFalse();
 });
 
-// ---------------------------------------------------------------- sem id, amarrado ao send()
-
 it('A /hyperv LÊ A PRÓPRIA CONCLUSÃO mesmo com par de processes que não sai da pasta', function () {
-    // Caso medido no disco: a limpeza não apagou, e o primeiro win-done do
-    // glob era de processes. A leitura do hyperv voltava "formato inesperado"
-    // com o JSON certo do hyperv na mesma pasta.
     fingirWorker($this, '07cc00000000', "PID Nome\n", 0, '', 'processes');
     travarProtegida($this, true);
 
@@ -306,14 +267,6 @@ it('QUANDO O PAR NÃO SAI DA PASTA, a saída diz, e o teste vê', function () {
 it('collect() recusa id fora do formato antes de montar caminho', function () {
     $this->canal->collect(1, '../../x');
 })->throws(RuntimeException::class, 'fora do formato');
-
-/*
- * Não há teste de dispatch(): ele é send() seguido de collect(), com as duas
- * metades cobertas acima. Um teste dele pagaria outros quatro segundos de
- * caminho de timeout para exercitar três linhas de encadeamento.
- */
-
-// ---------------------------------------------------------------- teto
 
 it('collect() aplica o teto de saída do PsRunner', function () {
     $grande = str_repeat('z', \App\Domain\OutputCap::MAX_OUTPUT_BYTES + 100);

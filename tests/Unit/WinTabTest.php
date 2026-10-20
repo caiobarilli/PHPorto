@@ -24,8 +24,6 @@ it('a ordem do menu é Sistema, Rede, Aplicativos, Serviços, Acesso Remoto, com
 });
 
 it('todo 303 do POST da /win volta para a aba de onde veio', function () {
-    // Lido como texto: o POST da /win sai por exit, e exercitá-lo por HTTP
-    // recolheria as órfãs do files/ desta máquina.
     $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
 
     expect($fonte)->not->toContain("Respond::redirect('/win')")

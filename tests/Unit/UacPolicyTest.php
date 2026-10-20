@@ -5,15 +5,6 @@ declare(strict_types=1);
 use App\Win\UacPolicy;
 use App\Win\UacVerdict;
 
-/**
- * A política do UAC, lida da saída do reg.exe.
- *
- * NADA AQUI LÊ O REGISTRO: a consulta é injetada, e cada teste dá a saída que
- * o reg.exe daria. O formato foi conferido no Windows 11 em português; o
- * cabeçalho com o nome da chave sai igual em qualquer idioma.
- */
-
-/** A saída do reg.exe para a chave, com os valores que se quiser. */
 function saidaReg(array $dwords): string
 {
     $linhas = ['', 'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'];
@@ -29,7 +20,6 @@ function saidaReg(array $dwords): string
     return implode("\r\n", $linhas);
 }
 
-/** A política com a consulta fingida, contando quantas vezes ela rodou. */
 function politica(?string $saida, ?int &$chamadas = null): UacPolicy
 {
     $chamadas = 0;

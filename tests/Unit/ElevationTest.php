@@ -5,28 +5,11 @@ declare(strict_types=1);
 use App\Win\Elevation;
 use App\Win\ElevationState;
 
-/**
- * O marcador e o estado do interruptor de PowerShell.
- *
- * NADA AQUI ELEVA NADA. O que exige integridade Alta é abrir o worker, e isso
- * não pode entrar numa suíte que precisa rodar sozinha — um teste que pedisse
- * elevação penduraria a suíte num prompt de UAC em máquina de fábrica. O que
- * dá para verificar sem elevar é justamente o que decide se a tela mente: a
- * validade do marcador e a frescura do heartbeat.
- *
- * O caminho de ligar de verdade foi exercitado à mão, elevado.
- */
-
 beforeEach(function () {
     $base = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto_elev_' . bin2hex(random_bytes(6));
     mkdir($base . DIRECTORY_SEPARATOR . 'files', 0o775, true);
     mkdir($base . DIRECTORY_SEPARATOR . 'storage', 0o775, true);
 
-    // Uma src/Win de mentira, com os dois .ps1 que o configProblem() confere.
-    // Vazia de conteúdo de propósito: a checagem olha se o arquivo está lá, e
-    // um stub de uma linha prova isso tão bem quanto o arquivo real — sem
-    // depender da árvore do projeto, que é o que permite testar a árvore
-    // INCOMPLETA logo abaixo.
     mkdir($base . DIRECTORY_SEPARATOR . 'Win', 0o775, true);
 
     $this->base    = $base;
@@ -57,7 +40,6 @@ afterEach(function () {
     @rmdir($this->base);
 });
 
-/** A Elevation do teste, apontando para a src/Win que se quiser. */
 function elevacao(object $ctx, ?string $winDir = null): Elevation
 {
     return new Elevation(
@@ -67,7 +49,6 @@ function elevacao(object $ctx, ?string $winDir = null): Elevation
     );
 }
 
-/** Grava o marcador com o PID que se quiser fingir. */
 function gravarMarcador(object $ctx, ?int $phpPid = null, int $psPid = 4242, string $nonce = 'abc123'): void
 {
     file_put_contents(
@@ -81,7 +62,6 @@ function gravarMarcador(object $ctx, ?int $phpPid = null, int $psPid = 4242, str
     );
 }
 
-/** Bate o heartbeat com a idade que se quiser, em segundos. */
 function baterHeartbeat(object $ctx, int $segundosAtras = 0): void
 {
     $caminho = (string) $ctx->files . DIRECTORY_SEPARATOR . Elevation::F_HEARTBEAT;
@@ -89,8 +69,6 @@ function baterHeartbeat(object $ctx, int $segundosAtras = 0): void
     touch($caminho, time() - $segundosAtras);
     clearstatcache(true, $caminho);
 }
-
-// ---------------------------------------------------------------- constantes
 
 it('os prazos são constantes com nome e valor documentado', function () {
     expect(Elevation::PROOF_TIMEOUT_S)->toBe(30)
@@ -101,10 +79,6 @@ it('os prazos são constantes com nome e valor documentado', function () {
 });
 
 it('o limite de tempo sobe ANTES de rodar o lançador, e não depois', function () {
-    // Com prompt (CPBA = 5) o Start-Process -Verb RunAs bloqueia, e o
-    // max_execution_time do Windows conta relógio. Levantado depois, um prompt
-    // respondido aos ~28 s derrubava a requisição antes da resposta. Lido como
-    // texto: o caminho de verdade exige elevar.
     $fonte  = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/Elevation.php');
     $enable = substr($fonte, (int) strpos($fonte, 'public function enable()'));
     $limite = strpos($enable, 'set_time_limit(self::PROOF_TIMEOUT_S');
@@ -125,30 +99,16 @@ it('o lançador manda o -ArgumentList como uma string só, com os caminhos entre
 });
 
 it('a limpeza do canal leva as sobras de um uso único', function () {
-    // Os arquivos do canal também, como a limpeza os encontraria de verdade.
     $canal = [Elevation::F_ORDEM_DESLIGAR, Elevation::F_ORDEM_CANCELAR, Elevation::F_JOB, Elevation::F_HEARTBEAT, Elevation::F_MANIFESTO];
 
     foreach ([...$canal, 'win-oneshot-abc000000001.json', 'win-oneshot-abc000000001.estado', 'win-oneshot-launcher-abc000000001.ps1'] as $nome) {
         file_put_contents($this->files . DIRECTORY_SEPARATOR . $nome, 'x');
     }
 
-    // Privado, e chamado só pelo enable(), que no fim abre o powershell.exe:
-    // por reflexão, para testar a limpeza sem tentar elevar.
     (new ReflectionMethod(Elevation::class, 'cleanupChannel'))->invoke(elevacao($this));
 
     expect(glob($this->files . DIRECTORY_SEPARATOR . '*'))->toBe([]);
 });
-
-// ---------------------------------------------------------------- bloqueado
-
-/*
- * A checagem que sobrou depois que o PHPORTO_WINUTIL_PATH morreu.
- *
- * Antes daqui saía a maioria dos bloqueios: uma chave do .env apontando para
- * um projeto externo que a pessoa não tinha preenchido. Não há mais nada a
- * configurar — o motor mora no repositório —, então o que resta de verificável
- * é o CHECKOUT: os dois .ps1 de src/Win estão no lugar?
- */
 
 it('bloqueia quando falta o <_> em src/Win', function (string $ausente) {
     unlink($this->win . DIRECTORY_SEPARATOR . $ausente);
@@ -185,7 +145,6 @@ it('bloqueado NEM TENTA ligar, e devolve o motivo', function () {
     $erro = elevacao($this)->enable();
 
     expect($erro)->toContain('Instalação incompleta')
-        // E não deixou marcador para trás.
         ->and(is_file($this->storage . DIRECTORY_SEPARATOR . Elevation::F_MARCADOR))->toBeFalse();
 });
 
@@ -194,8 +153,6 @@ it('com os dois .ps1 no lugar, dá para tentar', function () {
 });
 
 it('a árvore de verdade do projeto passa na checagem', function () {
-    // O que index.php monta. Se este teste falhar, é o repositório que está
-    // incompleto, não a lógica.
     $real = new Elevation(
         filesDir: (string) $this->files,
         storageDir: (string) $this->storage,
@@ -204,8 +161,6 @@ it('a árvore de verdade do projeto passa na checagem', function () {
 
     expect($real->state()->canTry())->toBeTrue();
 });
-
-// ---------------------------------------------------------------- desligado
 
 it('sem marcador está desligado, e sem drama', function () {
     $estado = elevacao($this)->state();
@@ -216,8 +171,6 @@ it('sem marcador está desligado, e sem drama', function () {
 });
 
 it('MARCADOR DE OUTRA EXECUÇÃO DO SERVIDOR lê como desligado', function () {
-    // É o mecanismo funcionando: o PID do php -S muda quando ele reinicia, e
-    // isso invalida o marcador sozinho, sem ninguém limpar nada.
     gravarMarcador($this, phpPid: getmypid() + 1);
     baterHeartbeat($this);
 
@@ -231,8 +184,6 @@ it('não apaga marcador inválido: leitura não tem efeito colateral', function 
 
     expect(is_file($this->storage . DIRECTORY_SEPARATOR . Elevation::F_MARCADOR))->toBeTrue();
 });
-
-// ---------------------------------------------------------------- ligado
 
 it('com PID casando e heartbeat fresco, está ligado', function () {
     gravarMarcador($this, psPid: 9876);
@@ -253,8 +204,6 @@ it('aceita heartbeat de idade dentro do limite', function () {
     expect(elevacao($this)->state()->on)->toBeTrue();
 });
 
-// ---------------------------------------- worker morto: o estado tem de dizer
-
 it('HEARTBEAT VELHO desliga e explica, em vez de mentir', function () {
     gravarMarcador($this);
     baterHeartbeat($this, segundosAtras: Elevation::HEARTBEAT_STALE_S + 5);
@@ -266,7 +215,6 @@ it('HEARTBEAT VELHO desliga e explica, em vez de mentir', function () {
 });
 
 it('marcador válido sem heartbeat nenhum desliga e explica', function () {
-    // Cenário real: alguém matou o worker por fora, de um shell elevado.
     gravarMarcador($this);
 
     $estado = elevacao($this)->state();
@@ -275,12 +223,7 @@ it('marcador válido sem heartbeat nenhum desliga e explica', function () {
         ->and($estado->detail)->toContain('sinal de vida');
 });
 
-// ------------------------------------------------- marcador ilegível/parcial
-
 it('JSON ILEGÍVEL VIRA DESLIGADO, e não erro', function (string $conteudo) {
-    // Mesma regra do Flags: a falha cai para o lado seguro por construção,
-    // não por tratamento de erro. Aqui o lado seguro é NÃO afirmar que existe
-    // um processo elevado de pé.
     file_put_contents($this->storage . DIRECTORY_SEPARATOR . Elevation::F_MARCADOR, $conteudo);
     baterHeartbeat($this);
 
@@ -296,8 +239,6 @@ it('JSON ILEGÍVEL VIRA DESLIGADO, e não erro', function (string $conteudo) {
     '{"ps_pid": 1, "nonce": "a", "provado_em": "x"}',
 ]);
 
-// ---------------------------------------------------------------- nonce
-
 it('nonce vem do marcador, e é nulo sem marcador', function () {
     expect(elevacao($this)->nonce())->toBeNull();
 
@@ -305,8 +246,6 @@ it('nonce vem do marcador, e é nulo sem marcador', function () {
 
     expect(elevacao($this)->nonce())->toBe('carimbo-desta-execucao');
 });
-
-// ---------------------------------------------------------------- ordens
 
 it('order() escreve o arquivo que o worker lê no laço', function () {
     expect(elevacao($this)->order(Elevation::F_ORDEM_CANCELAR))->toBeTrue()
@@ -318,11 +257,7 @@ it('jobPath fica em files/, com o nome que o worker espera', function () {
         ->toBe($this->files . DIRECTORY_SEPARATOR . Elevation::F_JOB);
 });
 
-// ---------------------------------------------------------------- desligar
-
 it('DESLIGAR apaga o marcador e deixa a ordem, sem tentar matar ninguém', function () {
-    // O PHP roda em integridade Média e o worker em Alta: matar não passa
-    // (medido, taskkill devolve "Acesso negado"). Então desligar é ordem.
     gravarMarcador($this);
 
     $frase = elevacao($this)->disable();
@@ -333,9 +268,6 @@ it('DESLIGAR apaga o marcador e deixa a ordem, sem tentar matar ninguém', funct
 });
 
 it('desligar apaga o marcador ANTES de esperar, para a tela não mentir', function () {
-    // Com heartbeat fresco, o disable() espera até SHUTDOWN_WAIT_S e desiste
-    // — mas o estado já tem de ler como desligado, porque foi o que a pessoa
-    // pediu.
     gravarMarcador($this);
     baterHeartbeat($this);
 
@@ -350,11 +282,7 @@ it('desligar sem nada ligado não estoura', function () {
     expect(elevacao($this)->disable())->toBeString();
 });
 
-// ------------------------------------------------------------ ociosidade
-
 it('o tempo ocioso da tela é o mesmo que o worker usa', function () {
-    // Quem sai é o worker; o PHP só mostra o número. Lido como texto, pelo
-    // mesmo motivo da paridade da allowlist: PHP não executa PowerShell.
     $worker = file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
 
     expect($worker)->toBeString();

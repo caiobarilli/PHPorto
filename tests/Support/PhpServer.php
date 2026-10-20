@@ -9,14 +9,6 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RuntimeException;
 
-/**
- * Um php -S de verdade, numa porta livre, com .env próprio, para teste.
- *
- * Sobe numa raiz temporária com cópia de public/ e do src/bootstrap.php, um
- * vendor/autoload.php que carrega o do projeto, storage/ e files/ vazios, o
- * banco .sqlite e o .env dado. Nada do .env, do storage/ nem do files/ desta
- * máquina entra. A raiz é apagada no stop().
- */
 final class PhpServer
 {
     /** @var resource */
@@ -29,11 +21,6 @@ final class PhpServer
     }
 
     /**
-     * Sobe o servidor e espera ele aceitar conexão.
-     *
-     * Recebe as chaves do .env do servidor (valor vazio vira CHAVE=). Essas
-     * chaves saem do ambiente herdado, para o .env valer. Devolve o servidor.
-     *
      * @param array<string, string> $dotenv
      */
     public static function start(array $dotenv): self
@@ -84,14 +71,8 @@ final class PhpServer
     }
 
     /**
-     * Faz uma requisição sem seguir redirecionamento.
-     *
-     * Recebe o método, o caminho, a senha do Basic (null = sem credencial), o
-     * corpo de formulário e cabeçalhos extras. Devolve [status, cabeçalhos, corpo].
-     *
      * @param array<string, string> $form
-     * @param list<string>          $headers
-     *
+     * @param list<string> $headers
      * @return array{0: int, 1: list<string>, 2: string}
      */
     public function request(string $method, string $path, ?string $password, array $form = [], array $headers = []): array
@@ -125,7 +106,6 @@ final class PhpServer
         return [(int) ($m[1] ?? 0), $linhas, is_string($resposta) ? $resposta : ''];
     }
 
-    /** Derruba o servidor e apaga a raiz temporária dele. */
     public function stop(): void
     {
         proc_terminate($this->proc);
@@ -134,10 +114,6 @@ final class PhpServer
     }
 
     /**
-     * Monta a raiz temporária do servidor.
-     *
-     * Recebe o caminho da raiz e as chaves do .env. Devolve o caminho.
-     *
      * @param array<string, string> $dotenv
      */
     private static function buildRoot(string $root, array $dotenv): string
@@ -175,7 +151,6 @@ final class PhpServer
         return $root;
     }
 
-    /** Apaga a raiz temporária, se existir. Recebe o caminho. */
     private static function remove(string $root): void
     {
         if (!is_dir($root)) {

@@ -9,8 +9,6 @@ use App\Http\WslView;
 use App\Wsl\Upload;
 
 /**
- * Monta a /wsl com as execuções e o estado da VM dados e devolve o HTML.
- *
  * @param list<Execution> $rows
  */
 function wslHtml(array $rows, ?bool $awake = null, int $maxUploadBytes = 2097152): string
@@ -38,7 +36,6 @@ function wslHtml(array $rows, ?bool $awake = null, int $maxUploadBytes = 2097152
 it('a /wsl mostra a data em dd/mm/aaaa hh:mm:ss no fuso, e não o UTC do banco', function () {
     $html = wslHtml([new Execution('ls', '', 0, 10, ExecutionKind::Comando, false, '2026-09-09 02:54:17')]);
 
-    // Uma no painel da última execução, uma na tabela.
     expect(substr_count($html, '08/09/2026 23:54:17'))->toBe(2)
         ->and($html)->not->toContain('>2026-09-09 02:54:17');
 });
@@ -137,8 +134,6 @@ it('o indicador diz acordada, dormindo, ou se cala quando não se sabe', functio
         ->and(wslHtml([]))->not->toContain('dormindo');
 });
 
-// ---- Sem reload (fase 1) ----------------------------------------------------
-
 it('sem reload: os três formulários da /wsl são marcados', function () {
     $html = wslHtml([]);
 
@@ -164,8 +159,6 @@ it('sem reload: apagar registros usa requestSubmit, com submit() só de recaída
     expect($html)->toContain('if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }')
         ->and(substr_count($html, '.submit()'))->toBe(1);
 });
-
-// ---- Tema do console ----------------------------------------------------------
 
 function layoutCss(): string
 {

@@ -24,13 +24,6 @@ it('debloat.json traz os 22 pacotes, sem repetição', function () {
         ->and($pacotes)->toContain('Microsoft.BingNews', 'Clipchamp.Clipchamp', 'MicrosoftTeams');
 });
 
-/**
- * A PARIDADE ENTRE A TELA E A AÇÃO.
- *
- * A tela lê debloat.json pelo WinConfig; a ação tem de ler o MESMO arquivo, e
- * não carregar uma cópia da lista. Lê o Invoke-Debloat.ps1 como texto, como o
- * teste de paridade das allowlists faz com o worker.
- */
 it('o Invoke-Debloat lê a lista do debloat.json, e não tem lista própria', function () {
     $acao = file_get_contents(dirname(__DIR__, 2) . '/src/Win/actions/Invoke-Debloat.ps1');
 
@@ -74,8 +67,6 @@ it('tolera BOM no começo do arquivo', function () {
     expect(WinConfig::debloat($this->dir))->toBe(['Microsoft.BingNews']);
 });
 
-// ---------------------------------------------------------------- tweaks
-
 it('a tela oferece 62 tweaks: os 66 do arquivo menos os de Type Button ou Combobox', function () {
     $bruto = json_decode(WinConfig::escapeControlChars((string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/config/tweaks.json')), true);
     expect($bruto)->toBeArray()->toHaveCount(66);
@@ -117,14 +108,6 @@ it('a nota do Explorer vale exatamente para os seis que chamam Invoke-WinUtilExp
     ]);
 });
 
-/**
- * O BURACO HERDADO DO WPFTweaksDVR, fixado do lado da tela.
- *
- * Os presets standard e advanced citam uma chave que o tweaks.json não tem.
- * Ao casar a seleção com um preset, a chave ausente é desconsiderada — senão
- * nenhuma seleção de caixas reproduziria os dois presets. Quando o dado for
- * consertado, este teste falha e avisa que a exceção pode sair.
- */
 it('WPFTweaksDVR segue citado pelos presets e ausente do tweaks.json, e o casamento o desconsidera', function () {
     $presetBruto = json_decode((string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/config/preset.json'), true);
 
@@ -165,8 +148,6 @@ it('o tweaks.json cru não é JSON estrito, e é por isso que o escape existe', 
 
     expect(json_last_error())->toBe(JSON_ERROR_CTRL_CHAR);
 });
-
-// ------------------------------------------------------------------- dns
 
 it('dnsProviders devolve as nove chaves do dns.json, na ordem do arquivo', function () {
     expect(WinConfig::dnsProviders())->toBe([

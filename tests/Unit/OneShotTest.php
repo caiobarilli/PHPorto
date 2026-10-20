@@ -8,16 +8,6 @@ use App\Win\PsResult;
 use App\Win\UacPolicy;
 use App\Win\WinAction;
 
-/**
- * A ação sensível: pedido, lançador, espera do ACEITO e coleta por id.
- *
- * NADA AQUI ELEVA NADA. O lançador é uma closure que faz o papel do
- * powershell.exe: ela lê o que o PHP escreveu (o pedido e o stub em base64) e
- * responde como o Windows responderia — recusado, sem resposta, aceito. O
- * stub e o worker de verdade são exercitados no OneShot.Tests.ps1, e a
- * elevação em si fica na lista do que se confere à mão no Windows.
- */
-
 beforeEach(function () {
     $base = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto_uma_' . bin2hex(random_bytes(6));
 
@@ -34,7 +24,6 @@ beforeEach(function () {
         file_put_contents($this->win . DIRECTORY_SEPARATOR . $nome, "# stub de {$nome}\r\n");
     }
 
-    // O que o lançador fingido viu, para o teste conferir depois.
     $this->visto = new ArrayObject();
 });
 
@@ -51,7 +40,6 @@ afterEach(function () {
     }
 });
 
-/** A saída do reg.exe com o UAC no CPBA que se quiser. */
 function regUac(int $cpba, int $lua = 1): string
 {
     return "\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\r\n"
@@ -59,9 +47,7 @@ function regUac(int $cpba, int $lua = 1): string
 }
 
 /**
- * O OneShot do teste.
- *
- * @param Closure(string, int): PsResult $lancador faz o papel do powershell.exe
+ * @param Closure(string, int): PsResult $lancador
  */
 function usoUnico(object $ctx, Closure $lancador, int $cpba = 5, ?string $files = null, int $startTimeout = 1): OneShot
 {
@@ -83,7 +69,6 @@ function usoUnico(object $ctx, Closure $lancador, int $cpba = 5, ?string $files 
     );
 }
 
-/** O id de um uso único, pelo nome do lançador. */
 function idDoLancador(string $lancador): string
 {
     preg_match('/win-oneshot-launcher-([0-9a-f]{12})\.ps1$/', $lancador, $m);
@@ -91,7 +76,6 @@ function idDoLancador(string $lancador): string
     return $m[1] ?? '';
 }
 
-/** O stub decodificado, de dentro do lançador. */
 function stubDoLancador(string $lancador): string
 {
     $texto = (string) file_get_contents($lancador);
@@ -101,10 +85,7 @@ function stubDoLancador(string $lancador): string
 }
 
 /**
- * Um lançador fingido que guarda o que viu e responde com o que se quiser.
- *
- * @param Closure(string, string): void|null $depois o que o "worker" faz,
- *        recebendo a pasta de trabalho e o id
+ * @param Closure(string, string): void|null $depois
  */
 function lancadorQue(object $ctx, string $saida, ?int $exit = 0, bool $timeout = false, ?Closure $depois = null): Closure
 {
@@ -126,7 +107,6 @@ function lancadorQue(object $ctx, string $saida, ?int $exit = 0, bool $timeout =
     };
 }
 
-/** Finge o worker de uso único: ACEITO, e o resultado na pasta protegida. */
 function workerAceita(string $saida = "feito\n", int $exit = 0): Closure
 {
     return static function (string $files, string $id) use ($saida, $exit): void {
@@ -141,13 +121,10 @@ function workerAceita(string $saida = "feito\n", int $exit = 0): Closure
     };
 }
 
-/** O que sobrou de uso único em files/. */
 function sobras(object $ctx): array
 {
     return glob((string) $ctx->files . DIRECTORY_SEPARATOR . Elevation::ONESHOT_PREFIX . '*') ?: [];
 }
-
-// ---------------------------------------------------------------- caminho feliz
 
 it('aceito, devolve a saída da ação pelo id e não deixa nada para trás', function () {
     $r = usoUnico($this, lancadorQue($this, "PID=4242\r\n", 0, false, workerAceita("instalado\n")))
@@ -208,8 +185,6 @@ it('O STUB SÓ LEVA CAMINHOS E HASHES: o hash do worker e o dos bytes do pedido'
         $pedido,
         hash('sha256', (string) $this->visto['pedido']),
     ))
-        // O texto do usuário vai no pedido, conferido por hash, e nunca na
-        // linha de comando.
         ->and($stub)->not->toContain('Foo')
         ->and($stub)->not->toContain('Remove-Item')
         ->and((string) $this->visto['pedido'])->toContain('Remove-Item');
@@ -246,10 +221,7 @@ it('o lançador pede RunAs com UMA string de argumentos e trata o 1223', functio
         ->and($texto)->toStartWith("\u{FEFF}");
 });
 
-// ---------------------------------------------------------------- nada executado
-
 it('RECUSADO NO PROMPT: diz que nada rodou, apaga o pedido e não coleta', function () {
-    // Um resultado de outro id na pasta: se o PHP coletasse, ele sumiria.
     file_put_contents($this->protegida . '/win-done-fff000000000.json', '{"id":"fff000000000","exit":0}');
 
     expect(fn () => usoUnico($this, lancadorQue($this, "CANCELADO\r\n", 2))
@@ -346,8 +318,6 @@ it('sunshine pair RECUSADO NO PROMPT: o pedido com a senha não fica no disco', 
         ->dispatch(WinAction::Sunshine, $params, 600))
         ->toThrow(RuntimeException::class, 'Você recusou o UAC; nada foi executado');
 
-    // Enquanto o prompt estava na tela, o pedido levava a senha (risco aceito,
-    // até ~75 s); depois, nada sobra.
     expect((string) $this->visto['pedido'])->toContain('Xyzzy12345')
         ->and((string) $this->visto['stub'])->not->toContain('Xyzzy12345')
         ->and((string) $this->visto['stub'])->not->toContain('4821')
@@ -357,8 +327,6 @@ it('sunshine pair RECUSADO NO PROMPT: o pedido com a senha não fica no disco', 
 it('ação comum não passa pelo uso único', function () {
     usoUnico($this, lancadorQue($this, "PID=1\n"))->dispatch(WinAction::Rdp, ['SubAction' => 'off'], 600);
 })->throws(RuntimeException::class, 'Só ação sensível');
-
-// ---------------------------------------------------------------- bloqueio
 
 it('com o UAC no padrão e o checkout inteiro, nada bloqueia', function () {
     expect(usoUnico($this, lancadorQue($this, ''))->blockingReason())->toBeNull();

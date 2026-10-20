@@ -2,14 +2,7 @@
 
 declare(strict_types=1);
 
-/*
- * O .env.example contra quem lê o ambiente: o Config, e os testes de
- * integração do MySQL para as MYSQL_TEST_*. Lido como texto.
- */
-
 /**
- * As chaves que o arquivo declara, na ordem em que aparecem.
- *
  * @return list<string>
  */
 function envExampleKeys(): array
@@ -21,9 +14,6 @@ function envExampleKeys(): array
 }
 
 /**
- * As chaves lidas do ambiente: self::env()/self::bool() no Config e
- * mysqlTestEnv() no MySQLProviderTest.
- *
  * @return list<string>
  */
 function envKeysRead(): array
