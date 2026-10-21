@@ -25,6 +25,7 @@ enum WinAction: string
     case Gdid = 'gdid';
     case Rdp = 'rdp';
     case Sunshine = 'sunshine';
+    case OpenSsh = 'openssh';
 
     case Hyperv = 'hyperv';
 
@@ -63,6 +64,8 @@ enum WinAction: string
 
     public const SUNSHINE_SUBACTIONS = ['status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close', 'set-creds', 'pair'];
 
+    public const OPENSSH_SUBACTIONS = ['status', 'install', 'enable', 'disable'];
+
     public const SUNSHINE_CRED_SUBACTIONS = ['set-creds', 'pair'];
 
     public const SUNSHINE_CRED_FIELDS = ['User', 'Password', 'Pin', 'DeviceName', 'SetCreds'];
@@ -96,6 +99,7 @@ enum WinAction: string
         'install'   => '*',
         'rdp'       => ['on'],
         'sunshine'  => ['install', 'firewall-open', 'set-creds', 'pair'],
+        'openssh'   => ['install', 'enable'],
         'exporter'  => ['install', 'firewall'],
         'gpu'       => ['install'],
         'hyperv-vm' => '*',
@@ -130,6 +134,7 @@ enum WinAction: string
             self::Gdid      => ['SubAction' => $this->pick($input, 'SubAction', self::GDID_SUBACTIONS, obrigatorio: true)],
             self::Rdp       => ['SubAction' => $this->pick($input, 'SubAction', self::RDP_SUBACTIONS, obrigatorio: true)],
             self::Sunshine  => $this->sunshine($input),
+            self::OpenSsh   => ['SubAction' => $this->pick($input, 'SubAction', self::OPENSSH_SUBACTIONS, obrigatorio: true)],
             self::Optimize  => $this->optimize($input),
             self::HypervVm  => $this->hypervVm($input),
         };
@@ -189,6 +194,12 @@ enum WinAction: string
                 'start' => new WinStateChange(applied: true),
                 'stop'  => new WinStateChange(applied: false),
                 default => null,
+            },
+
+            self::OpenSsh => match ($params['SubAction'] ?? '') {
+                'enable'  => new WinStateChange(applied: true),
+                'disable' => new WinStateChange(applied: false),
+                default   => null,
             },
 
             default => null,

@@ -100,6 +100,9 @@ $ALLOWLIST = @{
         'SetCreds'   = @{ tipo = 'flag' }
     }
 
+    'openssh'     = @{
+        'SubAction' = @{ tipo = 'set'; valores = @('status', 'install', 'enable', 'disable') }
+    }
     'hyperv'      = @{}
 
     'hyperv-vm'   = @{
@@ -112,6 +115,7 @@ $SENSIVEIS = @{
     'install'   = '*'
     'rdp'       = @('on')
     'sunshine'  = @('install', 'firewall-open', 'set-creds', 'pair')
+    'openssh'   = @('install', 'enable')
     'exporter'  = @('install', 'firewall')
     'gpu'       = @('install')
     'hyperv-vm' = '*'
