@@ -80,12 +80,18 @@ final class Api
         ]);
     }
 
+    public static function isJson(mixed $contentType): bool
+    {
+        if (!is_string($contentType)) {
+            return false;
+        }
+
+        return strtolower(trim(explode(';', $contentType, 2)[0])) === 'application/json';
+    }
+
     private function run(): never
     {
-        $type = $_SERVER['CONTENT_TYPE'] ?? '';
-        $type = is_string($type) ? strtolower($type) : '';
-
-        if (!str_contains($type, 'application/json')) {
+        if (!self::isJson($_SERVER['CONTENT_TYPE'] ?? null)) {
             Respond::json(
                 ['ok' => false, 'error' => 'Content-Type: application/json é obrigatório.'],
                 415
