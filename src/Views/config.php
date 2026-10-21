@@ -43,12 +43,12 @@ use App\Http\Respond;
 
       <div class="linha-acao">
         <label class="switch">
-          <input type="checkbox" name="api_enabled" value="1" id="api-toggle"
+          <input type="checkbox" name="api_enabled" value="1" id="api-toggle" data-envia-ao-mudar
                  <?= $view->apiEnabled ? 'checked' : '' ?>>
           <span class="trilho"></span>
           <span class="rotulo" id="api-rotulo"><?= $view->apiEnabled ? 'Ligada' : 'Desligada' ?></span>
         </label>
-        <button type="submit" class="btn btn-sm" id="btn-salvar-api">Salvar</button>
+        <button type="submit" class="btn btn-sm" id="btn-salvar-api" data-so-sem-js>Salvar</button>
       </div>
 
       <p class="nota-estado">
@@ -129,12 +129,12 @@ use App\Http\Respond;
 
       <div class="linha-acao">
         <label class="switch">
-          <input type="checkbox" name="hyperv_enabled" value="1" id="hyperv-toggle"
+          <input type="checkbox" name="hyperv_enabled" value="1" id="hyperv-toggle" data-envia-ao-mudar
                  <?= $view->hypervEnabled ? 'checked' : '' ?>>
           <span class="trilho"></span>
           <span class="rotulo" id="hyperv-rotulo"><?= $view->hypervEnabled ? 'Ligado' : 'Desligado' ?></span>
         </label>
-        <button type="submit" class="btn btn-sm" id="btn-salvar-hyperv">Salvar</button>
+        <button type="submit" class="btn btn-sm" id="btn-salvar-hyperv" data-so-sem-js>Salvar</button>
       </div>
 
       <p class="nota-estado">
@@ -273,10 +273,39 @@ use App\Http\Respond;
     'hyperv-toggle': ['hyperv-rotulo', 'Ligado', 'Desligado']
   };
 
+  function rotular(caixa) {
+    var r = ROTULOS[caixa.id];
+    if (r) { document.getElementById(r[0]).textContent = caixa.checked ? r[1] : r[2]; }
+  }
+
+  var aoMudar = !!(window.fetch && window.DOMParser && window.URLSearchParams && window.FormData && HTMLFormElement.prototype.requestSubmit);
+
+  function esconderSalvar() {
+    if (!aoMudar) { return; }
+    document.querySelectorAll('[data-so-sem-js]').forEach(function (b) { b.hidden = true; });
+  }
+
   document.addEventListener('change', function (ev) {
-    var r = ROTULOS[ev.target.id];
-    if (r) { document.getElementById(r[0]).textContent = ev.target.checked ? r[1] : r[2]; }
+    rotular(ev.target);
+    if (aoMudar && ev.target.hasAttribute('data-envia-ao-mudar') && ev.target.form) { ev.target.form.requestSubmit(); }
   });
+
+  document.addEventListener('phporto:trocou', esconderSalvar);
+  esconderSalvar();
+
+  var apiConfirmada = false;
+  var modalApi = document.getElementById('modal-api');
+  if (modalApi) {
+    modalApi.addEventListener('close', function () {
+      var caixa = document.getElementById('api-toggle');
+      var form = document.getElementById('form-api');
+      if (!apiConfirmada && caixa && form) {
+        caixa.checked = form.getAttribute('data-ligada') === '1';
+        rotular(caixa);
+      }
+      apiConfirmada = false;
+    });
+  }
 
   var TEMA = 'phporto.tema';
 
@@ -321,6 +350,7 @@ use App\Http\Respond;
     if (ev.target.closest('#btn-retentar')) { document.getElementById('form-ps').setAttribute('data-confirmado', ''); }
 
     if (ev.target.closest('#btn-confirmar-api')) {
+      apiConfirmada = true;
       document.getElementById('modal-api').close();
       enviar(document.getElementById('form-api'));
     }

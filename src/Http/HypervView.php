@@ -8,6 +8,12 @@ use App\Win\HypervListing;
 
 final readonly class HypervView
 {
+    public const PARTE_CASCA = 'casca';
+
+    public const PARTE_TABELA = 'tabela';
+
+    public const PARTE_COMPLETA = 'completa';
+
     public function __construct(
         public string $tz,
         public ?string $blocked,
@@ -18,6 +24,7 @@ final readonly class HypervView
         public string $csrfToken = '',
         public string $csrfField = '',
         public ?string $actionsBlocked = null,
+        public string $parte = self::PARTE_COMPLETA,
     ) {
     }
 }

@@ -119,17 +119,9 @@ $celulaIp = static function (\App\Win\HypervVm $vm): string {
 
 $listing = $view->listing;
 
+ob_start();
 ?>
-<div class="wrap">
-  <div class="topbar">
-    <h1>Hyper-V</h1>
-    <a href="/">voltar</a>
-  </div>
-
-  <?php if ($view->notice !== null): ?>
-    <div class="alert alert-note" data-aviso><?= Respond::e($view->notice) ?></div>
-  <?php endif; ?>
-
+<div id="hyperv-leitura">
   <?php if ($view->blocked !== null): ?>
     <div class="alert alert-block" id="hyperv-faixa">
       <strong>Para ver as máquinas virtuais, o PHPorto precisa do PowerShell elevado ligado.</strong>
@@ -140,7 +132,7 @@ $listing = $view->listing;
     <div class="alert alert-block" id="hyperv-faixa">
       <strong>A leitura demorou demais e foi cancelada.</strong>
       Tente atualizar em instantes.
-      <p><a class="btn btn-sm" href="/hyperv">Atualizar</a></p>
+      <p><a class="btn btn-sm" href="/hyperv?parte=completa" data-atualizar>Atualizar</a></p>
     </div>
   <?php elseif ($listing === null): ?>
     <div class="alert alert-block" id="hyperv-faixa">A leitura das máquinas virtuais não voltou.</div>
@@ -157,7 +149,7 @@ $listing = $view->listing;
       <strong>O serviço de máquinas virtuais do Windows está parado.</strong>
       Reiniciar o computador costuma resolver; se não, abra <em>Serviços</em> e inicie
       "Gerenciamento de Máquina Virtual do Hyper-V". O PHPorto não inicia o serviço por você.
-      <p><a class="btn btn-sm" href="/hyperv">Atualizar</a></p>
+      <p><a class="btn btn-sm" href="/hyperv?parte=completa" data-atualizar>Atualizar</a></p>
     </div>
   <?php elseif ($listing->hypervOn === false): ?>
     <div class="alert alert-block" id="hyperv-faixa">
@@ -169,7 +161,7 @@ $listing = $view->listing;
           <pre><?= Respond::e($listing->error) ?></pre>
         </details>
       <?php endif; ?>
-      <p><a class="btn btn-sm" href="/hyperv">Atualizar</a></p>
+      <p><a class="btn btn-sm" href="/hyperv?parte=completa" data-atualizar>Atualizar</a></p>
     </div>
   <?php else:
       $vms     = $listing->vms;
@@ -184,7 +176,7 @@ $listing = $view->listing;
         <strong><?= $rodando ?> de <?= $total ?> <?= $total === 1 ? 'ligada' : 'ligadas' ?></strong>
       <?php endif; ?>
       &middot; lido às <span title="<?= Respond::e($lidoEm) ?>"><?= Respond::e(preg_match('/ (\d\d:\d\d)/', $lidoEm, $hora) === 1 ? $hora[1] : $lidoEm) ?></span>
-      &middot; <a href="/hyperv" id="hyperv-atualizar">Atualizar</a>
+      &middot; <a href="/hyperv?parte=completa" id="hyperv-atualizar" data-atualizar>Atualizar</a>
     </p>
 
     <?php if ($vms === []): ?>
@@ -235,6 +227,35 @@ $listing = $view->listing;
         </tbody>
       </table>
     <?php endif; ?>
+  <?php endif; ?>
+</div>
+<?php
+$leitura = (string) ob_get_clean();
+
+if ($view->parte === \App\Http\HypervView::PARTE_TABELA) {
+    echo $leitura;
+
+    return;
+}
+
+?>
+<div class="wrap">
+  <div class="topbar">
+    <h1>Hyper-V</h1>
+    <a href="/">voltar</a>
+  </div>
+
+  <?php if ($view->notice !== null): ?>
+    <div class="alert alert-note" data-aviso><?= Respond::e($view->notice) ?></div>
+  <?php endif; ?>
+
+  <?php if ($view->parte === \App\Http\HypervView::PARTE_CASCA): ?>
+    <div id="hyperv-leitura" data-ler="/hyperv?parte=tabela" aria-live="polite">
+      <p class="sub" data-lendo>Lendo as máquinas virtuais…</p>
+      <noscript><p><a class="btn btn-sm" href="/hyperv?parte=completa">Ler as máquinas virtuais</a></p></noscript>
+    </div>
+  <?php else: ?>
+<?= $leitura ?>
   <?php endif; ?>
 </div>
 
@@ -319,5 +340,78 @@ $listing = $view->listing;
       selecionar();
     }
   });
+})();
+(function () {
+  'use strict';
+
+  if (!window.fetch || !window.DOMParser) { return; }
+
+  var lendo = false;
+
+  function mostrarCopiar() {
+    document.querySelectorAll('[data-copiar]').forEach(function (b) { b.hidden = false; });
+  }
+
+  function falhou(alvo) {
+    var aviso = alvo.querySelector('[data-lendo]') || alvo.appendChild(document.createElement('p'));
+    aviso.setAttribute('data-lendo', '');
+    aviso.className = 'sub';
+    aviso.textContent = 'A leitura não voltou. Use Atualizar para tentar de novo.';
+    var link = document.createElement('a');
+    link.href = '/hyperv?parte=completa';
+    link.setAttribute('data-atualizar', '');
+    link.textContent = 'Atualizar';
+    aviso.appendChild(document.createTextNode(' '));
+    aviso.appendChild(link);
+  }
+
+  function ler() {
+    var alvo = document.getElementById('hyperv-leitura');
+    if (!alvo || lendo) { return; }
+    lendo = true;
+    alvo.setAttribute('aria-busy', 'true');
+    document.querySelectorAll('[data-atualizar]').forEach(function (a) { a.textContent = 'lendo…'; });
+
+    fetch('/hyperv?parte=tabela', {
+      credentials: 'same-origin',
+      mode: 'same-origin',
+      cache: 'no-store',
+      headers: { 'X-PHPorto-Sem-Reload': '1' }
+    }).then(function (r) {
+      var html = (r.headers.get('Content-Type') || '').indexOf('text/html') === 0;
+      if (!r.ok || !html || new URL(r.url).origin !== location.origin || new URL(r.url).pathname !== '/hyperv') {
+        location.assign('/hyperv?parte=completa');
+        return null;
+      }
+      return r.text();
+    }).then(function (texto) {
+      lendo = false;
+      if (texto === null) { return; }
+      var novo = new DOMParser().parseFromString(texto, 'text/html').getElementById('hyperv-leitura');
+      var atual = document.getElementById('hyperv-leitura');
+      if (!novo || !atual) { throw new Error('sem tabela'); }
+      atual.replaceWith(document.adoptNode(novo));
+      mostrarCopiar();
+    }).catch(function () {
+      lendo = false;
+      var atual = document.getElementById('hyperv-leitura');
+      if (atual) { atual.removeAttribute('aria-busy'); falhou(atual); }
+    });
+  }
+
+  function lerSePendente() {
+    var alvo = document.getElementById('hyperv-leitura');
+    if (alvo && alvo.hasAttribute('data-ler')) { ler(); }
+  }
+
+  document.addEventListener('click', function (ev) {
+    var link = ev.target.closest('[data-atualizar]');
+    if (!link || ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey) { return; }
+    ev.preventDefault();
+    ler();
+  });
+
+  document.addEventListener('phporto:trocou', lerSePendente);
+  lerSePendente();
 })();
 </script>

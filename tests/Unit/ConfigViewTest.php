@@ -137,3 +137,36 @@ it('a restauração de fábrica não toca no tema', function () {
     expect($pages)->not->toContain('phporto.tema')
         ->and($pages)->not->toContain('data-tema');
 });
+
+it('sem reload fase 2: API e Hyper-V enviam ao mudar o interruptor, e o Salvar fica só sem JS', function () {
+    $html = configHtml();
+
+    expect($html)->toContain('id="api-toggle" data-envia-ao-mudar')
+        ->and($html)->toContain('id="hyperv-toggle" data-envia-ao-mudar')
+        ->and($html)->toContain('id="btn-salvar-api" data-so-sem-js>Salvar</button>')
+        ->and($html)->toContain('id="btn-salvar-hyperv" data-so-sem-js>Salvar</button>')
+        ->and($html)->toContain("ev.target.form.requestSubmit()")
+        ->and($html)->toContain("document.querySelectorAll('[data-so-sem-js]')");
+});
+
+it('sem reload fase 2: o PowerShell mantém o Salvar visível e o modal, e não envia ao mudar', function () {
+    $html = configHtml();
+    $ps   = substr($html, (int) strpos($html, '<form method="post" id="form-ps"'));
+    $ps   = substr($ps, 0, (int) strpos($ps, '</form>'));
+
+    expect($ps)->toContain('id="btn-salvar-ps"')
+        ->and($ps)->toContain('>Salvar</button>')
+        ->and($ps)->not->toContain('data-envia-ao-mudar')
+        ->and($ps)->not->toContain('data-so-sem-js')
+        ->and($html)->toContain('<dialog id="modal-ps">');
+});
+
+it('sem reload fase 2: ligar a API ainda passa pelo modal, e cancelar volta o interruptor', function () {
+    $html = configHtml();
+
+    expect($html)->toContain("modal = 'modal-api';")
+        ->and($html)->toContain("modalApi.addEventListener('close'")
+        ->and($html)->toContain("caixa.checked = form.getAttribute('data-ligada') === '1';")
+        ->and(substr_count($html, '.submit()'))->toBe(1)
+        ->and($html)->not->toContain('innerHTML');
+});
