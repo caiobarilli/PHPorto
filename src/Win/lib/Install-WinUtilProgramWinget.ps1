@@ -21,10 +21,13 @@ Function Install-WinUtilProgramWinget {
     )
 
     foreach ($Program in $Programs) {
+        if ($Program -cnotmatch '\A[A-Za-z0-9][A-Za-z0-9_+-]*(?:\.[A-Za-z0-9_+-]+)+\z') {
+            throw "not a winget package ID: '$Program'"
+        }
         if ($Action -eq 'Install') {
-            $Arguments = "install --id `"$Program`" --exact --accept-package-agreements --accept-source-agreements --source winget --silent --disable-interactivity"
+            $Arguments = @('install', '--id', $Program, '--exact', '--accept-package-agreements', '--accept-source-agreements', '--source', 'winget', '--silent', '--disable-interactivity')
         } else {
-            $Arguments = "uninstall --id `"$Program`" --exact --accept-source-agreements --source winget --silent --disable-interactivity"
+            $Arguments = @('uninstall', '--id', $Program, '--exact', '--accept-source-agreements', '--source', 'winget', '--silent', '--disable-interactivity')
         }
         $Process = Start-Process -FilePath winget -ArgumentList $Arguments -NoNewWindow -Wait -PassThru
         [PSCustomObject]@{ Program = $Program; ExitCode = $Process.ExitCode }

@@ -195,25 +195,55 @@ it('install exige apps', function () {
     WinAction::Install->validate([]);
 })->throws(InvalidArgumentException::class);
 
-it('install aceita TEXTO LIVRE, sem curar o catálogo do winget', function () {
+it('install aceita qualquer ID do winget, sem curar o catálogo', function () {
     expect(WinAction::Install->validate(['Apps' => 'Git.Git,Microsoft.VSCode,Docker.DockerDesktop']))
         ->toBe(['Apps' => 'Git.Git,Microsoft.VSCode,Docker.DockerDesktop'])
         ->and(WinAction::Install->validate(['Apps' => 'Publisher.App-With_Odd.Name+2']))
-        ->toBe(['Apps' => 'Publisher.App-With_Odd.Name+2']);
+        ->toBe(['Apps' => 'Publisher.App-With_Odd.Name+2'])
+        ->and(WinAction::Install->validate(['Apps' => ' Python.Python.3.12 , Notepad++.Notepad++ ']))
+        ->toBe(['Apps' => 'Python.Python.3.12,Notepad++.Notepad++']);
 });
+
+it('install recusa item que não é ID do winget', function (string $apps) {
+    WinAction::Install->validate(['Apps' => $apps]);
+})->with([
+    'argumento a mais'   => ['Git.Git --override x'],
+    'aspas'              => ['a"b.c'],
+    'aspas no fim'       => ['Git.Git"'],
+    'espaço no meio'     => ['Git .Git'],
+    'opção'              => ['--override'],
+    'hífen no começo'    => ['-x.y'],
+    'sem ponto'          => ['Git'],
+    'ponto no fim'       => ['Git.'],
+    'ponto e vírgula'    => ['Git.Git;calc'],
+    'crase'              => ['Git.Git`n'],
+    'controle'           => ["Git.Git\tx"],
+    'quebra de linha'    => ["Git.Git\nMal.Feito"],
+    'acento'             => ['Edição.App'],
+    'barra'              => ['Git/Git.x'],
+    'segundo item ruim'  => ['Git.Git,a b.c'],
+])->throws(InvalidArgumentException::class, 'App fora do formato de ID do winget');
 
 it('install recusa entrada que só tem vírgulas', function () {
     WinAction::Install->validate(['Apps' => ' , , ']);
 })->throws(InvalidArgumentException::class);
 
 it('install recusa acima do teto de bytes', function () {
-    WinAction::Install->validate(['Apps' => str_repeat('a', WinAction::MAX_PARAM_BYTES + 1)]);
+    WinAction::Install->validate(['Apps' => str_repeat('Pub.App,', 511) . 'Pub.Apps1']);
 })->throws(InvalidArgumentException::class);
 
 it('install aceita exatamente no teto', function () {
-    $valor = str_repeat('a', WinAction::MAX_PARAM_BYTES);
+    $valor = str_repeat('Pub.App,', 511) . 'Pub.Apps';
 
-    expect(WinAction::Install->validate(['Apps' => $valor]))->toBe(['Apps' => $valor]);
+    expect(strlen($valor))->toBe(WinAction::MAX_PARAM_BYTES)
+        ->and(WinAction::Install->validate(['Apps' => $valor]))->toBe(['Apps' => $valor]);
+});
+
+it('o formato do ID é o mesmo no PHP e no worker', function () {
+    $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+    $id     = substr(WinAction::WINGET_ID_PATTERN, 3, -3);
+
+    expect($worker)->toContain("'Apps' = @{ tipo = 'text'; padrao = '\\A" . $id . '(?:,' . $id . ")*\\z' }");
 });
 
 it('os principais do install são os sete IDs conferidos no winget', function () {
@@ -245,7 +275,7 @@ it('install sem campo e sem caixa diz as duas saídas', function () {
 
 it('install recusa quando a soma passa do teto', function () {
     WinAction::Install->validate([
-        'Apps'         => str_repeat('a', WinAction::MAX_PARAM_BYTES - 5),
+        'Apps'         => str_repeat('Pub.App,', 511) . 'P.p',
         'AppsMarcados' => 'Git.Git',
     ]);
 })->throws(InvalidArgumentException::class, 'Apps passou do teto de 4096 bytes.');

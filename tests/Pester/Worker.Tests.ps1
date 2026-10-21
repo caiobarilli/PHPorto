@@ -1446,6 +1446,16 @@ Describe 'worker - acoes sensiveis' {
         $ok.params['Apps'] | Should -Be 'Mozilla.Firefox'
     }
 
+    It 'o uso unico recusa Apps fora do formato de ID do winget: <_>' -ForEach @('Git.Git --override x', 'a"b.c', 'Git .Git', 'Git.Git, Mozilla.Firefox', 'Git', '--override') {
+        $job = [PSCustomObject]@{ acao = 'install'; params = [PSCustomObject]@{ Apps = $_ } }
+        { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "'Apps' fora do formato"
+    }
+
+    It 'o uso unico aceita lista de IDs do winget separada por virgula' {
+        $job = [PSCustomObject]@{ acao = 'install'; params = [PSCustomObject]@{ Apps = 'Git.Git,Python.Python.3.12,Notepad++.Notepad++' } }
+        (Test-Job $job -Modo UmaVez).params['Apps'] | Should -Be 'Git.Git,Python.Python.3.12,Notepad++.Notepad++'
+    }
+
     It 'o uso unico recusa acao comum' {
         $job = [PSCustomObject]@{ acao = 'rdp'; params = [PSCustomObject]@{ SubAction = 'off' } }
         { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "*so roda acao sensivel, e 'rdp off' nao e'*"

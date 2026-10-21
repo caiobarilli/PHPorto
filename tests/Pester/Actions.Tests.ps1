@@ -743,13 +743,13 @@ Describe "Install-WinUtilProgramWinget builds a command that cannot stop to ask"
 
     It "runs winget once per program, by exact ID, accepting both agreements" {
         $script:argumentos = @()
-        Mock Start-Process { $script:argumentos += $ArgumentList; [PSCustomObject]@{ ExitCode = 0 } }
+        Mock Start-Process { $script:argumentos += ,@($ArgumentList); [PSCustomObject]@{ ExitCode = 0 } }
 
         $r = @(Install-WinUtilProgramWinget -Action Install -Programs @('Git.Git', 'VB-Audio.Voicemeeter.Potato'))
 
         $script:argumentos.Count | Should -Be 2
-        $script:argumentos[0] | Should -Be 'install --id "Git.Git" --exact --accept-package-agreements --accept-source-agreements --source winget --silent --disable-interactivity'
-        $script:argumentos[1] | Should -Match '^install --id "VB-Audio.Voicemeeter.Potato" --exact '
+        $script:argumentos[0] | Should -Be @('install', '--id', 'Git.Git', '--exact', '--accept-package-agreements', '--accept-source-agreements', '--source', 'winget', '--silent', '--disable-interactivity')
+        $script:argumentos[1][0..3] | Should -Be @('install', '--id', 'VB-Audio.Voicemeeter.Potato', '--exact')
         $r.Program  | Should -Be @('Git.Git', 'VB-Audio.Voicemeeter.Potato')
         $r.ExitCode | Should -Be @(0, 0)
     }
@@ -759,6 +759,13 @@ Describe "Install-WinUtilProgramWinget builds a command that cannot stop to ask"
 
         (Install-WinUtilProgramWinget -Action Install -Programs 'Git.Git').ExitCode | Should -Be -1978335189
         Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $Wait -and $PassThru }
+    }
+
+    It "refuses an ID that is not a winget package ID, before starting anything: <_>" -ForEach @('Git.Git --override x', 'a"b.c', 'Git .Git', '--override', 'Git', 'Git.Git;calc') {
+        Mock Start-Process { [PSCustomObject]@{ ExitCode = 0 } }
+
+        { Install-WinUtilProgramWinget -Action Install -Programs $_ } | Should -Throw -ExpectedMessage 'not a winget package ID*'
+        Should -Invoke Start-Process -Times 0 -Exactly
     }
 }
 

@@ -193,7 +193,7 @@ $ALLOWLIST = @{
         'SecondaryDNS' = @{ tipo = 'text' }
     }
     'install'     = @{
-        'Apps' = @{ tipo = 'text' }
+        'Apps' = @{ tipo = 'text'; padrao = '\A[A-Za-z0-9][A-Za-z0-9_+-]*(?:\.[A-Za-z0-9_+-]+)+(?:,[A-Za-z0-9][A-Za-z0-9_+-]*(?:\.[A-Za-z0-9_+-]+)+)*\z' }
     }
     'network'     = @{
         'Interface' = @{ tipo = 'text' }
