@@ -102,6 +102,7 @@ já posicionada no menu de abas.
 | Aplicativos | Instalar apps |
 | Serviços | Métricas do Windows, Métricas da GPU, Otimizar, Dispositivos conectados (GDID), Desempenho |
 | Acesso Remoto | Área de Trabalho Remota (RDP), Sunshine, Acesso SSH |
+| Chaves SSH | Gerar chave, Arquivo .ppk, Autorizar no Windows, Usuário e chave no WSL |
 
 ## As ações
 
@@ -265,6 +266,30 @@ porta 22 na rede privada. Não há porta configurável, e nada mexe no
 `sshd_config` nem em chaves. Detalhes em
 [seguranca.md](seguranca.md#acesso-remoto-túnel-ssh).
 
+### Chaves SSH (`ssh-keys`)
+
+Na aba **Chaves SSH**, depois de Acesso Remoto. Com o OpenSSH desligado, a aba
+avisa, e autorizar e criar usuário no WSL ficam desabilitados.
+
+- **Gerar chave ed25519** (`generate`) — `ssh-keygen -t ed25519` do Windows,
+  sem senha, em `%USERPROFILE%\.ssh\id_ed25519`. Se já existe, não sobrescreve
+  e avisa. A tela e o histórico mostram só a pública e a impressão SHA256.
+- **Ver o estado** (`status`) — `sshd`, a pública que está no disco, o
+  PuTTYgen e quantas chaves estão autorizadas. Só lê.
+- **Instalar PuTTYgen** (`puttygen`) — winget com o ID fixo `PuTTY.PuTTY`,
+  pela mesma validação do `install`. Abre o UAC.
+- **Autorizar** (`authorize`) — acrescenta a pública colada, ou a gerada, ao
+  `C:\ProgramData\ssh\administrators_authorized_keys`, com ACL só de SYSTEM e
+  Administradores. Abre o UAC.
+- **Ver as autorizadas** (`list`) e **Remover…** (`remove`, por impressão,
+  com confirmação). Remover abre o UAC.
+- **Criar usuário** (`wsl-user`) — usuário novo na distro escolhida, sem sudo,
+  com `~/.ssh` em 700 e `authorized_keys` em 600. Abre o UAC.
+
+Só entra linha pública `ssh-ed25519`, `ssh-rsa` ou `ecdsa-sha2-nistp*`, sem
+opções na frente, conferida no PHP e no worker. Login por senha e
+`sshd_config` ficam de fora.
+
 ## A tela Hyper-V
 
 `/hyperv` lista as máquinas virtuais deste computador: nome, situação, memória
@@ -321,6 +346,7 @@ que não cabe mais é recusado com o motivo.
 | DNS | escolher outro provedor, ou **DHCP** |
 | Métricas da GPU | **desinstalar** |
 | Acesso SSH | **Desligar o SSH** (`disable`); o OpenSSH Server instalado fica |
+| Chaves SSH | **Remover…** tira a autorizada; a chave gerada e o usuário do WSL ficam |
 | Remover apps | não se desfaz pela tela |
 | Instalar apps | não se desfaz pela tela |
 | Métricas do Windows | não há subação de desinstalar |

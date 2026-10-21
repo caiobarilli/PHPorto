@@ -273,11 +273,34 @@ Describe 'worker - a allowlist do lado elevado' {
         $ok.params['Undo']  | Should -BeTrue
     }
 
-    It 'conhece as dezoito acoes' {
+    It 'conhece as dezenove acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
-            'memory', 'network', 'openssh', 'optimize', 'performance', 'processes', 'rdp', 'sunshine', 'tweaks'
+            'memory', 'network', 'openssh', 'optimize', 'performance', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks'
         )
+    }
+
+    It 'ssh-keys: authorize so passa com UAC proprio, e a linha com opcoes na frente nao passa' {
+        $chave = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8g notebook'
+        $job   = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'ssh-keys'; params = [PSCustomObject]@{ SubAction = 'authorize'; PublicKey = $chave } }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage '*so roda com UAC proprio*'
+        (Test-Job $job -Modo UmaVez).params['PublicKey'] | Should -Be $chave
+
+        $ruim = [PSCustomObject]@{ acao = 'ssh-keys'; params = [PSCustomObject]@{ SubAction = 'authorize'; PublicKey = ('command="x" ' + $chave) } }
+        { Test-Job $ruim -Modo UmaVez } | Should -Throw -ExpectedMessage "'PublicKey' fora do formato"
+    }
+
+    It 'ssh-keys: usuario do WSL fora do formato nao passa' {
+        $job = [PSCustomObject]@{ acao = 'ssh-keys'; params = [PSCustomObject]@{ SubAction = 'wsl-user'; UseGenerated = $true; User = 'Dev;id'; Distro = 'Debian' } }
+        { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "'User' fora do formato"
+    }
+
+    It 'ssh-keys: status e list rodam no laco, sem UAC' {
+        foreach ($sub in 'status', 'list', 'generate') {
+            $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'ssh-keys'; params = [PSCustomObject]@{ SubAction = $sub } }
+            (Test-Job $job).params['SubAction'] | Should -Be $sub
+        }
     }
 
     It 'aceita sunshine com <_>' -ForEach @('status', 'install', 'start', 'stop', 'firewall-open', 'firewall-close', 'set-creds', 'pair') {

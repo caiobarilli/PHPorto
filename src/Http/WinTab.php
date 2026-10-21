@@ -16,6 +16,8 @@ enum WinTab: string
 
     case AcessoRemoto = 'acesso-remoto';
 
+    case ChavesSsh = 'chaves-ssh';
+
     public function label(): string
     {
         return match ($this) {
@@ -24,6 +26,7 @@ enum WinTab: string
             self::Aplicativos  => 'Aplicativos',
             self::Servicos     => 'Serviços',
             self::AcessoRemoto => 'Acesso Remoto',
+            self::ChavesSsh    => 'Chaves SSH',
         };
     }
 

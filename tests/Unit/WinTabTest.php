@@ -10,15 +10,16 @@ it('a aba da URL é lida, e a desconhecida cai em Sistema sem erro', function (m
     'rede'          => ['rede', WinTab::Rede],
     'serviços'      => ['servicos', WinTab::Servicos],
     'acesso remoto' => ['acesso-remoto', WinTab::AcessoRemoto],
+    'chaves ssh'    => ['chaves-ssh', WinTab::ChavesSsh],
     'ausente'       => [null, WinTab::Sistema],
     'desconhecida'  => ['nada', WinTab::Sistema],
     'maiúscula'     => ['REDE', WinTab::Sistema],
     'lista'         => [['rede'], WinTab::Sistema],
 ]);
 
-it('a ordem do menu é Sistema, Rede, Aplicativos, Serviços, Acesso Remoto, com a URL de cada uma', function () {
+it('a ordem do menu é Sistema, Rede, Aplicativos, Serviços, Acesso Remoto, Chaves SSH, com a URL de cada uma', function () {
     expect(array_map(static fn (WinTab $t): string => $t->label(), WinTab::cases()))
-        ->toBe(['Sistema', 'Rede', 'Aplicativos', 'Serviços', 'Acesso Remoto'])
+        ->toBe(['Sistema', 'Rede', 'Aplicativos', 'Serviços', 'Acesso Remoto', 'Chaves SSH'])
         ->and(WinTab::Aplicativos->url())->toBe('/win?aba=aplicativos')
         ->and(WinTab::AcessoRemoto->url())->toBe('/win?aba=acesso-remoto');
 });
@@ -27,5 +28,5 @@ it('todo 303 do POST da /win volta para a aba de onde veio', function () {
     $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
 
     expect($fonte)->not->toContain("Respond::redirect('/win')")
-        ->and(substr_count($fonte, 'Respond::redirect($aba->url())'))->toBe(9);
+        ->and(substr_count($fonte, 'Respond::redirect($aba->url())'))->toBe(10);
 });

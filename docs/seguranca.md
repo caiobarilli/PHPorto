@@ -66,6 +66,25 @@ fechada.
 Pelo túnel, janelas que uma ação abre — como o **Explorar** da auditoria —
 aparecem na máquina Windows, não na sua.
 
+### Chaves SSH
+
+A aba **Chaves SSH** (ação `ssh-keys`) cuida das chaves do túnel:
+
+- A privada gerada fica em `%USERPROFILE%\.ssh\id_ed25519` e nunca é lida pela
+  ação: tela, log e histórico só recebem a pública e a impressão SHA256. Chave
+  que já existe não é sobrescrita.
+- A pública só entra como uma linha `tipo AAAA... comentário`, com o tipo na
+  lista fechada, o base64 conferido contra o tipo e o comentário sem espaço.
+  Linha com opções na frente (`command=`, `from=`) é recusada no PHP e no
+  worker.
+- O `administrators_authorized_keys` é regravado com herança cortada e só
+  SYSTEM e Administradores, que é o que o `sshd` exige para ler o arquivo.
+- O usuário do WSL é criado sem grupo extra (sem sudo), com nome em
+  `[a-z][a-z0-9-]{0,31}` e fora dos nomes do sistema, numa distro que aparece em
+  `wsl -l -q`. A pública vai pela entrada padrão, não pela linha de comando.
+- `puttygen`, `authorize`, `remove` e `wsl-user` abrem o UAC a cada clique.
+  Login por senha e `sshd_config` seguem fora.
+
 ## Token de acesso
 
 Toda requisição, telas e API, passa por um portão único antes do roteamento.

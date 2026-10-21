@@ -381,6 +381,7 @@ final class Pages
             dnsProblem: $dnsProblem,
             tab: $aba,
             sensitiveBlocked: $failed ?? $this->elevation->configProblem(),
+            wslDistros: $aba === WinTab::ChavesSsh ? ($this->distroChecker->registered() ?? []) : [],
         );
 
         Respond::html('PHPorto — Windows', Respond::render('win.php', $view));
@@ -440,6 +441,15 @@ final class Pages
             $params = $acao->validate($entrada);
         } catch (InvalidArgumentException $e) {
             $this->flash($e->getMessage());
+            Respond::redirect($aba->url());
+        }
+
+        if (
+            $acao === WinAction::SshKeys
+            && ($params['SubAction'] ?? '') === 'wsl-user'
+            && !Distro::contains($this->distroChecker->registered() ?? [], (string) ($params['Distro'] ?? ''))
+        ) {
+            $this->flash('A distro escolhida não aparece em "wsl -l -q". Escolha uma da lista.');
             Respond::redirect($aba->url());
         }
 

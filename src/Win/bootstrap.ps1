@@ -81,6 +81,7 @@ $global:PhportoWinActions = [ordered]@{
     'rdp'         = 'Invoke-Rdp'
     'sunshine'    = 'Invoke-Sunshine'
     'openssh'     = 'Invoke-OpenSsh'
+    'ssh-keys'    = 'Invoke-SshKeys'
     'hyperv'      = 'Invoke-Hyperv'
     'hyperv-vm'   = 'Invoke-HypervVm'
 }
