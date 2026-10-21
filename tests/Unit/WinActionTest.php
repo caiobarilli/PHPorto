@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 use App\Win\WinAction;
 
-it('tem as dezessete ações: as quinze do menu em ordem, e as duas da /hyperv fora dele', function () {
+it('tem as dezoito ações: as dezesseis do menu em ordem, e as duas da /hyperv fora dele', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
-            'gdid', 'rdp', 'sunshine',
+            'gdid', 'rdp', 'sunshine', 'openssh',
             'hyperv', 'hyperv-vm',
         ]);
 });
@@ -738,6 +738,7 @@ it('toda subação sensível existe na lista de subações da ação', function 
         'sunshine' => WinAction::SUNSHINE_SUBACTIONS,
         'exporter' => WinAction::EXPORTER_SUBACTIONS,
         'gpu'      => WinAction::GPU_SUBACTIONS,
+        'openssh'  => WinAction::OPENSSH_SUBACTIONS,
     ];
 
     foreach (WinAction::SENSITIVE as $acao => $regra) {
@@ -821,4 +822,46 @@ it('a órfã recolhida com *** do worker continua ***', function () {
 it('as outras ações continuam com o rótulo de antes', function () {
     expect(rotulo(WinAction::Dns, ['Provider' => 'Custom', 'PrimaryDNS' => '1.1.1.1']))->toBe('dns -Provider Custom -PrimaryDNS 1.1.1.1')
         ->and(rotulo(WinAction::Optimize, ['Kill' => 'a b', 'Undo' => true]))->toBe('optimize -Kill "a b" -Undo');
+});
+
+it('openssh aceita as quatro subações, na grafia da lista', function (string $sub) {
+    expect(WinAction::OpenSsh->validate(['SubAction' => $sub]))->toBe(['SubAction' => $sub])
+        ->and(WinAction::OpenSsh->validate(['SubAction' => strtoupper($sub)]))->toBe(['SubAction' => $sub]);
+})->with(['status', 'install', 'enable', 'disable']);
+
+it('openssh recusa subação fora do conjunto fechado, e exige uma', function (array $input) {
+    WinAction::OpenSsh->validate($input);
+})->with([
+    'porta'   => [['SubAction' => 'port']],
+    'chaves'  => [['SubAction' => 'keygen']],
+    'config'  => [['SubAction' => 'config']],
+    'vazio'   => [['SubAction' => '']],
+    'ausente' => [[]],
+])->throws(InvalidArgumentException::class);
+
+it('openssh não leva campo livre: parâmetro a mais não passa adiante', function () {
+    expect(WinAction::OpenSsh->validate(['SubAction' => 'enable', 'Port' => '2222']))->toBe(['SubAction' => 'enable']);
+});
+
+it('openssh: install e enable são sensíveis, status e disable não', function (string $sub, bool $sens) {
+    expect(WinAction::OpenSsh->isSensitive(['SubAction' => $sub]))->toBe($sens);
+})->with([
+    ['install', true],
+    ['enable', true],
+    ['status', false],
+    ['disable', false],
+]);
+
+it('openssh: enable marca aplicado, disable desfaz, status e install não mexem', function () {
+    expect(WinAction::OpenSsh->stateChange(['SubAction' => 'enable'])?->applied)->toBeTrue()
+        ->and(WinAction::OpenSsh->stateChange(['SubAction' => 'disable'])?->applied)->toBeFalse()
+        ->and(WinAction::OpenSsh->stateChange(['SubAction' => 'status']))->toBeNull()
+        ->and(WinAction::OpenSsh->stateChange(['SubAction' => 'install']))->toBeNull();
+});
+
+it('openssh: o worker tem o mesmo conjunto e as mesmas sensíveis', function () {
+    $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+
+    expect($worker)->toContain("'SubAction' = @{ tipo = 'set'; valores = @('status', 'install', 'enable', 'disable') }")
+        ->and($worker)->toContain("'openssh'   = @('install', 'enable')");
 });
