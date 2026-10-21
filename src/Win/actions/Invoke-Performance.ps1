@@ -14,12 +14,10 @@ function Invoke-Performance {
         $planOutput = powercfg /list 2>&1
         $targetGuid = $null
 
-        # Priority 1: original Ultimate Performance GUID already present
         if ($planOutput -match [regex]::Escape($ultimateGuid)) {
             $targetGuid = $ultimateGuid
         }
 
-        # Priority 2: any plan with "Ultimate" or "Maximum Performance" in its name
         if (-not $targetGuid) {
             foreach ($line in $planOutput) {
                 if ($line -match 'Ultimate|Desempenho M.ximo') {
@@ -31,7 +29,6 @@ function Invoke-Performance {
             }
         }
 
-        # Attempts to add the original plan via duplicatescheme (works on Pro/Enterprise)
         if (-not $targetGuid) {
             Write-Status INFO "Attempting to add Ultimate Performance via duplicatescheme..."
             powercfg -duplicatescheme $ultimateGuid 2>&1 | Out-Null
@@ -41,14 +38,12 @@ function Invoke-Performance {
             }
         }
 
-        # Priority 3: High Performance (8c5e7fda)
         if (-not $targetGuid) {
             if ($planOutput -match [regex]::Escape($hiPerfGuid)) {
                 $targetGuid = $hiPerfGuid
             }
         }
 
-        # Priority 4: Balanced fallback
         if (-not $targetGuid) {
             Write-Status WARNING "No high-performance plan found. Using Balanced."
             $targetGuid = $balancedGuid

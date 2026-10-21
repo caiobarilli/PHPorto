@@ -4,18 +4,6 @@
         [string]$VmId
     )
 
-    # Liga, desliga ou reinicia UMA VM, achada pelo VMId (GUID) e nunca pelo
-    # nome: um nome como '*' pegaria todas, e o Hyper-V aceita duas VMs com o
-    # mesmo nome. O worker ja conferiu os dois parametros pela allowlist; a
-    # conferencia aqui repete a dele para quem carregar a acao na mao.
-    #
-    # O estado e' lido de novo AQUI, na hora, antes de agir: a tela mostra o
-    # que leu ha pouco, e a VM pode ter mudado no meio. O que nao cabe no
-    # estado atual e' recusado com motivo, sem tocar na VM.
-    #
-    # A saida e' um JSON unico, como a do Invoke-Hyperv. Recusa e falha saem
-    # com ok = false e exit 1.
-
     $resultado = [ordered]@{
         ok        = $false
         subAction = [string]$SubAction
@@ -56,8 +44,6 @@
     $resultado.name  = [string]$vm.Name
     $resultado.antes = [string]$vm.State
 
-    # Comparacao por texto, como no Invoke-Hyperv: o [string] do enum VMState
-    # e o de um substituto de teste dao o mesmo 'Running'.
     $plano = Get-PhportoHypervVmPlano $SubAction $resultado.antes
 
     if ($null -eq $plano.metodo) {
@@ -69,18 +55,12 @@
     $resultado.metodo = $plano.metodo
 
     try {
-        # Sempre sem pergunta: o filho roda -NonInteractive, e um prompt de
-        # confirmacao ali vira erro que nao explica nada.
         switch ($plano.metodo) {
             'Start-VM'  { Start-VM -VM $vm -Confirm:$false -ErrorAction Stop | Out-Null }
             'Resume-VM' { Resume-VM -VM $vm -Confirm:$false -ErrorAction Stop | Out-Null }
 
-            # -Force pede o desligamento pelo servico de integracao e nao
-            # pergunta. NAO e' o TurnOff, que seria tirar da tomada.
             'Stop-VM'   { Stop-VM -VM $vm -Force -Confirm:$false -ErrorAction Stop | Out-Null }
 
-            # -Type Reboot reinicia pelo sistema da VM. Sem o parametro (Hyper-V
-            # antigo), o Restart-VM so sabe reset, que e' o reinicio bruto.
             'Restart-VM -Type Reboot' { Restart-VM -VM $vm -Type Reboot -Force -Confirm:$false -ErrorAction Stop | Out-Null }
             'Restart-VM -Force'       { Restart-VM -VM $vm -Force -Confirm:$false -ErrorAction Stop | Out-Null }
         }
@@ -98,9 +78,6 @@
 }
 
 function Get-PhportoHypervVmPlano([string]$SubAction, [string]$Estado) {
-    # Os estados parados que o Start-VM liga. Salva, rapida ou hibernada, a VM
-    # volta de onde parou; o Stop jogaria esse estado fora, e por isso fica
-    # recusado nelas.
     $parados = @('Off', 'Saved', 'FastSaved', 'Hibernated')
 
     switch ($SubAction) {
@@ -126,9 +103,6 @@ function Get-PhportoHypervVmPlano([string]$SubAction, [string]$Estado) {
         }
     }
 
-    # O que sobra e' estado de passagem (Starting, Stopping, Saving, Pausing,
-    # Resuming, Reset...) ou um que esta acao nao conhece. Mexer no meio de
-    # uma transicao e' pedir erro do Hyper-V, entao a resposta e' esperar.
     return @{ metodo = $null; motivo = 'em-transicao'; mensagem = "A VM esta mudando de estado ($Estado). Espere terminar e atualize a lista." }
 }
 
@@ -139,8 +113,6 @@ function Test-PhportoRestartVmTemTipo {
 }
 
 function Get-PhportoHypervVmEstado([string]$VmId) {
-    # Leitura de depois, so informativa: falhar aqui nao muda o resultado da
-    # acao, que ja aconteceu ou ja foi recusada.
     try {
         $vm = @(Get-VM -Id ([guid]$VmId) -ErrorAction Stop) | Select-Object -First 1
         if ($null -ne $vm) { return [string]$vm.State }

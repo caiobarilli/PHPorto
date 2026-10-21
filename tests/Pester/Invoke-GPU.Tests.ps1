@@ -1,28 +1,12 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Pester 5+ tests for src/Win/actions/Invoke-GPU.ps1
-.DESCRIPTION
-    Mock-based unit tests for each SubAction.
-
-    Migrated from winutil-cli. Two things changed, and only these two: the
-    environment now comes from src/Win/bootstrap.ps1 instead of being rebuilt
-    by hand from the old entry point via AST, and the transcript to C:\log\ is
-    gone — the gate reads the Pester exit code, and C:\log\ belongs to the
-    audit action.
-#>
 
 BeforeAll {
     $Script:RaizProjeto = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
     $Script:PastaWin    = Join-Path $Script:RaizProjeto 'src\Win'
 
-    # Loads Write-Status, $sync, $root, lib/ and every action.
     . (Join-Path $Script:PastaWin 'bootstrap.ps1')
 }
 
-# ==============================================================
-# SANITY
-# ==============================================================
 Describe "Invoke-GPU - Sanity" {
 
     It "Invoke-GPU.ps1 exists in scripts/" {
@@ -43,9 +27,6 @@ Describe "Invoke-GPU - Sanity" {
     }
 }
 
-# ==============================================================
-# SUBACTION — unknown
-# ==============================================================
 Describe "Invoke-GPU - Unknown SubAction" {
 
     It "emits [ ERROR ] for an unrecognised subaction" {
@@ -59,9 +40,6 @@ Describe "Invoke-GPU - Unknown SubAction" {
         $output | Should -Match 'install'
     }
 
-    # Added on migration. In winutil-cli an empty -SubAction opened a Read-Host
-    # menu (Invoke-GPU.ps1:223); inside the elevated worker there is nobody to
-    # type, and the prompt would hang the run until the timeout.
     It "refuses an empty subaction instead of prompting" {
         $output = (Invoke-GPU) 6>&1 | Out-String
         $output | Should -Match '\[ ERROR \].*No subaction specified'
@@ -69,9 +47,6 @@ Describe "Invoke-GPU - Unknown SubAction" {
     }
 }
 
-# ==============================================================
-# SUBACTION — status
-# ==============================================================
 Describe "Invoke-GPU - SubAction status" {
 
     Context "process running, task registered" {
@@ -94,9 +69,6 @@ Describe "Invoke-GPU - SubAction status" {
     }
 }
 
-# ==============================================================
-# SUBACTION — start
-# ==============================================================
 Describe "Invoke-GPU - SubAction start" {
 
     It "emits [ INFO ] when process is already running" {
@@ -123,9 +95,6 @@ Describe "Invoke-GPU - SubAction start" {
     }
 }
 
-# ==============================================================
-# SUBACTION — stop
-# ==============================================================
 Describe "Invoke-GPU - SubAction stop" {
 
     It "emits [ WARNING ] when process is not running" {
@@ -143,9 +112,6 @@ Describe "Invoke-GPU - SubAction stop" {
     }
 }
 
-# ==============================================================
-# SUBACTION — metrics
-# ==============================================================
 Describe "Invoke-GPU - SubAction metrics" {
 
     It "emits [ INFO ] with the metrics URL" {
@@ -158,7 +124,6 @@ Describe "Invoke-GPU - SubAction metrics" {
     }
 
     It "shows at most 100 lines (not 20) from the response" {
-        # 110 numbered lines; only first 100 should appear
         $allLines = (1..110 | ForEach-Object { "line_$_" }) -join "`n"
         Mock Invoke-WebRequest { [PSCustomObject]@{ Content = $allLines } }
         $output = (Invoke-GPU -SubAction 'metrics') 6>&1 | Out-String
@@ -173,9 +138,6 @@ Describe "Invoke-GPU - SubAction metrics" {
     }
 }
 
-# ==============================================================
-# SUBACTION — metrics-gpu
-# ==============================================================
 Describe "Invoke-GPU - SubAction metrics-gpu" {
 
     It "emits [ INFO ] with the metrics URL" {
@@ -211,9 +173,6 @@ Describe "Invoke-GPU - SubAction metrics-gpu" {
     }
 }
 
-# ==============================================================
-# SUBACTION — install
-# ==============================================================
 Describe "Invoke-GPU - SubAction install" {
 
     It "emits [ OK ] with port 9835 message after successful install" {
@@ -301,9 +260,6 @@ Describe "Invoke-GPU - SubAction install" {
     }
 }
 
-# ==============================================================
-# SUBACTION — uninstall
-# ==============================================================
 Describe "Invoke-GPU - SubAction uninstall" {
 
     It "stops process, removes task, firewall rule, and directory" {

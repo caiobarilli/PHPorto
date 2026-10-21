@@ -10,7 +10,6 @@ function Invoke-DNS {
         return
     }
 
-    # access is case-insensitive
     $valid = @($sync.configs.dns.PSObject.Properties.Name)
     if ($Provider -notin $valid -and $Provider -notin @('Default', 'DHCP')) {
         Write-Status ERROR "Provider '$Provider' does not exist in dns.json."
@@ -39,13 +38,6 @@ function Invoke-DNS {
     Write-Status OK "DNS '$Provider' applied."
 }
 
-<#
-    Runs a script block and collects every warning and error it writes.
-
-    Receives the script block. Returns the text of each warning, each
-    non-terminating error and the terminating one, if any, in order;
-    everything else it writes passes through unchanged.
-#>
 function Invoke-PhportoCapturingProblems {
     param([scriptblock]$Bloco)
 
@@ -66,12 +58,6 @@ function Invoke-PhportoCapturingProblems {
     return $problemas
 }
 
-<#
-    Sets the given DNS servers on every network adapter that is up.
-
-    Receives the primary server (required) and the secondary (optional).
-    Returns nothing; writes one OK or ERROR line per adapter and a summary.
-#>
 function Set-PhportoCustomDNS {
     param(
         [string]$PrimaryDNS,

@@ -50,14 +50,6 @@ function Invoke-Install {
     Write-Status OK "Installation complete."
 }
 
-<#
-    Classifies a winget exit code.
-
-    Receives the exit code of one winget install. Returns 'ok' for 0,
-    'installed' when the package was already installed or had no update to
-    apply, 'reboot' when winget says a restart finishes the install, and
-    'error' for anything else, including a missing code.
-#>
 function Get-PhportoWingetOutcome {
     param($ExitCode)
 
@@ -65,9 +57,9 @@ function Get-PhportoWingetOutcome {
 
     switch ([int]$ExitCode) {
         0             { return 'ok' }
-        -1978335189   { return 'installed' }   # 0x8A15002B UPDATE_NOT_APPLICABLE
-        -1978335135   { return 'installed' }   # 0x8A150061 PACKAGE_ALREADY_INSTALLED
-        -1978334967   { return 'reboot' }      # 0x8A150109 INSTALL_REBOOT_REQUIRED_TO_FINISH
+        -1978335189   { return 'installed' }
+        -1978335135   { return 'installed' }
+        -1978334967   { return 'reboot' }
         default       { return 'error' }
     }
 }

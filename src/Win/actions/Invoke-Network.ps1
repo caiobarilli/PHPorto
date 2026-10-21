@@ -18,7 +18,6 @@ function Invoke-Network {
         try {
             winget install WiresharkFoundation.Wireshark --silent --accept-package-agreements
             Write-Status OK "Wireshark installed."
-            # Update PATH without restarting the process
             $env:PATH = [System.Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' +
                         [System.Environment]::GetEnvironmentVariable('PATH', 'User')
         } catch {

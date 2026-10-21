@@ -166,22 +166,18 @@ tela oferece, e o nome das três categorias, pela chave do `tweaks.json`. O
 tabela prova. Tweak sem tradução, ou arquivo ausente, aparece na tela com o
 texto original; só a exibição usa este arquivo, e nenhuma ação o lê.
 
-### Uma divergência conhecida da regra de encoding
+### Uma divergência que deixou de existir
 
-`Invoke-Gdid.ps1` e `Invoke-Optimize.ps1` carregam bytes acima de `0x7F` e
-**não têm BOM** — são os únicos `.ps1` daqui nessa situação.
+`Invoke-Gdid.ps1` e `Invoke-Optimize.ps1` não têm BOM e carregavam bytes acima
+de `0x7F` só em comentário (caixas de `─` e travessões). Os comentários dos
+`.ps1` do projeto saíram, e com eles esses bytes: hoje os dois são ASCII puro,
+e a falta de BOM não tem o que estragar. O teste que parseia os `Invoke-*.ps1`
+passou a exigir que nenhum deles tenha byte alto sem BOM. O `Invoke-Optimize`
+continua montando as palavras acentuadas com `[char]0x00E9`, em vez de
+escrevê-las.
 
-Medido: em ambos, esses bytes estão **só em comentário** (caixas de `─` e
-travessões), e os dois parseiam sem erro. O `Invoke-Optimize` já contornava a
-falta de BOM à mão, montando as palavras acentuadas com `[char]0x00E9` em vez
-de escrevê-las: os textos comparados com o `query session` são construídos, não
-literais.
-
-Ficaram sem BOM porque pôr um é mudar bytes num commit que só muda endereço. É
-tripwire, não conserto: o teste que parseia todo `Invoke-*.ps1` falha na hora em
-que alguém escrever um travessão dentro de string num desses dois arquivos —
-que é exatamente o acidente descrito no `bootstrap.ps1`. Pôr o BOM nos dois é
-commit próprio, de uma linha cada.
+Os arquivos de `lib/` são do upstream e ficaram com os comentários: tirar
+mudaria os hashes da tabela da seção 1, que provam a cópia byte a byte.
 
 ---
 

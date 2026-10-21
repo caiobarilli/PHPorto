@@ -1,16 +1,8 @@
 ﻿function Invoke-Hyperv {
-    # SO LEITURA nesta fatia: Get-VM e Get-VMNetworkAdapter nao mexem em VM
-    # nenhuma. Nada de ligar, desligar, criar ou apagar. A saida e' um JSON
-    # unico, que o lado PHP le e vira tabela.
 
     try {
         $vms = @(Get-VM -ErrorAction Stop)
     } catch {
-        # Get-VM so chega aqui elevado (o worker recusa subir sem elevacao). O
-        # que falhou nao e' sempre "Hyper-V desligado": o servico vmms parado,
-        # o modulo quebrado ou um erro WMI caem no mesmo catch. Por isso a
-        # saida leva um motivo fechado, e a tela so manda reiniciar quando o
-        # recurso esta mesmo desligado.
         Write-Output (ConvertTo-Json -Compress -Depth 3 ([ordered]@{
             hyperv = $false
             motivo = (Get-PhportoHypervMotivo)
@@ -23,20 +15,11 @@
     $lista = New-Object System.Collections.Generic.List[object]
 
     foreach ($vm in $vms) {
-        # Comparacao por texto, nao pelo enum VMState: o [string] da o mesmo
-        # 'Running' venha do enum de verdade ou de um substituto de teste, e o
-        # arquivo nao depende do tipo do modulo estar carregado.
         $rodando = ([string]$vm.State -eq 'Running')
 
         $ips = @()
         if ($rodando) {
-            # So faz sentido perguntar o IP de quem esta rodando. Ler pode
-            # falhar (adaptador sem servicos de integracao reportando), e ai a
-            # lista fica vazia, e o lado PHP diz que nao deu, sem chutar.
             try {
-                # Pelo NOME, nao pelo objeto VM: -VMName aceita string, e um
-                # nome nao amarra este arquivo ao tipo VirtualMachine do modulo
-                # Hyper-V, e ainda deixa a acao testavel com um substituto.
                 $ips = @(
                     Get-VMNetworkAdapter -VMName $vm.Name -ErrorAction Stop |
                         ForEach-Object { $_.IPAddresses } |
@@ -47,8 +30,6 @@
             }
         }
 
-        # O id e' o VMId: e' por ele, e nunca pelo nome, que o Invoke-HypervVm
-        # acha a VM para ligar, desligar ou reiniciar.
         $lista.Add([ordered]@{
             id            = [string]$vm.VMId
             name          = [string]$vm.Name
@@ -67,8 +48,6 @@
 }
 
 function Get-PhportoHypervMotivo {
-    # So leitura, e cada sonda pode falhar sozinha: na duvida o motivo e'
-    # 'erro', que a tela mostra com a mensagem, sem mandar reiniciar nada.
     try {
         $f = Get-CimInstance -ClassName Win32_OptionalFeature -Filter "Name='Microsoft-Hyper-V'" -ErrorAction Stop
         if ($null -eq $f -or [int]$f.InstallState -ne 1) { return 'recurso-desligado' }

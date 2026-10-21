@@ -1,22 +1,10 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Pester 5+ tests for src/Win/actions/Invoke-Hyperv.ps1
-.DESCRIPTION
-    Mock-based unit tests for the read-only VM listing. Get-VM and
-    Get-VMNetworkAdapter are mocked, so the suite runs unelevated and touches no
-    virtual machine. The action emits a single JSON document; each test parses
-    it and checks the shape the /hyperv screen depends on.
-#>
 
 BeforeAll {
     $Script:RaizProjeto = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
     $Script:PastaWin    = Join-Path $Script:RaizProjeto 'src\Win'
     $Script:Acao        = Join-Path $Script:PastaWin 'actions\Invoke-Hyperv.ps1'
 
-    # Pester can only mock a command that exists. Where the Hyper-V module,
-    # CIM or the service cmdlets are absent (a host without the feature, or
-    # pwsh on Linux), they are stubbed first.
     if (-not (Get-Command -Name 'Get-VM' -ErrorAction SilentlyContinue)) {
         function global:Get-VM { [CmdletBinding()] param([guid[]]$Id, [string[]]$Name) }
         function global:Get-VMNetworkAdapter { [CmdletBinding()] param([string[]]$VMName) }
@@ -28,7 +16,6 @@ BeforeAll {
         function global:Get-Service { [CmdletBinding()] param([string[]]$Name) }
     }
 
-    # Loads Write-Status, $sync, $root and every action.
     . (Join-Path $Script:PastaWin 'bootstrap.ps1')
 
     function New-FakeVM([string]$Name, [string]$State, [long]$Memory, [int]$UptimeSeconds, [string]$Id = ([guid]::NewGuid().ToString())) {
@@ -42,9 +29,6 @@ BeforeAll {
     }
 }
 
-# ==============================================================
-# SANITY
-# ==============================================================
 Describe "Invoke-Hyperv - Sanity" {
 
     It "Invoke-Hyperv.ps1 exists in actions/" {
@@ -73,9 +57,6 @@ Describe "Invoke-Hyperv - Sanity" {
     }
 }
 
-# ==============================================================
-# LISTING — running and off VMs
-# ==============================================================
 Describe "Invoke-Hyperv - listing" {
 
     It "reports host on, both VMs, and the running one's fields" {
@@ -111,7 +92,6 @@ Describe "Invoke-Hyperv - listing" {
 
         $obj = Invoke-Hyperv | ConvertFrom-Json
 
-        # Two VMs with the same name: only the id tells them apart.
         @($obj.vms.id) | Should -Be @('6c1e2a4b-0d3f-4e5a-9b8c-7d6e5f4a3b2c', '0f9e8d7c-6b5a-4c3d-8e2f-1a0b9c8d7e6f')
         @($obj.vms.name) | Should -Be @('Ubuntu', 'Ubuntu')
     }
@@ -151,9 +131,6 @@ Describe "Invoke-Hyperv - listing" {
     }
 }
 
-# ==============================================================
-# EMPTY host
-# ==============================================================
 Describe "Invoke-Hyperv - no VMs" {
 
     It "reports host on with an empty VM list" {
@@ -166,9 +143,6 @@ Describe "Invoke-Hyperv - no VMs" {
     }
 }
 
-# ==============================================================
-# Hyper-V off
-# ==============================================================
 Describe "Invoke-Hyperv - host off" {
 
     It "reports host off when Get-VM throws, with the message" {

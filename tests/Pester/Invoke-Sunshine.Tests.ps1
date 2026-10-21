@@ -1,32 +1,15 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Pester 5+ tests for src/Win/actions/Invoke-Sunshine.ps1
-.DESCRIPTION
-    Mock-based unit tests for each SubAction. Nothing is installed and no service
-    or firewall rule is touched: winget, the winget lib, service control, the
-    firewall cmdlets, sunshine.exe and the HTTPS client are all mocked, so the
-    suite runs unelevated and changes nothing.
-
-    set-creds and pair carry a password and a PIN. Every test of them checks
-    that the output never repeats either one.
-#>
 
 BeforeAll {
     $Script:RaizProjeto = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
     $Script:PastaWin    = Join-Path $Script:RaizProjeto 'src\Win'
     $Script:Acao        = Join-Path $Script:PastaWin 'actions\Invoke-Sunshine.ps1'
 
-    # Loads Write-Status, the winget lib and every action (Get-PhportoWingetOutcome included).
     . (Join-Path $Script:PastaWin 'bootstrap.ps1')
 
-    # Outside Windows (pwsh on Linux) these cmdlets do not exist, and Pester can
-    # only mock a command that exists. Stand-ins that throw if a test forgets
-    # to mock them; on Windows the real cmdlets are there and get mocked.
     foreach ($nome in 'Get-Service', 'Start-Service', 'Stop-Service', 'Get-CimInstance',
                       'Get-NetFirewallRule', 'New-NetFirewallRule', 'Remove-NetFirewallRule') {
         if (-not (Get-Command -Name $nome -ErrorAction SilentlyContinue)) {
-            # The parameters the action passes, so -ParameterFilter can see them.
             Set-Item -Path ("function:global:" + $nome) -Value ([scriptblock]::Create(
                 "[CmdletBinding()] param([string]`$Name, [string]`$DisplayName, [string]`$Direction, [string]`$Protocol, `$LocalPort, [string]`$Action, [string]`$Profile, [string]`$ClassName, [string]`$Filter, [switch]`$Force) throw 'stand-in de $nome sem mock'"
             ))
@@ -35,7 +18,6 @@ BeforeAll {
     if (-not (Get-Command -Name 'winget' -ErrorAction SilentlyContinue)) {
         function global:winget { throw 'stand-in de winget sem mock' }
     }
-    # Same story for the Windows folders the status reads: an empty temp folder.
     foreach ($var in 'ProgramData', 'ProgramFiles') {
         if (-not [Environment]::GetEnvironmentVariable($var)) {
             [Environment]::SetEnvironmentVariable($var, [System.IO.Path]::GetTempPath())
@@ -45,15 +27,11 @@ BeforeAll {
     $Script:Senha = 'Xyzzy "Segr\edo" 99'
     $Script:Pin   = '4821'
 
-    # The output of a block, all streams, as one string.
     function global:Get-SaidaSunshine([scriptblock]$Bloco) {
         return (& $Bloco *>&1 | Out-String)
     }
 }
 
-# ==============================================================
-# SANITY
-# ==============================================================
 Describe "Invoke-Sunshine - Sanity" {
 
     It "Invoke-Sunshine.ps1 exists in actions/" {
@@ -77,7 +55,6 @@ Describe "Invoke-Sunshine - Sanity" {
     }
 
     It "never WRITES a PIN or a password anywhere" {
-        # The PIN is asked for now, but it is never persisted: no file writes at all.
         $text = Get-Content -Path $Script:Acao -Raw
         $text | Should -Not -Match 'Read-Host'
         $text | Should -Not -Match 'Set-Content'
@@ -111,9 +88,6 @@ Describe "Invoke-Sunshine - Sanity" {
     }
 }
 
-# ==============================================================
-# SUBACTION — missing / unknown
-# ==============================================================
 Describe "Invoke-Sunshine - SubAction validation" {
 
     It "emits [ ERROR ] and lists the options when no subaction is given" {
@@ -158,9 +132,6 @@ Describe "Invoke-Sunshine - SubAction validation" {
     }
 }
 
-# ==============================================================
-# SUBACTION — status (read only)
-# ==============================================================
 Describe "Invoke-Sunshine - status" {
 
     It "reports the service and install, and says paired clients cannot be read here" {
@@ -189,9 +160,6 @@ Describe "Invoke-Sunshine - status" {
     }
 }
 
-# ==============================================================
-# SUBACTION — install
-# ==============================================================
 Describe "Invoke-Sunshine - install" {
 
     It "installs LizardByte.Sunshine through the winget lib and points to the web UI for pairing" {
@@ -209,9 +177,6 @@ Describe "Invoke-Sunshine - install" {
     }
 }
 
-# ==============================================================
-# SUBACTION — start / stop (service state -> Applied)
-# ==============================================================
 Describe "Invoke-Sunshine - start and stop" {
 
     It "start finds the service, starts it, and points to pairing in PHPorto" {
@@ -242,9 +207,6 @@ Describe "Invoke-Sunshine - start and stop" {
     }
 }
 
-# ==============================================================
-# SUBACTION — firewall-open / firewall-close
-# ==============================================================
 Describe "Invoke-Sunshine - firewall" {
 
     It "firewall-open creates the 47990 inbound rule when absent" {
@@ -278,15 +240,9 @@ Describe "Invoke-Sunshine - firewall" {
     }
 }
 
-# ==============================================================
-# ConvertTo-PhportoArgvWin — the command line of sunshine.exe --creds
-# ==============================================================
 Describe "Invoke-Sunshine - ConvertTo-PhportoArgvWin" {
 
     BeforeAll {
-        # The CRT rules (CommandLineToArgvW / MSVC argv), written out so the
-        # round trip also runs outside Windows. On Windows the real API is
-        # checked too, below.
         function global:Split-ArgvCrt([string]$Linha) {
             $saida = New-Object System.Collections.Generic.List[string]
             $i = 0
@@ -363,9 +319,6 @@ public static extern System.IntPtr LocalFree(System.IntPtr p);
     }
 }
 
-# ==============================================================
-# Where Sunshine lives: from the service path, under Program Files only
-# ==============================================================
 Describe "Invoke-Sunshine - Get-PhportoSunshinePasta" {
 
     BeforeAll { $Script:PfAntes = $env:ProgramFiles }
@@ -401,9 +354,6 @@ Describe "Invoke-Sunshine - Get-PhportoSunshinePasta" {
     }
 }
 
-# ==============================================================
-# The certificate pin
-# ==============================================================
 Describe "Invoke-Sunshine - Get-PhportoSunshineCertSha256" {
 
     BeforeAll {
@@ -446,9 +396,6 @@ Describe "Invoke-Sunshine - Get-PhportoSunshineCertSha256" {
     }
 }
 
-# ==============================================================
-# set-creds — stop, sunshine.exe --creds, start
-# ==============================================================
 Describe "Invoke-Sunshine - Set-PhportoSunshineCreds" {
 
     BeforeEach {
@@ -504,7 +451,7 @@ Describe "Invoke-Sunshine - Set-PhportoSunshineCreds" {
 
     It "fails with ERROR when the service does not come back" {
         Mock Invoke-PhportoSunshineCredsExe { 0 }
-        Mock Start-Service { $global:SunOrdem.Add('start') }   # stays Stopped
+        Mock Start-Service { $global:SunOrdem.Add('start') }
 
         $output = Get-SaidaSunshine { $global:SunOk = Set-PhportoSunshineCreds -Exe 'C:\x\sunshine.exe' -User 'admin' -Password $Script:Senha }
 
@@ -514,7 +461,7 @@ Describe "Invoke-Sunshine - Set-PhportoSunshineCreds" {
     }
 
     It "writes nothing when the service does not stop" {
-        Mock Stop-Service { $global:SunOrdem.Add('stop') }   # stays Running
+        Mock Stop-Service { $global:SunOrdem.Add('stop') }
         Mock Invoke-PhportoSunshineCredsExe { $global:SunOrdem.Add('creds'); 0 }
 
         $output = Get-SaidaSunshine { $global:SunOk = Set-PhportoSunshineCreds -Exe 'C:\x\sunshine.exe' -User 'admin' -Password $Script:Senha }
@@ -533,9 +480,6 @@ Describe "Invoke-Sunshine - Set-PhportoSunshineCreds" {
     }
 }
 
-# ==============================================================
-# pair — both API versions, and every refusal
-# ==============================================================
 Describe "Invoke-Sunshine - Invoke-PhportoSunshinePair" {
 
     BeforeAll {
@@ -673,9 +617,6 @@ Describe "Invoke-Sunshine - Invoke-PhportoSunshinePair" {
     }
 }
 
-# ==============================================================
-# pair through Invoke-Sunshine — the whole flow, mocked at the edges
-# ==============================================================
 Describe "Invoke-Sunshine - pair end to end" {
 
     BeforeEach {
@@ -741,8 +682,6 @@ Describe "Invoke-Sunshine - pair end to end" {
     }
 
     It "arrives through the bootstrap splatting, SetCreds as a bool" {
-        # This is how the worker-generated script calls it: a hashtable whose
-        # SetCreds is $true, splatted into the [switch].
         $params = @{ SubAction = 'pair'; User = 'admin'; Password = $Script:Senha; Pin = $Script:Pin; DeviceName = 'notebook'; SetCreds = $true }
         $null = Get-SaidaSunshine { Invoke-Sunshine @params }
         Should -Invoke -CommandName Set-PhportoSunshineCreds -Times 1

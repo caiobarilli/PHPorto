@@ -1,14 +1,4 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Pester 5+ tests for src/Win/actions/Invoke-HypervVm.ps1
-.DESCRIPTION
-    Mock-based unit tests for start, stop and restart of one VM. Get-VM,
-    Start-VM, Stop-VM, Restart-VM and Resume-VM are mocked, so the suite runs
-    unelevated and touches no virtual machine. Where the Hyper-V module is
-    absent (a host without the feature, or pwsh on Linux), the cmdlets are
-    stubbed first: Pester can only mock a command that exists.
-#>
 
 BeforeAll {
     $Script:RaizProjeto = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -58,9 +48,6 @@ BeforeAll {
     }
 }
 
-# ==============================================================
-# SANITY
-# ==============================================================
 Describe "Invoke-HypervVm - Sanity" {
 
     It "Invoke-HypervVm.ps1 exists in actions/" {
@@ -93,9 +80,6 @@ Describe "Invoke-HypervVm - Sanity" {
     }
 }
 
-# ==============================================================
-# START
-# ==============================================================
 Describe "Invoke-HypervVm - start" {
 
     It "starts a VM that is <_>" -ForEach @('Off', 'Saved', 'FastSaved', 'Hibernated') {
@@ -139,9 +123,6 @@ Describe "Invoke-HypervVm - start" {
     }
 }
 
-# ==============================================================
-# STOP
-# ==============================================================
 Describe "Invoke-HypervVm - stop" {
 
     It "stops a running VM gracefully: -Force, never -TurnOff, never asks" {
@@ -173,9 +154,6 @@ Describe "Invoke-HypervVm - stop" {
     }
 }
 
-# ==============================================================
-# RESTART
-# ==============================================================
 Describe "Invoke-HypervVm - restart" {
 
     It "reboots through the guest when Restart-VM has -Type" {
@@ -216,9 +194,6 @@ Describe "Invoke-HypervVm - restart" {
     }
 }
 
-# ==============================================================
-# TRANSITIONS, bad input, Hyper-V errors
-# ==============================================================
 Describe "Invoke-HypervVm - refusals" {
 
     It "refuses <Sub> while the VM is <Estado>, touching nothing" -ForEach @(
