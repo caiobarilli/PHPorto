@@ -48,7 +48,8 @@ Algumas ações pedem **um prompt de UAC a cada execução**, mesmo com o
 PowerShell elevado ligado: instalar apps (`install`), ligar o acesso remoto
 (`rdp on`), instalar o Sunshine, abrir a porta dele no firewall, gravar a senha
 da Web UI dele e parear um Moonlight, instalar o
-windows_exporter e liberá-lo no firewall, e instalar o exportador da GPU. Na
+windows_exporter e liberá-lo no firewall, instalar o exportador da GPU, e
+instalar e ligar o OpenSSH Server (`openssh install` e `openssh enable`). Na
 tela, o botão ou a opção delas diz **abre o UAC**.
 
 - O prompt mostra "Windows PowerShell". Ele é a confirmação daquele clique;
@@ -83,11 +84,11 @@ A tela tem quatro partes, nesta ordem:
 1. a última execução do Windows;
 2. as três ações de um clique, sem parâmetro e sem estado: **Auditoria**,
    **Memória** e **Processos**;
-3. as outras dez ações, em quatro abas;
+3. as outras ações, em cinco abas;
 4. o histórico do Windows.
 
-A aba aberta fica na URL, em `/win?aba=sistema`, `rede`, `aplicativos` ou
-`servicos`. Depois de executar, a tela volta para a mesma aba. Aba desconhecida
+A aba aberta fica na URL, em `/win?aba=sistema`, `rede`, `aplicativos`,
+`servicos` ou `acesso-remoto`. Depois de executar, a tela volta para a mesma aba. Aba desconhecida
 abre Sistema.
 
 Trocar de aba não volta ao topo da página. Com JavaScript, o painel troca sem
@@ -100,6 +101,7 @@ já posicionada no menu de abas.
 | Rede | DNS, Captura de rede |
 | Aplicativos | Instalar apps |
 | Serviços | Métricas do Windows, Métricas da GPU, Otimizar, Dispositivos conectados (GDID), Desempenho |
+| Acesso Remoto | Área de Trabalho Remota (RDP), Sunshine, Acesso SSH |
 
 ## As ações
 
@@ -243,6 +245,26 @@ o usuário, mas `***` no lugar da senha e do PIN. O PIN expira em pouco tempo no
 Moonlight: se o UAC demorar, gere outro. Detalhes em
 [seguranca.md](seguranca.md#sunshine-senha-da-web-ui-e-pin-do-moonlight).
 
+### Acesso SSH (`openssh`)
+
+Na aba **Acesso Remoto**. Prepara esta máquina para o túnel SSH que leva ao
+PHPorto de outro computador da rede privada:
+
+- **Ver o estado** (`status`) — se o OpenSSH Server está instalado, se o `sshd`
+  está rodando e se a regra do firewall existe. Só lê.
+- **Instalar o OpenSSH Server** (`install`) — recurso opcional do próprio
+  Windows, sem winget. Abre o UAC.
+- **Ligar o SSH** (`enable`) — `sshd` em Automático e no ar, e a porta 22
+  aberta só no perfil Privado do firewall. Abre o UAC.
+- **Desligar o SSH** (`disable`) — para o `sshd`, volta para Manual e fecha a
+  porta.
+
+A seção traz o comando do túnel pronto para copiar,
+`ssh -N -L 4001:127.0.0.1:4001 <usuario>@<maquina>`, e avisa que ligar abre a
+porta 22 na rede privada. Não há porta configurável, e nada mexe no
+`sshd_config` nem em chaves. Detalhes em
+[seguranca.md](seguranca.md#acesso-remoto-túnel-ssh).
+
 ## A tela Hyper-V
 
 `/hyperv` lista as máquinas virtuais deste computador: nome, situação, memória
@@ -298,6 +320,7 @@ que não cabe mais é recusado com o motivo.
 | GDID | **Religar** (`enable`) |
 | DNS | escolher outro provedor, ou **DHCP** |
 | Métricas da GPU | **desinstalar** |
+| Acesso SSH | **Desligar o SSH** (`disable`); o OpenSSH Server instalado fica |
 | Remover apps | não se desfaz pela tela |
 | Instalar apps | não se desfaz pela tela |
 | Métricas do Windows | não há subação de desinstalar |

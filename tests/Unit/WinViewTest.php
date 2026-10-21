@@ -183,7 +183,7 @@ it('cada painel tem só as ações da aba dele, e o desempenho mora em Serviços
     'rede'          => [WinTab::Rede, ['dns', 'network']],
     'aplicativos'   => [WinTab::Aplicativos, ['install']],
     'serviços'      => [WinTab::Servicos, ['exporter', 'gpu', 'optimize', 'gdid', 'performance']],
-    'acesso remoto' => [WinTab::AcessoRemoto, ['rdp', 'sunshine']],
+    'acesso remoto' => [WinTab::AcessoRemoto, ['rdp', 'sunshine', 'openssh']],
 ]);
 
 it('os cinco painéis vêm na página, e só o da aba aberta está visível', function (WinTab $aberta) {
@@ -196,7 +196,7 @@ it('os cinco painéis vêm na página, e só o da aba aberta está visível', fu
     expect($html)->toContain('Histórico do Windows');
 })->with(WinTab::cases());
 
-it('as quinze ações do menu aparecem uma vez só na página, e as da /hyperv não', function () {
+it('as dezesseis ações do menu aparecem uma vez só na página, e as da /hyperv não', function () {
     $todas = winAcoes(winHtml());
     sort($todas);
 
@@ -222,13 +222,14 @@ it('o menu tem as cinco abas como links, e só a aberta é a atual', function ()
         ->and($html)->toContain('<a href="/win?aba=acesso-remoto#abas" data-aba="acesso-remoto">Acesso Remoto</a>');
 });
 
-it('a aba Acesso Remoto navega e traz as duas seções', function () {
+it('a aba Acesso Remoto navega e traz as três seções', function () {
     $html = winHtml(aba: WinTab::AcessoRemoto);
 
     expect($html)->toContain('<a href="/win?aba=acesso-remoto#abas" data-aba="acesso-remoto" class="ativa" aria-current="page">Acesso Remoto</a>')
         ->and($html)->toContain('<div class="painel" id="painel-acesso-remoto" role="tabpanel">')
         ->and($html)->toContain('Área de Trabalho Remota (RDP)')
-        ->and($html)->toContain('<h2>Sunshine</h2>');
+        ->and($html)->toContain('<h2>Sunshine</h2>')
+        ->and($html)->toContain('<h2>Acesso SSH</h2>');
 });
 
 it('rdp sem estado: oferece Ligar, Ativar o vídeo H.264/UDP, e Ver o estado', function () {
@@ -417,4 +418,43 @@ it('sem reload: a confirmação do optimize usa requestSubmit, com submit() só 
 
     expect($html)->toContain('if (formOpt.requestSubmit) { formOpt.requestSubmit(); } else { formOpt.submit(); }')
         ->and(substr_count($html, '.submit()'))->toBe(1);
+});
+
+it('openssh desligado: oferece Ligar como principal, com UAC, e Ver o estado sem UAC', function () {
+    $s = winSecao(winHtml(aba: WinTab::AcessoRemoto), 'openssh');
+
+    expect($s)->toContain('<input type="hidden" name="SubAction" value="enable">')
+        ->and($s)->toContain('<input type="hidden" name="SubAction" value="install">')
+        ->and($s)->toContain('<input type="hidden" name="SubAction" value="disable">')
+        ->and($s)->toContain('<input type="hidden" name="SubAction" value="status">')
+        ->and($s)->toContain('<button type="submit" class="btn btn-sm" data-uac>Ligar o SSH · abre o UAC</button>')
+        ->and($s)->toContain('<button type="submit" class="btn btn-sm" data-uac>Instalar o OpenSSH Server · abre o UAC</button>')
+        ->and($s)->toContain('<button type="submit" class="btn btn-sm btn-ghost">Ver o estado</button>')
+        ->and($s)->toContain('<button type="submit" class="btn btn-sm btn-ghost">Desligar o SSH</button>')
+        ->and($s)->toContain('<strong data-ssh-estado>desligado</strong>');
+});
+
+it('openssh ligado: o principal vira Desligar, e o estado diz ligado', function () {
+    $s = winSecao(winHtml(acoes: ['openssh'], aba: WinTab::AcessoRemoto), 'openssh');
+
+    expect($s)->toContain('<button type="submit" class="btn btn-sm">Desligar o SSH</button>')
+        ->and($s)->toContain('<button type="submit" class="btn btn-sm btn-ghost" data-uac>Ligar o SSH · abre o UAC</button>')
+        ->and($s)->toContain('<strong data-ssh-estado>ligado');
+});
+
+it('openssh avisa que ligar abre a porta 22 na rede privada e traz o túnel com marcadores', function () {
+    $s = winSecao(winHtml(aba: WinTab::AcessoRemoto), 'openssh');
+
+    expect($s)->toContain('data-ssh-aviso')
+        ->and($s)->toContain('Ligar abre a porta 22 desta máquina na rede privada.')
+        ->and($s)->toContain('value="ssh -N -L 4001:127.0.0.1:4001 &lt;usuario&gt;@&lt;maquina&gt;"')
+        ->and($s)->toContain('readonly')
+        ->and($s)->not->toContain('name="Port"');
+});
+
+it('com o caminho sensível travado, Ligar e Instalar do openssh nascem desabilitados', function () {
+    $s = winSecao(winHtml(aba: WinTab::AcessoRemoto, sensitiveBlocked: 'UAC silencioso'), 'openssh');
+
+    expect($s)->toContain('data-uac disabled>Ligar o SSH')
+        ->and($s)->toContain('data-uac disabled>Instalar o OpenSSH Server');
 });

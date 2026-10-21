@@ -38,12 +38,30 @@ Para usar de outra máquina, abra um túnel SSH até o `127.0.0.1` da máquina q
 roda o PHPorto, em vez de abrir a porta:
 
 ```bash
-ssh -N -L 4001:127.0.0.1:4001 usuario@maquina-windows
+ssh -N -L 4001:127.0.0.1:4001 <usuario>@<maquina>
 ```
 
 E abra <http://127.0.0.1:4001> na máquina de onde você está. O tráfego, token
-incluído, vai cifrado pelo SSH. A máquina Windows precisa de um servidor SSH
-(como o OpenSSH Server do Windows), que o PHPorto não instala.
+incluído, vai cifrado pelo SSH.
+
+A máquina Windows precisa do OpenSSH Server, e a seção **Acesso SSH** da `/win`
+(ação `openssh`, aba Acesso Remoto) cuida dele:
+
+- `install` adiciona o recurso opcional do Windows `OpenSSH.Server~~~~0.0.1.0`
+  (`Add-WindowsCapability`), sem winget. Se a regra que o Windows cria junto
+  (`OpenSSH-Server-In-TCP`, para todos os perfis) estiver ativa, ela é
+  desativada.
+- `enable` põe o `sshd` em Automático, sobe o serviço e cria a regra
+  `PHPorto-OpenSSH-In-TCP-22`: entrada TCP 22, **só no perfil Privado**. Rodar
+  de novo não duplica a regra, só a devolve a esse estado.
+- `disable` para o `sshd`, volta para Manual e remove a regra.
+- `status` só lê.
+
+`install` e `enable` são sensíveis e abrem o UAC a cada clique. Não há campo
+livre: a porta não é configurável, e nada mexe no `sshd_config` nem em chaves.
+Ligar abre a porta 22 para qualquer computador da rede privada, que passa a
+poder tentar entrar com um usuário do Windows. Em rede pública a porta continua
+fechada.
 
 Pelo túnel, janelas que uma ação abre — como o **Explorar** da auditoria —
 aparecem na máquina Windows, não na sua.
@@ -265,6 +283,7 @@ pede um prompt de UAC próprio:
 | `sunshine` | `install`, `firewall-open`, `set-creds` (troca a senha da Web UI), `pair` (autoriza um dispositivo a ver e controlar a tela) |
 | `exporter` | `install`, `firewall` |
 | `gpu` | `install` (cria uma tarefa agendada como SYSTEM) |
+| `openssh` | `install`, `enable` (sobe o `sshd` e abre a porta 22 na rede privada) |
 
 A lista mora em dois lugares, `WinAction::SENSITIVE` (PHP, escolhe o caminho) e
 `$SENSIVEIS` (`worker.ps1`, a tranca), e um teste confere que são a mesma.

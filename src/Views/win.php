@@ -66,6 +66,7 @@ $gdidAplicado  = $aplicado(\App\Win\WinAction::Gdid);
 $rdpAplicado   = $aplicado(\App\Win\WinAction::Rdp);
 $rdpPendente   = in_array(\App\Win\WinAction::Rdp->value, $view->pendingRebootActions, true);
 $sunAplicado   = $aplicado(\App\Win\WinAction::Sunshine);
+$sshAplicado   = $aplicado(\App\Win\WinAction::OpenSsh);
 
 $grupos = [];
 foreach ($view->tweaks as $tw) {
@@ -591,6 +592,44 @@ foreach ($view->tweaks as $tw) {
         libera a porta 47990 no firewall do Windows para outro dispositivo alcançar esta máquina;
         <strong>Fechar</strong> desfaz. <strong>Só gravar credenciais</strong> troca o usuário e a senha
         da Web UI, reiniciando o serviço. Comece por <strong>Ver o estado</strong>, que só lê.
+      </p>
+    </section>
+    <section id="acao-openssh">
+      <?= $secao('Acesso SSH', 'Chegar ao PHPorto de outro computador da rede privada por um túnel SSH, com o OpenSSH Server do próprio Windows.') ?>
+      <p class="dica">
+        Estado conhecido por esta tela:
+        <strong data-ssh-estado><?= $sshAplicado ? 'ligado (sshd no ar e porta 22 aberta na rede privada)' : 'desligado' ?></strong>.
+        <strong>Ver o estado</strong> confere no Windows se está instalado e se o serviço está rodando.
+      </p>
+      <div class="row">
+        <?= $botao('openssh', 'SubAction', 'status', 'Ver o estado', true) ?>
+        <?= $botao('openssh', 'SubAction', 'install', 'Instalar o OpenSSH Server', false) ?>
+      </div>
+      <div class="row">
+        <?php if ($sshAplicado): ?>
+          <?= $botao('openssh', 'SubAction', 'disable', 'Desligar o SSH', false) ?>
+          <?= $botao('openssh', 'SubAction', 'enable', 'Ligar o SSH', true) ?>
+        <?php else: ?>
+          <?= $botao('openssh', 'SubAction', 'enable', 'Ligar o SSH', false) ?>
+          <?= $botao('openssh', 'SubAction', 'disable', 'Desligar o SSH', true) ?>
+        <?php endif; ?>
+      </div>
+      <div class="alert alert-note" data-ssh-aviso>
+        <strong>Ligar abre a porta 22 desta máquina na rede privada.</strong> Qualquer computador da
+        rede privada passa a poder tentar entrar por SSH com um usuário do Windows. A regra do firewall
+        vale só para o perfil Privado; em rede pública a porta continua fechada.
+        <strong>Desligar</strong> para o serviço e remove a regra.
+      </div>
+      <div class="campo">
+        <label for="ssh-tunel">Túnel, no outro computador</label>
+        <input type="text" id="ssh-tunel" readonly value="ssh -N -L 4001:127.0.0.1:4001 &lt;usuario&gt;@&lt;maquina&gt;">
+      </div>
+      <p class="dica">
+        Troque <code>&lt;usuario&gt;</code> pelo seu usuário do Windows e <code>&lt;maquina&gt;</code>
+        pelo nome ou IP desta máquina na rede. Com o túnel aberto, o PHPorto fica em
+        <code>http://127.0.0.1:4001</code> no outro computador. <strong>Instalar</strong> usa o recurso
+        opcional do próprio Windows, sem winget. Nada aqui mexe no <code>sshd_config</code> nem em chaves,
+        e a porta não é configurável.
       </p>
     </section>
   </div>
