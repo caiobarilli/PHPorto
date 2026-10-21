@@ -67,6 +67,11 @@ $rdpAplicado   = $aplicado(\App\Win\WinAction::Rdp);
 $rdpPendente   = in_array(\App\Win\WinAction::Rdp->value, $view->pendingRebootActions, true);
 $sunAplicado   = $aplicado(\App\Win\WinAction::Sunshine);
 $sshAplicado   = $aplicado(\App\Win\WinAction::OpenSsh);
+$disChave      = $travado || !$sshAplicado ? ' disabled' : $disSens;
+$disWsl        = $view->wslDistros === [] ? ' disabled' : $disChave;
+$chaveGerada   = \App\Win\SshKeyOutput::generated($view->rows);
+$autorizadas   = \App\Win\SshKeyOutput::authorized($view->rows);
+$usuariosWsl   = \App\Win\SshKeyOutput::wslUsers($view->rows);
 
 $grupos = [];
 foreach ($view->tweaks as $tw) {
@@ -634,6 +639,137 @@ foreach ($view->tweaks as $tw) {
     </section>
   </div>
 
+  <?= $painel(WinTab::ChavesSsh) ?>
+    <?php if (!$sshAplicado): ?>
+      <div class="alert alert-block" data-chaves-aviso>
+        O OpenSSH Server está desligado. Autorizar chave e usuário no WSL não entram.
+        Ligue em <a href="<?= Respond::e(WinTab::AcessoRemoto->url()) ?>#abas">Acesso Remoto</a>.
+      </div>
+    <?php endif; ?>
+    <section id="acao-ssh-keys">
+      <?= $secao('Gerar chave neste Windows', 'Roda o ssh-keygen -t ed25519 nativo e grava em %USERPROFILE%\.ssh\id_ed25519. Só a pública sobe na tela.') ?>
+      <div class="row">
+        <?= $botao('ssh-keys', 'SubAction', 'generate', 'Gerar chave ed25519', false) ?>
+        <?= $botao('ssh-keys', 'SubAction', 'status', 'Ver o estado', true) ?>
+      </div>
+      <?php if ($chaveGerada === null): ?>
+        <p class="empty">Nenhuma chave gerada por esta tela. Se já existir uma em <code>.ssh</code>, ela não é sobrescrita: <strong>Ver o estado</strong> mostra a pública dela.</p>
+      <?php else: ?>
+        <div class="campo" style="align-items:flex-start">
+          <label for="chave-publica">Pública</label>
+          <textarea id="chave-publica" readonly><?= Respond::e($chaveGerada['key']) ?></textarea>
+        </div>
+        <dl class="kv" style="margin-top:14px">
+          <dt>Tipo</dt><dd>ed25519</dd>
+          <dt>Impressão</dt><dd><?= Respond::e($chaveGerada['fingerprint']) ?></dd>
+          <dt>Arquivo</dt><dd>%USERPROFILE%\.ssh\id_ed25519.pub</dd>
+        </dl>
+        <p class="nota-estado">A privada ficou no disco. Esta tela e o log não a mostram.</p>
+      <?php endif; ?>
+    </section>
+    <section id="chaves-putty">
+      <?= $secao('Arquivo .ppk', 'Quem entra com cliente que pede .ppk precisa do PuTTYgen. Instalação pelo winget, ID fixo ' . \App\Win\WinAction::PUTTYGEN_WINGET_ID . '.') ?>
+      <div class="row">
+        <?= $botao('ssh-keys', 'SubAction', 'puttygen', 'Instalar PuTTYgen', false) ?>
+      </div>
+    </section>
+    <section id="chaves-autorizar">
+      <?= $secao('Autorizar no Windows', 'Grava no C:\ProgramData\ssh\administrators_authorized_keys, só com SYSTEM e Administradores no arquivo, como o OpenSSH exige.') ?>
+      <form method="post" data-sem-reload>
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="ssh-keys">
+        <input type="hidden" name="SubAction" value="authorize">
+        <div class="campo" style="align-items:flex-start">
+          <label for="chave-colar">Pública</label>
+          <textarea id="chave-colar" name="PublicKey" maxlength="<?= \App\Win\WinAction::SSH_PUBLIC_KEY_MAX ?>" placeholder="ssh-ed25519 AAAA... comentario"<?= $disChave ?>></textarea>
+        </div>
+        <div class="row">
+          <button type="submit" class="btn btn-sm btn-ghost" name="UseGenerated" value="1" data-usar-gerada data-uac<?= $disChave ?>>Usar a gerada acima<?= Respond::e($avisoUac) ?></button>
+          <button type="submit" class="btn btn-sm" data-uac<?= $disChave ?>>Autorizar<?= Respond::e($avisoUac) ?></button>
+          <?= $botao('ssh-keys', 'SubAction', 'list', 'Ver as autorizadas', true) ?>
+        </div>
+      </form>
+      <?php if ($autorizadas === null): ?>
+        <p class="empty"><strong>Ver as autorizadas</strong> lê o arquivo e mostra a lista aqui.</p>
+      <?php elseif ($autorizadas === []): ?>
+        <p class="empty">Nenhuma chave autorizada neste Windows.</p>
+      <?php else: ?>
+        <table>
+          <thead>
+            <tr><th style="width:16%">Tipo</th><th style="width:28%">Comentário</th><th>Impressão digital</th><th style="width:18%"></th></tr>
+          </thead>
+          <tbody>
+            <?php foreach ($autorizadas as $aut): ?>
+              <tr>
+                <td><span class="tag"><?= Respond::e($aut['kind']) ?></span></td>
+                <td><?= Respond::e($aut['comment']) ?></td>
+                <td><?= Respond::e($aut['fingerprint']) ?></td>
+                <td>
+                  <form method="post" data-sem-reload data-remover-chave data-rotulo="<?= Respond::e($aut['comment'] !== '' ? $aut['comment'] : $aut['fingerprint']) ?>">
+                    <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+                    <input type="hidden" name="acao" value="ssh-keys">
+                    <input type="hidden" name="SubAction" value="remove">
+                    <input type="hidden" name="Fingerprint" value="<?= Respond::e($aut['fingerprint']) ?>">
+                    <button type="submit" class="btn btn-danger btn-sm" data-uac<?= $travado ? ' disabled' : $disSens ?>>Remover…</button>
+                  </form>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+    </section>
+    <section id="chaves-wsl">
+      <?= $secao('Usuário e chave no WSL', 'Cria o usuário na distro, sem sudo, e grava ~/.ssh/authorized_keys com ~/.ssh em 700 e o arquivo em 600.') ?>
+      <form method="post" data-sem-reload>
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="ssh-keys">
+        <input type="hidden" name="SubAction" value="wsl-user">
+        <div class="campo">
+          <label for="wsl-usuario">Usuário</label>
+          <input type="text" id="wsl-usuario" name="User" maxlength="32" pattern="[a-z][a-z0-9\-]{0,31}" placeholder="somente minúsculas, números, hífen"<?= $disWsl ?>>
+        </div>
+        <div class="campo">
+          <label for="wsl-distro">Distro</label>
+          <select id="wsl-distro" name="Distro"<?= $disWsl ?>>
+            <?php foreach ($view->wslDistros as $d): ?>
+              <option value="<?= Respond::e($d) ?>"><?= Respond::e($d) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <?php if ($view->wslDistros === []): ?>
+          <p class="bad">Nenhuma distro em <code>wsl -l -q</code>.</p>
+        <?php endif; ?>
+        <div class="campo" style="align-items:flex-start">
+          <label for="wsl-chave">Pública</label>
+          <textarea id="wsl-chave" name="PublicKey" maxlength="<?= \App\Win\WinAction::SSH_PUBLIC_KEY_MAX ?>" placeholder="colar ou usar a gerada acima"<?= $disWsl ?>></textarea>
+        </div>
+        <div class="row">
+          <button type="submit" class="btn btn-sm btn-ghost" name="UseGenerated" value="1" data-usar-gerada data-uac<?= $disWsl ?>>Usar a gerada acima<?= Respond::e($avisoUac) ?></button>
+          <button type="submit" class="btn btn-sm" data-uac<?= $disWsl ?>>Criar usuário<?= Respond::e($avisoUac) ?></button>
+        </div>
+      </form>
+      <?php if ($usuariosWsl === []): ?>
+        <p class="empty">Nenhum usuário criado por esta tela.</p>
+      <?php else: ?>
+        <table>
+          <thead>
+            <tr><th style="width:28%">Usuário</th><th style="width:28%">Distro</th><th>Impressão</th></tr>
+          </thead>
+          <tbody>
+            <?php foreach ($usuariosWsl as $uw): ?>
+              <tr>
+                <td><?= Respond::e($uw['user']) ?></td>
+                <td><?= Respond::e($uw['distro']) ?></td>
+                <td><?= Respond::e($uw['fingerprint']) ?></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+    </section>
+  </div>
+
   <section>
     <h2>Histórico do Windows</h2>
 
@@ -690,6 +826,20 @@ foreach ($view->tweaks as $tw) {
     <?php endif; ?>
   </p>
 </div>
+
+<dialog id="modal-remover-chave">
+  <div class="modal-corpo">
+    <h3>Remover esta chave</h3>
+    <p>
+      Quem entrar com <strong data-remover-rotulo></strong> deixa de ser aceito neste Windows.
+      Abre o UAC. Não apaga a chave do disco do outro computador.
+    </p>
+  </div>
+  <div class="modal-acoes">
+    <button type="button" class="btn btn-ghost btn-sm" data-fechar-remover>Cancelar</button>
+    <button type="button" class="btn btn-danger btn-sm" data-confirmar-remover>Remover</button>
+  </div>
+</dialog>
 
 <dialog id="modal-ssh">
   <div class="modal-corpo">
@@ -810,6 +960,40 @@ foreach ($view->tweaks as $tw) {
     if (modal && !document.getElementById('opt-undo').checked) {
       ev.preventDefault();
       modal.showModal();
+    }
+  });
+
+  var removerAlvo = null;
+
+  document.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    if (!form.hasAttribute('data-remover-chave')) { return; }
+    if (form.hasAttribute('data-confirmado')) { form.removeAttribute('data-confirmado'); return; }
+
+    ev.preventDefault();
+    removerAlvo = form;
+    var modal = document.getElementById('modal-remover-chave');
+    modal.querySelector('[data-remover-rotulo]').textContent = form.getAttribute('data-rotulo');
+    modal.showModal();
+  });
+
+  document.addEventListener('click', function (ev) {
+    var usar = ev.target.closest('[data-usar-gerada]');
+    if (usar) {
+      var campo = usar.form.querySelector('textarea[name="PublicKey"]');
+      if (campo) { campo.value = ''; }
+    }
+
+    if (ev.target.closest('[data-fechar-remover]')) {
+      ev.target.closest('dialog').close();
+      removerAlvo = null;
+    }
+
+    if (ev.target.closest('[data-confirmar-remover]') && removerAlvo) {
+      ev.target.closest('dialog').close();
+      removerAlvo.setAttribute('data-confirmado', '');
+      removerAlvo.requestSubmit();
+      removerAlvo = null;
     }
   });
 

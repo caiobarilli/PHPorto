@@ -34,6 +34,7 @@ final readonly class WinView
      * @param string|null $dnsProblem
      * @param WinTab $tab
      * @param string|null $sensitiveBlocked
+     * @param list<string> $wslDistros
      */
     public function __construct(
         public array $rows,
@@ -63,6 +64,7 @@ final readonly class WinView
         public ?string $dnsProblem,
         public WinTab $tab = WinTab::Sistema,
         public ?string $sensitiveBlocked = null,
+        public array $wslDistros = [],
     ) {
     }
 }

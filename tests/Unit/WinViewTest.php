@@ -12,6 +12,8 @@ use App\Win\ElevationState;
  * @param list<string> $aplicados
  * @param list<string> $acoes
  * @param list<string> $pendentes
+ * @param list<\App\Domain\Execution> $rows
+ * @param list<string> $distros
  */
 function winHtml(
     array $marcados = [],
@@ -21,6 +23,8 @@ function winHtml(
     array $pendentes = [],
     ?string $blocked = null,
     ?string $sensitiveBlocked = null,
+    array $rows = [],
+    array $distros = [],
 ): string {
     $tweaks = [];
     foreach (['A', 'B', 'C'] as $k) {
@@ -28,7 +32,7 @@ function winHtml(
     }
 
     return Respond::render('win.php', new WinView(
-        rows: [],
+        rows: $rows,
         result: null,
         blocked: $blocked,
         notice: null,
@@ -55,6 +59,7 @@ function winHtml(
         dnsProblem: null,
         tab: $aba,
         sensitiveBlocked: $sensitiveBlocked,
+        wslDistros: $distros,
     ));
 }
 
@@ -145,7 +150,7 @@ it('o que os botões de Reverter mandam passa pela validação e reverte o estad
 
 function winAcoes(string $html): array
 {
-    preg_match_all('/<section id="acao-([a-z]+)">/', $html, $m);
+    preg_match_all('/<section id="acao-([a-z-]+)">/', $html, $m);
 
     return $m[1];
 }
@@ -184,9 +189,10 @@ it('cada painel tem só as ações da aba dele, e o desempenho mora em Serviços
     'aplicativos'   => [WinTab::Aplicativos, ['install']],
     'serviços'      => [WinTab::Servicos, ['exporter', 'gpu', 'optimize', 'gdid', 'performance']],
     'acesso remoto' => [WinTab::AcessoRemoto, ['rdp', 'sunshine', 'openssh']],
+    'chaves ssh'    => [WinTab::ChavesSsh, ['ssh-keys']],
 ]);
 
-it('os cinco painéis vêm na página, e só o da aba aberta está visível', function (WinTab $aberta) {
+it('os seis painéis vêm na página, e só o da aba aberta está visível', function (WinTab $aberta) {
     $html = winHtml(aba: $aberta);
 
     foreach (WinTab::cases() as $aba) {
@@ -196,7 +202,7 @@ it('os cinco painéis vêm na página, e só o da aba aberta está visível', fu
     expect($html)->toContain('Histórico do Windows');
 })->with(WinTab::cases());
 
-it('as dezesseis ações do menu aparecem uma vez só na página, e as da /hyperv não', function () {
+it('as dezessete ações do menu aparecem uma vez só na página, e as da /hyperv não', function () {
     $todas = winAcoes(winHtml());
     sort($todas);
 
@@ -212,10 +218,10 @@ it('as dezesseis ações do menu aparecem uma vez só na página, e as da /hyper
         ->and($todas)->not->toContain('hyperv-vm');
 });
 
-it('o menu tem as cinco abas como links, e só a aberta é a atual', function () {
+it('o menu tem as seis abas como links, e só a aberta é a atual', function () {
     $html = winHtml(aba: WinTab::Rede);
 
-    expect(substr_count($html, 'href="/win?aba='))->toBe(5)
+    expect(substr_count($html, 'href="/win?aba='))->toBe(7)
         ->and(substr_count($html, 'aria-current="page"'))->toBe(1)
         ->and($html)->toContain('<a href="/win?aba=rede#abas" data-aba="rede" class="ativa" aria-current="page">Rede</a>')
         ->and($html)->toContain('<a href="/win?aba=sistema#abas" data-aba="sistema">Sistema</a>')
@@ -326,7 +332,7 @@ it('sem JavaScript, o link da aba recarrega posicionado no menu, que tem o id da
     $html = winHtml();
 
     expect($html)->toContain('<nav class="abas" id="abas"')
-        ->and(preg_match_all('~href="/win\?aba=[a-z-]+#abas"~', $html))->toBe(5);
+        ->and(preg_match_all('~href="/win\?aba=[a-z-]+#abas"~', $html))->toBe(7);
 });
 
 it('o JavaScript das abas é segunda camada e mantém a aba na URL com replaceState', function () {
