@@ -103,6 +103,14 @@ $ALLOWLIST = @{
     'openssh'     = @{
         'SubAction' = @{ tipo = 'set'; valores = @('status', 'install', 'enable', 'disable') }
     }
+    'ssh-keys'    = @{
+        'SubAction'    = @{ tipo = 'set'; valores = @('status', 'generate', 'puttygen', 'list', 'authorize', 'remove', 'wsl-user') }
+        'PublicKey'    = @{ tipo = 'text'; max = 2200; padrao = '\A(?:ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) AAAA[A-Za-z0-9+/]{16,2000}={0,2}(?: [A-Za-z0-9@._+-]{1,100})?\z' }
+        'UseGenerated' = @{ tipo = 'flag' }
+        'Fingerprint'  = @{ tipo = 'text'; max = 50; padrao = '\ASHA256:[A-Za-z0-9+/]{43}\z' }
+        'User'         = @{ tipo = 'text'; max = 32; padrao = '\A[a-z][a-z0-9-]{0,31}\z' }
+        'Distro'       = @{ tipo = 'text'; max = 64; padrao = '\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z' }
+    }
     'hyperv'      = @{}
 
     'hyperv-vm'   = @{
@@ -116,6 +124,7 @@ $SENSIVEIS = @{
     'rdp'       = @('on')
     'sunshine'  = @('install', 'firewall-open', 'set-creds', 'pair')
     'openssh'   = @('install', 'enable')
+    'ssh-keys'  = @('puttygen', 'authorize', 'remove', 'wsl-user')
     'exporter'  = @('install', 'firewall')
     'gpu'       = @('install')
     'hyperv-vm' = '*'

@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 use App\Win\WinAction;
 
-it('tem as dezoito ações: as dezesseis do menu em ordem, e as duas da /hyperv fora dele', function () {
+it('tem as dezenove ações: as dezessete do menu em ordem, e as duas da /hyperv fora dele', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
-            'gdid', 'rdp', 'sunshine', 'openssh',
+            'gdid', 'rdp', 'sunshine', 'openssh', 'ssh-keys',
             'hyperv', 'hyperv-vm',
         ]);
 });
@@ -739,6 +739,7 @@ it('toda subação sensível existe na lista de subações da ação', function 
         'exporter' => WinAction::EXPORTER_SUBACTIONS,
         'gpu'      => WinAction::GPU_SUBACTIONS,
         'openssh'  => WinAction::OPENSSH_SUBACTIONS,
+        'ssh-keys' => WinAction::SSHKEYS_SUBACTIONS,
     ];
 
     foreach (WinAction::SENSITIVE as $acao => $regra) {

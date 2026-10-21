@@ -109,16 +109,16 @@ Describe 'bootstrap - o que veio do upstream' {
 
 Describe 'bootstrap - as acoes migradas' {
 
-    It 'actions/ tem as dezoito, e so elas' {
+    It 'actions/ tem as dezenove, e so elas' {
         $nomes = @(Get-ChildItem -Path (Join-Path $Script:PastaWin 'actions') -Filter 'Invoke-*.ps1' -File |
             Select-Object -ExpandProperty BaseName | Sort-Object)
 
-        $nomes.Count | Should -Be 18
+        $nomes.Count | Should -Be 19
         $nomes | Should -Be @(
             'Invoke-Audit', 'Invoke-Debloat', 'Invoke-DNS', 'Invoke-Exporter',
             'Invoke-Gdid', 'Invoke-GPU', 'Invoke-Hyperv', 'Invoke-HypervVm', 'Invoke-Install',
             'Invoke-Memory', 'Invoke-Network', 'Invoke-OpenSsh', 'Invoke-Optimize', 'Invoke-Performance',
-            'Invoke-Processes', 'Invoke-Rdp', 'Invoke-Sunshine', 'Invoke-Tweaks'
+            'Invoke-Processes', 'Invoke-Rdp', 'Invoke-SshKeys', 'Invoke-Sunshine', 'Invoke-Tweaks'
         )
     }
 
@@ -259,11 +259,11 @@ Describe 'bootstrap - despachante' {
             Should -Not -BeNullOrEmpty
     }
 
-    It 'o mapa conhece as dezoito acoes' {
+    It 'o mapa conhece as dezenove acoes' {
         $chaves = @($global:PhportoWinActions.Keys | Sort-Object)
         $chaves | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
-            'memory', 'network', 'openssh', 'optimize', 'performance', 'processes', 'rdp', 'sunshine', 'tweaks'
+            'memory', 'network', 'openssh', 'optimize', 'performance', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks'
         )
     }
 

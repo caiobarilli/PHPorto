@@ -26,6 +26,7 @@ enum WinAction: string
     case Rdp = 'rdp';
     case Sunshine = 'sunshine';
     case OpenSsh = 'openssh';
+    case SshKeys = 'ssh-keys';
 
     case Hyperv = 'hyperv';
 
@@ -66,6 +67,26 @@ enum WinAction: string
 
     public const OPENSSH_SUBACTIONS = ['status', 'install', 'enable', 'disable'];
 
+    public const SSHKEYS_SUBACTIONS = ['status', 'generate', 'puttygen', 'list', 'authorize', 'remove', 'wsl-user'];
+
+    public const SSHKEYS_KEY_SUBACTIONS = ['authorize', 'wsl-user'];
+
+    public const SSHKEYS_FIELDS = ['PublicKey', 'UseGenerated', 'Fingerprint', 'User', 'Distro'];
+
+    public const SSH_PUBLIC_KEY_PATTERN = '\A(?:ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) AAAA[A-Za-z0-9+/]{16,2000}={0,2}(?: [A-Za-z0-9@._+-]{1,100})?\z';
+
+    public const SSH_PUBLIC_KEY_MAX = 2200;
+
+    public const SSH_FINGERPRINT_PATTERN = '\ASHA256:[A-Za-z0-9+/]{43}\z';
+
+    public const WSL_USER_PATTERN = '\A[a-z][a-z0-9-]{0,31}\z';
+
+    public const WSL_USER_RESERVED = ['root', 'daemon', 'bin', 'sys', 'sync', 'nobody', 'sshd'];
+
+    public const WSL_DISTRO_PATTERN = '\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z';
+
+    public const PUTTYGEN_WINGET_ID = 'PuTTY.PuTTY';
+
     public const SUNSHINE_CRED_SUBACTIONS = ['set-creds', 'pair'];
 
     public const SUNSHINE_CRED_FIELDS = ['User', 'Password', 'Pin', 'DeviceName', 'SetCreds'];
@@ -100,6 +121,7 @@ enum WinAction: string
         'rdp'       => ['on'],
         'sunshine'  => ['install', 'firewall-open', 'set-creds', 'pair'],
         'openssh'   => ['install', 'enable'],
+        'ssh-keys'  => ['puttygen', 'authorize', 'remove', 'wsl-user'],
         'exporter'  => ['install', 'firewall'],
         'gpu'       => ['install'],
         'hyperv-vm' => '*',
@@ -135,6 +157,7 @@ enum WinAction: string
             self::Rdp       => ['SubAction' => $this->pick($input, 'SubAction', self::RDP_SUBACTIONS, obrigatorio: true)],
             self::Sunshine  => $this->sunshine($input),
             self::OpenSsh   => ['SubAction' => $this->pick($input, 'SubAction', self::OPENSSH_SUBACTIONS, obrigatorio: true)],
+            self::SshKeys   => $this->sshKeys($input),
             self::Optimize  => $this->optimize($input),
             self::HypervVm  => $this->hypervVm($input),
         };
@@ -472,6 +495,140 @@ enum WinAction: string
         }
 
         return $params;
+    }
+
+    public static function isSshPublicKey(string $linha): bool
+    {
+        if (strlen($linha) > self::SSH_PUBLIC_KEY_MAX || preg_match('~' . self::SSH_PUBLIC_KEY_PATTERN . '~', $linha) !== 1) {
+            return false;
+        }
+
+        [$tipo, $base64] = explode(' ', $linha, 3);
+        $blob            = base64_decode($base64, true);
+
+        if ($blob === false || strlen($blob) < 4) {
+            return false;
+        }
+
+        $tamanho = unpack('N', substr($blob, 0, 4));
+
+        return is_array($tamanho) && $tamanho[1] === strlen($tipo) && substr($blob, 4, strlen($tipo)) === $tipo;
+    }
+
+    public static function sshFingerprint(string $linha): ?string
+    {
+        if (!self::isSshPublicKey($linha)) {
+            return null;
+        }
+
+        $blob = (string) base64_decode(explode(' ', $linha, 3)[1], true);
+
+        return 'SHA256:' . rtrim(base64_encode(hash('sha256', $blob, true)), '=');
+    }
+
+    /**
+     * @param array<string, string> $input
+     * @return array<string, string|bool>
+     */
+    private function sshKeys(array $input): array
+    {
+        $sub    = $this->pick($input, 'SubAction', self::SSHKEYS_SUBACTIONS, obrigatorio: true);
+        $params = ['SubAction' => $sub];
+
+        $usados = [];
+        foreach (self::SSHKEYS_FIELDS as $campo) {
+            if (trim($input[$campo] ?? '') !== '') {
+                $usados[] = $campo;
+            }
+        }
+
+        $aceitos = match ($sub) {
+            'authorize' => ['PublicKey', 'UseGenerated'],
+            'wsl-user'  => ['PublicKey', 'UseGenerated', 'User', 'Distro'],
+            'remove'    => ['Fingerprint'],
+            default     => [],
+        };
+
+        foreach (array_diff($usados, $aceitos) as $campo) {
+            throw new InvalidArgumentException(sprintf('%s não vale para a subação %s.', $campo, $sub));
+        }
+
+        if (in_array($sub, self::SSHKEYS_KEY_SUBACTIONS, true)) {
+            $params += $this->sshKey($input);
+        }
+
+        if ($sub === 'remove') {
+            $digital = trim($input['Fingerprint'] ?? '');
+
+            if (preg_match('~' . self::SSH_FINGERPRINT_PATTERN . '~', $digital) !== 1) {
+                throw new InvalidArgumentException('Fingerprint precisa ser SHA256: seguido de 43 caracteres.');
+            }
+
+            $params['Fingerprint'] = $digital;
+        }
+
+        if ($sub === 'wsl-user') {
+            $params['User']   = self::wslUser($input['User'] ?? '');
+            $params['Distro'] = self::wslDistro($input['Distro'] ?? '');
+        }
+
+        return $params;
+    }
+
+    /**
+     * @param array<string, string> $input
+     * @return array<string, string|bool>
+     */
+    private function sshKey(array $input): array
+    {
+        $chave = trim($input['PublicKey'] ?? '');
+        $usar  = $this->flag($input, 'UseGenerated');
+
+        if ($usar && $chave !== '') {
+            throw new InvalidArgumentException('Cole uma pública ou use a gerada, não os dois.');
+        }
+
+        if ($usar) {
+            return ['UseGenerated' => true];
+        }
+
+        if ($chave === '') {
+            throw new InvalidArgumentException('Cole a chave pública, ou use a gerada acima.');
+        }
+
+        if (!self::isSshPublicKey($chave)) {
+            throw new InvalidArgumentException(
+                'Essa não é uma chave pública. Cole uma linha ssh-ed25519, ssh-rsa ou ecdsa, sem a privada e sem opções na frente.'
+            );
+        }
+
+        return ['PublicKey' => $chave];
+    }
+
+    private static function wslUser(string $bruto): string
+    {
+        $user = trim($bruto);
+
+        if (preg_match('/' . self::WSL_USER_PATTERN . '/', $user) !== 1) {
+            throw new InvalidArgumentException('Usuário: só minúsculas, números e hífen, começando por letra, até 32.');
+        }
+
+        if (in_array($user, self::WSL_USER_RESERVED, true)) {
+            throw new InvalidArgumentException(sprintf('O usuário %s é do sistema. Escolha outro nome.', $user));
+        }
+
+        return $user;
+    }
+
+    private static function wslDistro(string $bruto): string
+    {
+        $distro = trim($bruto);
+
+        if (preg_match('/' . self::WSL_DISTRO_PATTERN . '/', $distro) !== 1) {
+            throw new InvalidArgumentException('Escolha uma distro da lista.');
+        }
+
+        return $distro;
     }
 
     /**
