@@ -69,7 +69,7 @@ embutido do PHP.
 | `/` | Início, com os botões de configuração, WSL e Windows e o motivo de cada um estar desabilitado. |
 | `/config` | Banco ativo, interruptor da API, PowerShell elevado e restauração de fábrica. |
 | `/wsl` | Executa comandos e copia arquivos na distro, com o histórico do WSL. |
-| `/win` | As treze ações do Windows, executadas por um PowerShell elevado, com o histórico do Windows. |
+| `/win` | As ações do Windows, executadas por um PowerShell elevado, com o histórico do Windows. |
 
 ## Portão
 
@@ -94,7 +94,7 @@ MIT © 2022 CT Tech Group LLC. O que veio de onde está em
 
 - [Configuração](docs/configuracao.md) — cada chave do `.env`
 - [WSL](docs/wsl.md) — a tela `/wsl`
-- [Windows](docs/windows.md) — a tela `/win` e as treze ações
+- [Windows](docs/windows.md) — a tela `/win` e as ações
 - [API](docs/api.md) — `/api/executions`
 - [Segurança](docs/seguranca.md) — o modelo de proteção e o acesso remoto
 - [Desenvolvimento](docs/desenvolvimento.md) — árvore, portão, testes e convenções

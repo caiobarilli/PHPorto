@@ -1,41 +1,12 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Pester 5+ tests for the actions that have no file of their own yet.
-.DESCRIPTION
-    Migrated from winutil-cli.Tests.ps1. Covers parameter validation and
-    mock-based execution of audit, performance, dns, processes and optimize.
-    Invoke-GPU and Invoke-Gdid have their own files next to this one.
-
-    WHAT WAS DROPPED, and why:
-
-      - the whole BeforeAll: src/Win/bootstrap.ps1 does the same job, and doing
-        it here again would test a copy of the setup instead of the real one
-      - "winutil-cli.ps1 exists in root": that entry point does not migrate;
-        the /win screen is the menu now
-      - the config/ and functions/ sanity checks: Bootstrap.Tests.ps1 covers
-        the same ground against the new tree, including the two JSON that did
-        not migrate
-      - "Entry point wiring": the ValidateSet and the dispatch of the old entry
-        point are gone; the mapping is now tested in Bootstrap.Tests.ps1, and
-        the allowlists in the Pest suite
-      - the transcript to C:\log\: the gate reads the Pester exit code, and
-        C:\log\ belongs to the audit action
-
-    Everything else is the original test, unchanged.
-#>
 
 BeforeAll {
     $Script:RaizProjeto = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
     $Script:PastaWin    = Join-Path $Script:RaizProjeto 'src\Win'
 
-    # Loads Write-Status, $sync, $root, lib/ and every action.
     . (Join-Path $Script:PastaWin 'bootstrap.ps1')
 }
 
-# ==============================================================
-# SANITY
-# ==============================================================
 Describe "Sanity" {
 
     It "audit/audit.ps1 exists where \$root says it does" {
@@ -56,13 +27,6 @@ Describe "Sanity" {
     }
 }
 
-# ==============================================================
-# NO PROMPTS — added on migration
-# ==============================================================
-#
-# Three actions used to ask. Inside the elevated worker there is nobody to
-# type: Read-Host in a -NonInteractive process either fails with an error that
-# explains nothing to whoever clicked, or hangs the run until the timeout.
 Describe "No prompts in the non-interactive path" {
 
     It "-Action exporter with no -SubAction refuses instead of opening a menu" {
@@ -71,19 +35,6 @@ Describe "No prompts in the non-interactive path" {
         $output | Should -Match '\[ INFO \].*install, status, start, stop, metrics, firewall'
     }
 
-    <#
-        Invoke-Network is checked statically, and the reason is worth writing
-        down: its -Interface refusal sits AFTER the tshark discovery, so
-        reaching it means either having Wireshark installed or letting the
-        function reach `winget install` — a test that installs software.
-        Mocking the probe is not available either: Pester refuses to mock a
-        command that does not exist, and tshark is not on PATH here.
-
-        So this pins the shape instead: the question is gone, the refusal that
-        already existed below it is intact. The behaviour is covered where it
-        can be covered honestly — Bootstrap.Tests.ps1 proves no action file
-        contains Read-Host at all.
-    #>
     It "-Action network no longer asks for the interface, and still refuses without it" {
         $texto = Get-Content -Path (Join-Path $Script:PastaWin 'actions\Invoke-Network.ps1') -Raw
 
@@ -92,12 +43,8 @@ Describe "No prompts in the non-interactive path" {
     }
 }
 
-# ==============================================================
-# PARAMETER VALIDATION
-# ==============================================================
 Describe "Parameter Validation" {
 
-    # 6>&1 redirects the Information stream (Write-Host PS 5+) to the pipeline
     It "-Action dns without -Provider returns [ ERROR ]" {
         $output = (Invoke-DNS -Provider '') 6>&1 | Out-String
         $output | Should -Match '\[ ERROR \]'
@@ -124,9 +71,6 @@ Describe "Parameter Validation" {
     }
 }
 
-# ==============================================================
-# EXECUTION WITH MOCK
-# ==============================================================
 Describe "Execution with Mock" {
 
     Context "-Action audit" {
@@ -199,8 +143,6 @@ Describe "Execution with Mock" {
 
             Invoke-Debloat 6>$null
 
-            # Two steps on purpose: in 5.1, ConvertFrom-Json emits a JSON array as ONE
-            # pipeline object, and @(... | ConvertFrom-Json) would wrap it into a single item.
             $esperados = Get-Content (Join-Path $Script:PastaWin 'config\debloat.json') -Raw | ConvertFrom-Json
             $esperados.Count | Should -Be 22
             $script:removidos | Should -Be $esperados
@@ -249,7 +191,6 @@ Describe "Execution with Mock" {
 
     Context "-Action performance" {
         It "calls powercfg without throwing an exception" {
-            # Returns simulated list already containing the original GUID (Priority 1)
             Mock powercfg {
                 "Power Scheme GUID: e9a42b02-d5df-448d-aa00-03f14749eb61  (Ultimate Performance)"
             }
@@ -336,7 +277,6 @@ Describe "Execution with Mock" {
         }
 
         It "the WARNING that Set-WinUtilDNS writes on failure is an ERROR, and not applied" {
-            # O upstream captura a excecao e so escreve Write-Warning.
             Mock Set-DnsClientServerAddress { throw 'recusado' }
             $output = (Invoke-DNS -Provider 'cloudflare') 6>&1 | Out-String
 
@@ -400,10 +340,8 @@ Describe "Execution with Mock" {
             Mock Test-Path { $true }
             Mock Set-Content { }
             Invoke-Optimize -Preset 'ssh'
-            # 5 service-backed: SearchHost (WSearch), TextInputHost, OfficeClickToRun, LDSvc (PaceLicenseDServices), WslService
             Should -Invoke -CommandName Set-Service  -Times 5
             Should -Invoke -CommandName Stop-Service -Times 5
-            # 6 process-only: LogonUI, StartMenuExperienceHost, ShellExperienceHost, ShellHost, msedgewebview2, cowork-svc
             Should -Invoke -CommandName Stop-Process -Times 6
         }
 
@@ -423,9 +361,7 @@ Describe "Execution with Mock" {
             Mock Test-Path { $true }
             Mock Set-Content { }
             Invoke-Optimize -Preset 'ssh' -Kill 'notepad'
-            # 5 service-backed from preset + 0 extra = 5
             Should -Invoke -CommandName Stop-Service -Times 5
-            # 6 process-only from preset + 1 custom kill
             Should -Invoke -CommandName Stop-Process -Times 7
         }
 
@@ -477,11 +413,8 @@ Describe "Execution with Mock" {
             Mock query { @(" SESSIONNAME       USERNAME                 ID  STATE   TYPE") }
             Mock logoff { }
             Invoke-Optimize -Preset 'kill-rdp'
-            # 2 service-backed: SearchHost (WSearch), TextInputHost (TextInputManagementService)
             Should -Invoke -CommandName Set-Service  -Times 2
             Should -Invoke -CommandName Stop-Service -Times 2
-            # 10 process-only: explorer, StartMenuExperienceHost, ShellExperienceHost, ShellHost,
-            #                   msedgewebview2, dwm, sihost, RuntimeBroker, backgroundTaskHost, CrossDeviceResume
             Should -Invoke -CommandName Stop-Process -Times 10
         }
 
@@ -600,9 +533,6 @@ Describe "Execution with Mock" {
     }
 }
 
-# ==============================================================
-# INVOKE-TWEAKS — missing commands are errors, never OK
-# ==============================================================
 Describe "Invoke-Tweaks with a tweak that reaches a missing command" {
 
     BeforeAll {
@@ -736,20 +666,17 @@ Describe "Invoke-Tweaks with a tweak that reaches a missing command" {
     }
 }
 
-# ==============================================================
-# INSTALL — one exact ID at a time, and each exit code read
-# ==============================================================
 Describe "Install-WinUtilProgramWinget builds a command that cannot stop to ask" {
 
     It "runs winget once per program, by exact ID, accepting both agreements" {
         $script:argumentos = @()
-        Mock Start-Process { $script:argumentos += $ArgumentList; [PSCustomObject]@{ ExitCode = 0 } }
+        Mock Start-Process { $script:argumentos += ,@($ArgumentList); [PSCustomObject]@{ ExitCode = 0 } }
 
         $r = @(Install-WinUtilProgramWinget -Action Install -Programs @('Git.Git', 'VB-Audio.Voicemeeter.Potato'))
 
         $script:argumentos.Count | Should -Be 2
-        $script:argumentos[0] | Should -Be 'install --id "Git.Git" --exact --accept-package-agreements --accept-source-agreements --source winget --silent --disable-interactivity'
-        $script:argumentos[1] | Should -Match '^install --id "VB-Audio.Voicemeeter.Potato" --exact '
+        $script:argumentos[0] | Should -Be @('install', '--id', 'Git.Git', '--exact', '--accept-package-agreements', '--accept-source-agreements', '--source', 'winget', '--silent', '--disable-interactivity')
+        $script:argumentos[1][0..3] | Should -Be @('install', '--id', 'VB-Audio.Voicemeeter.Potato', '--exact')
         $r.Program  | Should -Be @('Git.Git', 'VB-Audio.Voicemeeter.Potato')
         $r.ExitCode | Should -Be @(0, 0)
     }
@@ -759,6 +686,13 @@ Describe "Install-WinUtilProgramWinget builds a command that cannot stop to ask"
 
         (Install-WinUtilProgramWinget -Action Install -Programs 'Git.Git').ExitCode | Should -Be -1978335189
         Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter { $Wait -and $PassThru }
+    }
+
+    It "refuses an ID that is not a winget package ID, before starting anything: <_>" -ForEach @('Git.Git --override x', 'a"b.c', 'Git .Git', '--override', 'Git', 'Git.Git;calc') {
+        Mock Start-Process { [PSCustomObject]@{ ExitCode = 0 } }
+
+        { Install-WinUtilProgramWinget -Action Install -Programs $_ } | Should -Throw -ExpectedMessage 'not a winget package ID*'
+        Should -Invoke Start-Process -Times 0 -Exactly
     }
 }
 
@@ -804,16 +738,9 @@ Describe "Invoke-Install reports each package from its winget exit code" {
     }
 }
 
-# ==============================================================
-# INVOKE-MEMORY — the downloaded exe only runs with the pinned hash
-# ==============================================================
-# O exe roda como Administrador e mora numa pasta gravavel pelo usuario. O
-# $root aponta para o TestDrive, para nada aqui tocar em src/Win/tools/.
 Describe "Invoke-Memory checks the pinned SHA-256 before running" {
 
     BeforeAll {
-        # O Get-CimInstance nao existe no pwsh fora do Windows, e o Mock exige
-        # um comando para substituir.
         $Script:CimStub = -not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)
         if ($Script:CimStub) { function global:Get-CimInstance { param($ClassName) } }
         $Script:Pinado = '8B68D56C6EE28740F76513F21B21F5A1018F0EF291467B3F3D39D43DAF0C0F2F'

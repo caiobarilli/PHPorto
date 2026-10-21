@@ -42,8 +42,6 @@
             return $null
         }
 
-        # Only count when the shape is the one we know; an unrecognised file is
-        # reported as "cannot read" instead of a guessed number.
         if ($state.root -and $null -ne $state.root.devices) {
             return @($state.root.devices).Count
         }
@@ -188,9 +186,6 @@
 
     $sub = $SubAction.ToLower()
 
-    # A COMBINACAO dos campos, conferida de novo deste lado: o worker confere
-    # cada campo sozinho, e a tela recusa antes com frase boa. As mensagens
-    # citam o NOME do campo, nunca o valor.
     $credencial = @('set-creds', 'pair')
     if ($sub -notin $credencial) {
         foreach ($campo in 'User', 'Password', 'Pin', 'DeviceName', 'SetCreds') {
@@ -226,8 +221,6 @@
         'firewall-open'  { Open-SunshineFirewall }
         'firewall-close' { Close-SunshineFirewall }
         'set-creds' {
-            # A falha devolve 1 pelo $LASTEXITCODE, que o script gerado pelo
-            # worker le: o historico mostra que nao deu certo.
             $exe = Get-PhportoSunshineExe
             if (-not $exe -or -not (Set-PhportoSunshineCreds -Exe $exe -User $User -Password $Password)) {
                 $global:LASTEXITCODE = 1
@@ -250,30 +243,10 @@
     }
 }
 
-# ============================================================
-# CREDENCIAIS E PAREAMENTO — set-creds e pair
-# ============================================================
-#
-# Funcoes de topo, e nao internas do Invoke-Sunshine, para os testes poderem
-# trocar cada uma por um mock. O prefixo Phporto e' o mesmo das outras
-# auxiliares de actions/.
-#
-# NADA AQUI ESCREVE SENHA OU PIN: nem na saida, nem em arquivo, nem no
-# cabecalho de log. O unico ponto em que a senha vira argumento de processo e'
-# o sunshine.exe --creds, que e' a unica interface do Sunshine para TROCAR a
-# senha sem saber a atual (risco registrado em docs/seguranca.md).
-#
-# O DESTINO E' FIXO: https://127.0.0.1:47990, sem parametro de host. Um host
-# vindo de fora faria o PHPorto mandar a senha para onde o formulario
-# mandasse. 127.0.0.1, e nao localhost, porque o arquivo hosts e' editavel e
-# localhost pode resolver para ::1.
-
 $script:PhportoSunshineHost  = '127.0.0.1'
 $script:PhportoSunshinePorta = 47990
 
 function Test-PhportoSunshinePorta {
-    # PS 5.1 has no -SkipCertificateCheck, and 47990 is HTTPS with a
-    # self-signed cert; a plain TCP connect answers "is anything listening".
     $client = New-Object System.Net.Sockets.TcpClient
     try {
         $iar = $client.BeginConnect('127.0.0.1', 47990, $null, $null)
@@ -286,25 +259,10 @@ function Test-PhportoSunshinePorta {
     }
 }
 
-<#
-    O servico pelo nome EXATO. O Get-SunshineService do status casa
-    '*unshine*', o que basta para mostrar estado, mas e' frouxo demais para
-    parar servico e gravar senha.
-#>
 function Get-PhportoSunshineServico {
     return Get-Service -Name 'SunshineService' -ErrorAction SilentlyContinue
 }
 
-<#
-    A pasta de instalacao, tirada do caminho do servico, e so se ficar sob
-    Program Files. Sem isso, $null e ERROR: nada de caminho fixo nem de
-    parametro, porque quem escolhesse a pasta escolheria o executavel que roda
-    elevado com a senha na linha de comando.
-
-    O servico roda <pasta>\tools\sunshinesvc.exe; o sunshine.exe e a config
-    ficam em <pasta>. O PathName vem com aspas nas versoes novas e sem aspas
-    nas antigas (CVE-2025-54081); os dois sao lidos.
-#>
 function Get-PhportoSunshinePasta {
     try {
         $svc = Get-CimInstance -ClassName Win32_Service -Filter "Name='SunshineService'" -ErrorAction Stop
@@ -331,8 +289,6 @@ function Get-PhportoSunshinePasta {
         return $null
     }
 
-    # Partido a mao, na barra invertida: o PathName e' sempre caminho do
-    # Windows, e o Split-Path do pwsh fora do Windows nao parte nela.
     $pasta = $caminho.Substring(0, [Math]::Max(0, $caminho.LastIndexOf('\')))
     if ($pasta.Substring($pasta.LastIndexOf('\') + 1) -ieq 'tools') {
         $pasta = $pasta.Substring(0, [Math]::Max(0, $pasta.LastIndexOf('\')))
@@ -359,15 +315,6 @@ function Get-PhportoSunshineExe {
     return $exe
 }
 
-<#
-    O SHA-256 do certificado que o PROPRIO Sunshine gerou, em
-    <pasta>\config\credentials\cacert.pem. E' contra ele que a conexao HTTPS
-    e' conferida: o certificado do outro lado tem de ser exatamente este, e
-    nada de "aceitar qualquer um".
-
-    Com cert = ... proprio no sunshine.conf, recusa (escopo minimo: o caminho
-    customizado pode ser relativo a outra pasta, e adivinhar seria pior).
-#>
 function Get-PhportoSunshineCertSha256([string]$Pasta) {
     $config = Join-Path $Pasta 'config'
     $conf   = Join-Path $config 'sunshine.conf'
@@ -410,15 +357,6 @@ function Get-PhportoSha256Hex([byte[]]$Bytes) {
     }
 }
 
-<#
-    Junta argumentos numa linha de comando que o CRT do Windows parte de volta
-    exatamente nos mesmos argumentos (regras do CommandLineToArgvW).
-
-    O & do 5.1 corrompe argumento com aspa embutida, e a senha pode ter aspa.
-    As regras: argumento sem espaco nem aspa vai como esta; os outros vao entre
-    aspas, com cada aspa interna escapada por \ e as barras ANTES de uma aspa
-    (ou do fim) dobradas.
-#>
 function ConvertTo-PhportoArgvWin {
     param([string[]]$Argumentos)
 
@@ -453,13 +391,6 @@ function ConvertTo-PhportoArgvWin {
     return ($partes -join ' ')
 }
 
-<#
-    Roda sunshine.exe --creds <usuario> <senha> e devolve o codigo de saida, ou
-    $null se nao terminou em 30 s.
-
-    A saida do sunshine.exe e' lida e DESCARTADA: ela nao e' nossa para
-    repassar, e o codigo de saida diz o que importa.
-#>
 function Invoke-PhportoSunshineCredsExe {
     param([string]$Exe, [string]$User, [string]$Password)
 
@@ -474,8 +405,6 @@ function Invoke-PhportoSunshineCredsExe {
 
     $p = [System.Diagnostics.Process]::Start($psi)
     try {
-        # Leitura assincrona dos dois fluxos: sem ela, um buffer cheio trava o
-        # filho e o WaitForExit espera os 30 s inteiros.
         [void]$p.StandardOutput.ReadToEndAsync()
         [void]$p.StandardError.ReadToEndAsync()
         if (-not $p.WaitForExit(30000)) {
@@ -501,14 +430,6 @@ function Wait-PhportoSunshineServico {
     return $false
 }
 
-<#
-    Os passos do Sunshine-Setup.ps1: para o servico, grava as credenciais com
-    o proprio sunshine.exe e sobe o servico de volta.
-
-    O SERVICO SOBE DE VOLTA MESMO SE A GRAVACAO FALHAR (finally): a maquina
-    nao pode ficar sem Sunshine porque a senha deu errado. Devolve $true so
-    quando gravou E o servico voltou com a porta respondendo.
-#>
 function Set-PhportoSunshineCreds {
     param([string]$Exe, [string]$User, [string]$Password)
 
@@ -560,27 +481,6 @@ function Set-PhportoSunshineCreds {
     return $gravou
 }
 
-<#
-    Uma requisicao HTTPS a Web UI do Sunshine, com o certificado pinado.
-
-    Devolve { Status; Location; Json; Falha }. Status 0 = nao houve resposta,
-    e Falha diz por que: 'certificado' (o do outro lado nao e' o do Sunshine
-    instalado; o cabecalho com a senha so seguiria DEPOIS do handshake, entao
-    nada foi enviado) ou 'rede'.
-
-    - Callback de certificado POR REQUISICAO, nunca global: o
-      ServicePointManager.ServerCertificateValidationCallback nao e' tocado.
-      O callback compara o SHA-256 do certificado com o do cacert.pem e confere
-      host e porta.
-    - Tls12 e' SOMADO ao SecurityProtocol (-bor): o 5.1 nasce sem TLS 1.2 e o
-      Sunshine nao aceita menos. Aditivo, e so neste filho de vida curta.
-    - Proxy nulo: credencial nao passa por proxy do sistema.
-    - Sem redirect automatico: o redirect para /welcome nao reenvia o Basic.
-    - Sem Origin nem Referer: e' assim que o CSRF do Sunshine aceita o pedido
-      sem token (pedido que nao veio de navegador).
-    - Sem compilar classe C# para validar o certificado: a compilacao poria uma
-      DLL no %TEMP% do usuario, carregada por processo elevado.
-#>
 function Invoke-PhportoSunshineApi {
     param(
         [ValidateSet('GET', 'POST')] [string]$Metodo,
@@ -606,9 +506,6 @@ function Invoke-PhportoSunshineApi {
     $req.ReadWriteTimeout  = 35000
     $req.Accept            = 'application/json'
     $req.Headers.Add('Authorization', 'Basic ' + [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($User + ':' + $Password)))
-    # So .NET dentro do callback, sem chamar funcao nossa: o GetNewClosure
-    # prende as tres variaveis num modulo dinamico, e de la uma funcao do
-    # escopo do script gerado pelo worker nao seria encontrada.
     $req.ServerCertificateValidationCallback = {
         param($remetente, $cert, $cadeia, $erros)
         if ($null -eq $cert -or $null -eq $remetente) { return $false }
@@ -665,10 +562,6 @@ function Invoke-PhportoSunshineApi {
     }
 }
 
-<#
-    Diz em portugues o que uma resposta que nao e' sucesso significa, ou $null
-    se ela nao e' um dos casos conhecidos. Nunca repete senha nem PIN.
-#>
 function Get-PhportoSunshineMotivo($Resposta) {
     if ($Resposta.Falha -eq 'certificado') {
         return "O certificado em 127.0.0.1:47990 não é o do Sunshine instalado. Nada foi enviado."
@@ -688,18 +581,6 @@ function Get-PhportoSunshineMotivo($Resposta) {
     return $null
 }
 
-<#
-    Pareia o Moonlight que esta esperando PIN. Devolve $true se pareou.
-
-    DUAS VERSOES DA API, detectadas pelo GET /api/pin:
-      - 200 com { pairings: [ {id, name, address} ] }: Sunshine a partir de
-        v2026.906. O POST leva pairing_id (32 hex) + pin + name.
-      - 404: Sunshine ate v2026.516. O POST leva so pin + name.
-
-    Mais de um pedido pendente: recusa e lista nome e endereco de cada um.
-    Sem nova tentativa: PIN errado gasta o pedido do Moonlight, e tentar de
-    novo e' outro clique com outro PIN.
-#>
 function Invoke-PhportoSunshinePair {
     param([string]$User, [string]$Password, [string]$Pin, [string]$DeviceName, [string]$CertSha256)
 
@@ -753,8 +634,6 @@ function Invoke-PhportoSunshinePair {
         return $false
     }
 
-    # O Sunshine antigo (boost ptree) devolve "true" como texto; o novo, como
-    # booleano. Os dois valem.
     $status = if ($null -ne $resp.Json) { $resp.Json.status } else { $null }
     if ($status -eq $true -or [string]$status -eq 'true') {
         $de = if ($origem) { " (pedido de $origem)" } else { '' }
@@ -766,9 +645,6 @@ function Invoke-PhportoSunshinePair {
     return $false
 }
 
-<#
-    O fluxo do pair: credenciais (se pedido), porta no ar, certificado, PIN.
-#>
 function Invoke-PhportoSunshineParear {
     param([string]$User, [string]$Password, [string]$Pin, [string]$DeviceName, [switch]$SetCreds)
 

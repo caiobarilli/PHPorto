@@ -1,31 +1,10 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Testes do script que o worker gera para rodar uma acao.
-
-.DESCRIPTION
-    POR QUE POR AST: o worker.ps1 tem parametros obrigatorios e termina num
-    laco infinito — carrega-lo com dot-source rodaria o worker. As funcoes de
-    topo dele sao extraidas pelo parser e avaliadas aqui, que e' a mesma tecnica
-    que a suite do winutil-cli usava para pegar o Write-Status do ponto de
-    entrada sem executa-lo.
-
-    O QUE ISSO COBRE: New-InvocationScript, que e' a peca que a fatia 3 troca —
-    o script gerado deixou de chamar um winutil-cli externo e passou a carregar
-    o bootstrap deste repositorio.
-
-    E COBRE DE VERDADE: o ultimo Describe RODA o script gerado num powershell
-    de verdade e confere o codigo de saida e o arquivo de codigo. Funciona
-    porque a suite roda SEM elevacao — o despachante recusa, e recusa e'
-    exatamente o caminho que precisa provar que devolve 1 em vez de nada.
-#>
 
 BeforeAll {
     $Script:RaizProjeto = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
     $Script:PastaWin    = Join-Path $Script:RaizProjeto 'src\Win'
     $Script:Worker      = Join-Path $Script:PastaWin 'worker.ps1'
 
-    # As funcoes de topo do worker, sem executar o worker.
     $ast = [System.Management.Automation.Language.Parser]::ParseFile(
         $Script:Worker, [ref]$null, [ref]$null
     )
@@ -34,9 +13,6 @@ BeforeAll {
         $false
     ) | ForEach-Object { Invoke-Expression $_.Extent.Text }
 
-    # E as constantes que a Test-Job consulta. Vem do arquivo, e nao
-    # copiadas para ca: uma copia viraria um segundo lugar para atualizar, e o
-    # teste passaria a conferir a copia em vez da tranca.
     $ast.FindAll(
         {
             param($n)
@@ -55,9 +31,6 @@ BeforeAll {
     $global:SID_SYSTEM      = $SID_SYSTEM
     $global:SID_DONO        = $SID_DONO
 
-    # O manifesto que o PHP gravaria ao ligar, tirado aqui com as mesmas
-    # fontes do WinManifest::FONTES. O teste de PHP confere que essas fontes
-    # cobrem a arvore; aqui so importa ter o mapa de uma arvore real.
     function New-ManifestoDeTeste([string]$raiz) {
         $m = @{}
         foreach ($fonte in 'bootstrap.ps1', 'audit/audit.ps1', 'actions/*.ps1', 'lib/*.ps1', 'config/*.json') {
@@ -70,12 +43,6 @@ BeforeAll {
     }
     $global:Nonce           = 'nonce-de-teste'
 
-    # O que o worker teria em escopo de script quando gera o arquivo.
-    #
-    # $RAIZ_WIN aponta para o src/Win DE VERDADE, com o manifesto dele, e nao
-    # para um dublê: os testes que rodam o script gerado precisam do arquivo
-    # real na ponta, senao provariam apenas que o texto foi escrito. A pasta
-    # protegida, aqui, e' a de trabalho: a ACL e' coberta a parte.
     $Script:Trabalho = Join-Path ([System.IO.Path]::GetTempPath()) ("phporto-worker-" + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $Script:Trabalho -Force | Out-Null
 
@@ -101,12 +68,6 @@ BeforeAll {
         }
     }
 
-    # Um duble do bootstrap, para ver o que CHEGA na acao. Os parametros
-    # viajam como dado codificado, entao o texto do script nao diz mais nada
-    # sobre eles: a prova tem de ser rodar o script e olhar o outro lado.
-    # O duble so registra o que recebeu, e nao pede elevacao. Mora numa raiz
-    # propria, com manifesto proprio, porque o script gerado so carrega
-    # bootstrap conferido.
     $Script:RaizDuble = Join-Path $Script:Trabalho 'raiz-duble'
     New-Item -ItemType Directory -Path $Script:RaizDuble -Force | Out-Null
     $Script:Duble    = Join-Path $Script:RaizDuble 'bootstrap.ps1'
@@ -125,8 +86,6 @@ BeforeAll {
     [System.IO.File]::WriteAllText($Script:Duble, $duble, [System.Text.UTF8Encoding]::new($true))
     $Script:ManifestoDuble = @{ 'bootstrap.ps1' = (Get-FileHash -LiteralPath $Script:Duble -Algorithm SHA256).Hash }
 
-    # Gera o script apontando para o duble e roda num PowerShell de verdade, o
-    # mesmo que roda a suite: powershell.exe no Windows, pwsh fora dele.
     function Invoke-ScriptGerado {
         param([string]$Acao, [hashtable]$Params = @{})
 
@@ -165,21 +124,9 @@ AfterAll {
     }
 }
 
-# ==============================================================
-# ENCODING DO PROPRIO WORKER
-# ==============================================================
-#
-# ESTE TESTE NASCEU DE UM ACIDENTE, e vale registrar qual: um `sed -i` rodado
-# sobre o worker.ps1 para ajustar comentario devolveu o arquivo em LF. O
-# .gitattributes marca *.ps1 com -text, ou seja, grava os bytes como estao —
-# entao o LF teria entrado no repositorio, e o diff de vinte linhas apareceu
-# como mil e cento e setenta e cinco, escondendo a mudanca real na revisao.
-#
-# O Bootstrap.Tests.ps1 ja cobria o bootstrap.ps1. O worker nao tinha ninguem
-# olhando, e e' o arquivo que roda elevado.
 Describe 'worker - encoding' {
 
-    It 'worker.ps1 tem BOM UTF-8 — sem ele o 5.1 le como ANSI' {
+    It 'worker.ps1 tem BOM UTF-8, sem ele o 5.1 le como ANSI' {
         $bytes = [System.IO.File]::ReadAllBytes($Script:Worker)
         $bytes[0] | Should -Be 0xEF
         $bytes[1] | Should -Be 0xBB
@@ -203,21 +150,11 @@ Describe 'worker - encoding' {
     It 'o worker nao recebe mais caminho de projeto externo' {
         $texto = Get-Content -Path $Script:Worker -Raw
 
-        # O parametro -Winutil saiu com a independencia. Se voltar, volta junto
-        # a chave de .env que esta fatia removeu de ponta a ponta.
         $texto | Should -Not -Match '\$Winutil'
         $texto | Should -Not -Match 'PHPORTO_WINUTIL_PATH'
     }
 }
 
-# ==============================================================
-# O ARQUIVO DE CONCLUSAO — o unico sinal de fim
-# ==============================================================
-#
-# Ele carrega mais do que o PHP que espera precisa, e por um motivo medido:
-# quem espera ja sabe o que pediu, quem RECOLHE depois nao sabe de nada. Se o
-# php -S sair entre o filho terminar e a linha ser gravada, este arquivo e' tudo
-# o que resta da execucao.
 Describe 'worker - o arquivo de conclusao' {
 
     BeforeEach {
@@ -239,25 +176,18 @@ Describe 'worker - o arquivo de conclusao' {
     }
 
     It 'a hora de fim sai no formato do CURRENT_TIMESTAMP do banco, em UTC' {
-        # 'yyyy-MM-dd HH:mm:ss'. Sem isso o recolhimento gravaria um carimbo
-        # que o banco nao entende, e a ordenacao por created_at iria para o
-        # espaco.
         Write-Done 'teste02' 0 1 '' 'audit' $null
 
         $j = Get-Content (Join-Path $Script:Trabalho 'win-done-teste02.json') -Raw | ConvertFrom-Json
 
         $j.fim | Should -Match '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$'
 
-        # E e' UTC, nao hora local: comparado com o agora em UTC, a diferenca
-        # tem de ser de segundos.
         $agora = [DateTime]::UtcNow
         $lido  = [DateTime]::ParseExact($j.fim, 'yyyy-MM-dd HH:mm:ss', [System.Globalization.CultureInfo]::InvariantCulture)
         [Math]::Abs(($agora - $lido).TotalMinutes) | Should -BeLessThan 2
     }
 
     It 'params sai como OBJETO JSON, e nao como texto de tipo .NET' {
-        # Com o -Depth padrao (2) o hashtable aninhado sairia serializado como
-        # o nome do tipo, e o PHP receberia uma string onde espera objeto.
         Write-Done 'teste03' 0 1 '' 'tweaks' ([ordered]@{ Preset = 'advanced'; Undo = $true })
 
         $bruto = Get-Content (Join-Path $Script:Trabalho 'win-done-teste03.json') -Raw
@@ -305,12 +235,11 @@ Describe 'worker - o arquivo de conclusao' {
     }
 
     It 'outra acao com um parametro chamado Pin nao seria mascarada por engano' {
-        # A lista e' por acao: so o que $SEGREDOS declara sai como ***.
         (Hide-PhportoSegredos 'gdid' ([ordered]@{ SubAction = 'status' }))['SubAction'] | Should -Be 'status'
         (Hide-PhportoSegredos 'sunshine' $null).Count | Should -Be 0
     }
 
-    It 'o JSON sai sem BOM — com BOM o json_decode do PHP devolve null' {
+    It 'o JSON sai sem BOM, com BOM o json_decode do PHP devolve null' {
         Write-Done 'teste06' 0 1 '' 'audit' $null
 
         $bytes = [System.IO.File]::ReadAllBytes((Join-Path $Script:Trabalho 'win-done-teste06.json'))
@@ -318,30 +247,31 @@ Describe 'worker - o arquivo de conclusao' {
     }
 
     It 'a interrupcao existe como caminho proprio, e deixa sinal de fim' {
-        # A funcao que fecha o buraco medido: antes, o laco saia por
-        # "pai desapareceu" matando o filho e sem escrever conclusao nenhuma —
-        # entao nao havia o que recolher, e a execucao desaparecia.
         Get-Command -Name 'Stop-FilhoComSinal' -CommandType Function -ErrorAction SilentlyContinue |
             Should -Not -BeNullOrEmpty
 
         $texto = Get-Content -Path $Script:Worker -Raw
 
-        # Os dois caminhos de saida do laco passam por ela.
         $texto | Should -Match "Stop-FilhoComSinal 'pai desapareceu'"
         $texto | Should -Match "Stop-FilhoComSinal 'desligando'"
         $texto | Should -Match "Write-Done .*'interrompido'"
     }
 }
 
-# ==============================================================
-# A TRANCA — Test-Job contra a allowlist
-# ==============================================================
-#
-# Esta e' a allowlist que importa: a do lado elevado, a ultima a validar antes
-# de executar. A do PHP recusa mais cedo e com mensagem melhor, mas quem
-# escrever direto no arquivo de trabalho passa por cima dela — e nao por cima
-# desta.
 Describe 'worker - a allowlist do lado elevado' {
+
+    It 'um parametro de lista no meio nao apaga a allowlist da acao para os parametros seguintes' {
+        $item = @(Get-PhportoListaPermitida 'tweaks')[0]
+        $job  = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'tweaks'
+            params = [PSCustomObject]@{ Items = $item; Undo = $true }
+        }
+
+        $ok = Test-Job $job
+        $ok.params['Items'] | Should -Be @($item)
+        $ok.params['Undo']  | Should -BeTrue
+    }
 
     It 'conhece as dezessete acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
@@ -357,8 +287,6 @@ Describe 'worker - a allowlist do lado elevado' {
             params = [PSCustomObject]@{ SubAction = $_ }
         }
 
-        # A sensivel so passa no uso unico; o worker longo a recusa (ver
-        # 'worker - acoes sensiveis').
         $modo = if (Test-AcaoSensivel 'sunshine' @{ SubAction = $_ }) { 'UmaVez' } else { 'Laco' }
         (Test-Job $job -Modo $modo).params['SubAction'] | Should -Be $_
     }
@@ -399,8 +327,6 @@ Describe 'worker - a allowlist do lado elevado' {
         $p[$Campo] = $Valor
         $job = [PSCustomObject]@{ acao = 'sunshine'; params = [PSCustomObject]$p }
 
-        # O digito arabe (2 bytes cada) estoura o teto de 4 antes do padrao;
-        # os dois recusam, e as duas frases citam so o nome.
         { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "'$Campo' *"
     }
 
@@ -437,8 +363,6 @@ Describe 'worker - a allowlist do lado elevado' {
             params = [PSCustomObject]@{ SubAction = $_ }
         }
 
-        # A sensivel so passa no uso unico; o worker longo a recusa (ver
-        # 'worker - acoes sensiveis').
         $modo = if (Test-AcaoSensivel 'rdp' @{ SubAction = $_ }) { 'UmaVez' } else { 'Laco' }
         (Test-Job $job -Modo $modo).params['SubAction'] | Should -Be $_
     }
@@ -544,12 +468,6 @@ Describe 'worker - a allowlist do lado elevado' {
     }
 }
 
-# ==============================================================
-# O ALVO
-# ==============================================================
-# ==============================================================
-# A REGRA 'lista' — tweaks -Items e debloat -Packages
-# ==============================================================
 Describe 'worker - as regras lista' {
 
     It 'a lista de tweaks tem as 62 chaves, sem os quatro Button/Combobox' {
@@ -683,12 +601,6 @@ Describe 'worker - o provider do dns vem do dns.json' {
     }
 }
 
-# ==============================================================
-# LISTA NO SCRIPT GERADO — chega na acao como array
-# ==============================================================
-# O worker aberto aceita job de quem souber o nonce, e o nonce e' legivel no
-# marcador. Sair sozinho quando ninguem usa encurta essa janela. A conta e'
-# pura e fica numa funcao para dar para testar sem esperar dez minutos.
 Describe 'worker - sai sozinho quando fica ocioso' {
 
     BeforeAll {
@@ -727,7 +639,6 @@ Describe 'worker - sai sozinho quando fica ocioso' {
     It 'o laco usa a conta e sai com break' {
         $texto = Get-Content -Raw $Script:Worker
         $texto | Should -Match 'Test-WorkerOcioso \$ultimaAtividade \(Get-Date\) \$IDLE_TIMEOUT_S'
-        # Job lido conta como atividade, aceito ou recusado.
         $texto | Should -Match '(?s)if \(\$null -ne \$bruto\) \{\s+\$ultimaAtividade = Get-Date'
     }
 }
@@ -741,8 +652,6 @@ Describe 'worker - lista chega na acao como array' {
     }
 
     It 'lista de um item so continua array' {
-        # O ConvertFrom-Json devolve Object[]; sem a conversao a mao, um item
-        # so poderia chegar como string solta num parametro [string[]].
         $r = Invoke-ScriptGerado 'debloat' @{ Packages = [string[]]@('Microsoft.BingNews') }
         $r.Recebido.tipos.Packages     | Should -Be 'System.String[]'
         @($r.Recebido.params.Packages) | Should -Be @('Microsoft.BingNews')
@@ -766,8 +675,6 @@ Describe 'worker - o script gerado aponta para o bootstrap' {
     }
 
     It 'nunca carrega o bootstrap pelo caminho, so pelo texto conferido' {
-        # Dot-source pelo caminho leria o arquivo de novo, depois da
-        # conferencia, e quem o trocasse em laco acertaria a janela.
         $g = Get-ScriptGerado -Acao 'audit'
         $g.Texto | Should -Not -Match "\. '[^']*bootstrap\.ps1'"
     }
@@ -782,7 +689,7 @@ Describe 'worker - o script gerado aponta para o bootstrap' {
         $g.Texto | Should -Match "Invoke-PhportoWinAction -Action 'processes'"
     }
 
-    It 'funde os fluxos com *>&1 — sem isso o Write-Host nao entra na captura' {
+    It 'funde os fluxos com *>&1, sem isso o Write-Host nao entra na captura' {
         $g = Get-ScriptGerado -Acao 'processes'
         $g.Texto | Should -Match '\*>&1'
     }
@@ -804,9 +711,6 @@ Describe 'worker - o script gerado aponta para o bootstrap' {
     }
 }
 
-# ==============================================================
-# PARAMETROS — dado decodificado, por splatting
-# ==============================================================
 Describe 'worker - os parametros chegam na acao como dado' {
 
     It 'acao sem parametro chega com hashtable vazio' {
@@ -823,7 +727,6 @@ Describe 'worker - os parametros chegam na acao como dado' {
     }
 
     It 'inteiro chega como inteiro' {
-        # Int32 no 5.1, Int64 no 7: os dois ligam num parametro [int].
         $r = Invoke-ScriptGerado -Acao 'network' -Params @{ Duration = 60 }
         $r.Recebido.params.Duration | Should -Be 60
         $r.Recebido.tipos.Duration  | Should -Match '^System\.Int(32|64)$'
@@ -841,11 +744,6 @@ Describe 'worker - os parametros chegam na acao como dado' {
         $r.Recebido.params.Preset | Should -Be 'standard'
     }
 
-    <#
-        A GUARDA CONTRA INJECAO. Um valor que tenta fechar a string e emendar
-        um comando nem aparece no texto do script: ele viaja codificado, e o
-        script gerado continua parseando.
-    #>
     It 'valor com apostrofo nao aparece no script, e o script continua valido' {
         $veneno = "x'; Remove-Item C:\ -Recurse; '"
         $g      = Get-ScriptGerado -Acao 'install' -Params @{ Apps = $veneno }
@@ -865,14 +763,6 @@ Describe 'worker - os parametros chegam na acao como dado' {
     }
 }
 
-# ==============================================================
-# ASPA CURVA — o PowerShell fecha literal de apostrofo com ela
-# ==============================================================
-#
-# U+2018, U+2019, U+201A e U+201B fecham um literal de apostrofo como o '.
-# O escape antigo so dobrava o ', entao um -Apps com uma curva fechava a
-# string, e o $(...) seguinte rodava no script gerado, em integridade Alta.
-# O veneno daqui grava um arquivo-marca se virar codigo.
 Describe 'worker - aspa curva nao vira codigo' {
 
     It 'valor com <Nome> chega como dado, e nao executa' -ForEach @(
@@ -907,8 +797,6 @@ Describe 'worker - aspa curva nao vira codigo' {
         @{ Nome = 'U+201A'; Codigo = 0x201A }
         @{ Nome = 'U+201B'; Codigo = 0x201B }
     ) {
-        # A segunda camada: mesmo onde um valor ainda vira literal (caminhos,
-        # nome da acao), nenhuma aspa fecha a string.
         $aspa  = [string][char]$Codigo
         $valor = 'a' + $aspa + '; Get-Process; ' + $aspa + 'b'
 
@@ -923,18 +811,8 @@ Describe 'worker - aspa curva nao vira codigo' {
     }
 }
 
-# ==============================================================
-# CODIGO DE SAIDA — de verdade, rodando o script
-# ==============================================================
 Describe 'worker - o script gerado roda e devolve codigo' {
 
-    <#
-        Roda sem elevacao de proposito: o despachante lanca, o catch do script
-        gerado transforma isso em 1, e o arquivo de codigo e' escrito. Antes do
-        try/catch a excecao mataria o script antes dessas linhas, o worker nao
-        acharia arquivo nenhum e registraria exit nulo — que na tela nao se
-        distingue de "terminou sem dizer nada".
-    #>
     It 'recusa por falta de elevacao vira exit 1, com o motivo na saida' {
         $g = Get-ScriptGerado -Acao 'processes'
 
@@ -955,8 +833,6 @@ Describe 'worker - o script gerado roda e devolve codigo' {
     }
 
     It 'acao fora do mapa tambem vira exit 1, sem executar nada' {
-        # A allowlist do worker nunca deixaria chegar aqui; o teste prova que a
-        # ultima barreira tambem responde com codigo, e nao com silencio.
         $g = Get-ScriptGerado -Acao 'rm-rf'
 
         $saidaArq = Join-Path $Script:Trabalho ('out-' + $g.Id + '.txt')
@@ -970,14 +846,6 @@ Describe 'worker - o script gerado roda e devolve codigo' {
     }
 }
 
-# ==============================================================
-# MANIFESTO — o que entra elevado e' o que estava la ao ligar
-# ==============================================================
-#
-# src/Win e' gravavel por qualquer processo do usuario. O PHP tira o SHA-256 de
-# cada arquivo ao ligar, e o lado elevado confere logo antes de carregar. A
-# conferencia e' sobre os MESMOS bytes que entram: ler, conferir e depois
-# carregar pelo caminho deixaria uma janela para quem troca o arquivo em laco.
 Describe 'worker - Read-PhportoConferido' {
 
     BeforeAll {
@@ -1024,8 +892,6 @@ Describe 'worker - Read-PhportoConferido' {
     }
 
     It 'todo arquivo do manifesto real decodifica e parseia' {
-        # Os sem BOM saem como UTF-8, e nao como ANSI: dois deles tem acento,
-        # so em comentario. Este teste acusa se um dia houver acento fora dele.
         foreach ($chave in $global:MANIFESTO.Keys) {
             $texto = Read-PhportoConferido $Script:PastaWin $chave $global:MANIFESTO
             if ($chave -like '*.json') {
@@ -1133,8 +999,6 @@ Describe 'worker - o script gerado so roda bootstrap conferido' {
     }
 }
 
-# O bootstrap e' quem confere lib/, actions/ e config/. Aqui ele roda numa
-# copia de src/Win, para o teste poder estragar arquivo sem tocar no real.
 Describe 'bootstrap - com manifesto, so carrega o que bate' {
 
     BeforeAll {
@@ -1149,7 +1013,6 @@ Describe 'bootstrap - com manifesto, so carrega o que bate' {
 
     It 'arvore igual ao manifesto carrega' {
         $global:PhportoManifesto = New-ManifestoDeTeste $Script:Copia
-        # Fora de { }: dentro dele as funcoes do bootstrap morreriam com o bloco.
         Remove-Item function:Invoke-PhportoWinAction -ErrorAction SilentlyContinue
         . $Script:BootCopia
         Get-Command Invoke-PhportoWinAction -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
@@ -1169,7 +1032,6 @@ Describe 'bootstrap - com manifesto, so carrega o que bate' {
     }
 
     It 'config alterado depois do manifesto bloqueia a carga' {
-        # O tweaks.json carrega PowerShell: config e' codigo aqui.
         $global:PhportoManifesto = New-ManifestoDeTeste $Script:Copia
         $alvo = Join-Path $Script:Copia 'config/dns.json'
         $antes = [System.IO.File]::ReadAllBytes($alvo)
@@ -1197,13 +1059,6 @@ Describe 'bootstrap - com manifesto, so carrega o que bate' {
     }
 }
 
-# ==============================================================
-# PASTA PROTEGIDA — onde moram os scripts gerados e os resultados
-# ==============================================================
-#
-# As chamadas de ACL so existem no Windows. A decisao fica em funcoes puras,
-# testadas aqui; o que toca o disco fica em funcoes pequenas, trocadas por
-# Mock, como os outros testes fazem com os cmdlets do Windows.
 Describe 'worker - as regras da pasta protegida' {
 
     BeforeAll {
@@ -1260,8 +1115,6 @@ Describe 'worker - Test-PastaProtegida' {
 Describe 'worker - Initialize-PastaProtegida' {
 
     BeforeEach {
-        # A trava e' um arquivo de verdade, entao a pasta existe de verdade; a
-        # criacao e a ACL e' que sao trocadas por Mock.
         $Script:Pasta = Join-Path $Script:Trabalho ('protegida-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $Script:Pasta | Out-Null
         $Script:Ok = [PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $false; Dono = 'S-1-5-32-544' }
@@ -1315,7 +1168,6 @@ Describe 'worker - Initialize-PastaProtegida' {
         Mock Get-PastaInfo { $Script:Chamadas++; if ($Script:Chamadas -eq 1) { $Script:Ok } else { [PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $true; Dono = $null } } }
 
         { Initialize-PastaProtegida $Script:Pasta 'S-1-5-21-1' } | Should -Throw -ExpectedMessage '*link ou juncao*'
-        # Trava solta: o arquivo abre de novo sem compartilhar nada.
         $f = [System.IO.File]::Open((Join-Path $Script:Pasta 'win-trava'), 'Open', 'ReadWrite', 'None')
         $f.Dispose()
     }
@@ -1324,9 +1176,6 @@ Describe 'worker - Initialize-PastaProtegida' {
 Describe 'worker - Get-UsuarioPhp' {
 
     BeforeAll {
-        # Os cmdlets de CIM nao existem no pwsh fora do Windows, e o Mock exige
-        # um comando para substituir.
-        # Cada um a parte: outro arquivo de teste pode ter deixado um deles.
         $Script:StubGet = -not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)
         $Script:StubInv = -not (Get-Command Invoke-CimMethod -ErrorAction SilentlyContinue)
         if ($Script:StubGet) { function global:Get-CimInstance { param($ClassName, $Filter) } }
@@ -1365,9 +1214,6 @@ Describe 'worker - resultados na pasta protegida' {
     }
 }
 
-# ==============================================================
-# ACOES SENSIVEIS — o worker longo recusa, o uso unico so roda elas
-# ==============================================================
 Describe 'worker - acoes sensiveis' {
 
     It 'toda acao e subacao sensivel existe na allowlist' {
@@ -1446,6 +1292,16 @@ Describe 'worker - acoes sensiveis' {
         $ok.params['Apps'] | Should -Be 'Mozilla.Firefox'
     }
 
+    It 'o uso unico recusa Apps fora do formato de ID do winget: <_>' -ForEach @('Git.Git --override x', 'a"b.c', 'Git .Git', 'Git.Git, Mozilla.Firefox', 'Git', '--override') {
+        $job = [PSCustomObject]@{ acao = 'install'; params = [PSCustomObject]@{ Apps = $_ } }
+        { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "'Apps' fora do formato"
+    }
+
+    It 'o uso unico aceita lista de IDs do winget separada por virgula' {
+        $job = [PSCustomObject]@{ acao = 'install'; params = [PSCustomObject]@{ Apps = 'Git.Git,Python.Python.3.12,Notepad++.Notepad++' } }
+        (Test-Job $job -Modo UmaVez).params['Apps'] | Should -Be 'Git.Git,Python.Python.3.12,Notepad++.Notepad++'
+    }
+
     It 'o uso unico recusa acao comum' {
         $job = [PSCustomObject]@{ acao = 'rdp'; params = [PSCustomObject]@{ SubAction = 'off' } }
         { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "*so roda acao sensivel, e 'rdp off' nao e'*"
@@ -1462,9 +1318,6 @@ Describe 'worker - acoes sensiveis' {
     }
 }
 
-# ==============================================================
-# O PEDIDO DO USO UNICO
-# ==============================================================
 Describe 'worker - Read-PhportoPedido' {
 
     BeforeAll {
@@ -1568,9 +1421,6 @@ Describe 'worker - Read-PhportoPedido' {
     }
 }
 
-# ==============================================================
-# OS DOIS MODOS DE LINHA DE COMANDO
-# ==============================================================
 Describe 'worker - dois modos de linha de comando' {
 
     BeforeAll {
@@ -1611,9 +1461,6 @@ Describe 'worker - dois modos de linha de comando' {
     }
 }
 
-# ==============================================================
-# A TRAVA: o worker longo e o uso unico ao mesmo tempo
-# ==============================================================
 Describe 'worker - a trava abre duas vezes' {
 
     It 'dois Initialize-PastaProtegida na mesma pasta convivem' {
@@ -1635,8 +1482,6 @@ Describe 'worker - a trava abre duas vezes' {
     }
 
     It 'com a trava aberta, ninguem apaga o arquivo da trava' -Skip:(-not $IsWindows -and $PSVersionTable.PSVersion.Major -ge 6) {
-        # Comportamento do Windows: arquivo aberto sem FILE_SHARE_DELETE nao
-        # sai. No Linux o unlink de arquivo aberto e permitido, dai o Skip.
         $pasta = Join-Path $Script:Trabalho ('trava-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $pasta | Out-Null
         Mock Get-PastaInfo { [PSCustomObject]@{ Existe = $true; Pasta = $true; Link = $false; Dono = 'S-1-5-32-544' } }
@@ -1650,9 +1495,6 @@ Describe 'worker - a trava abre duas vezes' {
     }
 }
 
-# ==============================================================
-# O USO UNICO DE PONTA A PONTA, com o Windows trocado por Mock
-# ==============================================================
 Describe 'worker - Invoke-UmaVez' {
 
     BeforeEach {

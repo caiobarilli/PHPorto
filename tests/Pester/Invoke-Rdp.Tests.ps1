@@ -1,28 +1,16 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Pester 5+ tests for src/Win/actions/Invoke-Rdp.ps1
-.DESCRIPTION
-    Mock-based unit tests for each SubAction. The registry is never touched:
-    reads go through a mocked Get-ItemProperty and writes through a mocked
-    Set-WinUtilRegistry, so the suite runs unelevated and changes nothing.
-#>
 
 BeforeAll {
     $Script:RaizProjeto = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
     $Script:PastaWin    = Join-Path $Script:RaizProjeto 'src\Win'
     $Script:Acao        = Join-Path $Script:PastaWin 'actions\Invoke-Rdp.ps1'
 
-    # Loads Write-Status, $sync, $root, lib/ (Set-WinUtilRegistry) and every action.
     . (Join-Path $Script:PastaWin 'bootstrap.ps1')
 
     $Script:TsControl = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server'
     $Script:TsPolicy  = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
 }
 
-# ==============================================================
-# SANITY
-# ==============================================================
 Describe "Invoke-Rdp - Sanity" {
 
     It "Invoke-Rdp.ps1 exists in actions/" {
@@ -46,9 +34,6 @@ Describe "Invoke-Rdp - Sanity" {
     }
 }
 
-# ==============================================================
-# SUBACTION — missing / unknown
-# ==============================================================
 Describe "Invoke-Rdp - SubAction validation" {
 
     It "emits [ ERROR ] and lists the options when no subaction is given" {
@@ -64,9 +49,6 @@ Describe "Invoke-Rdp - SubAction validation" {
     }
 }
 
-# ==============================================================
-# SUBACTION — status (read only)
-# ==============================================================
 Describe "Invoke-Rdp - SubAction status" {
 
     It "reports RDP on, NLA required, default port, H.264 on and UDP transport" {
@@ -121,9 +103,6 @@ Describe "Invoke-Rdp - SubAction status" {
     }
 }
 
-# ==============================================================
-# SUBACTION — on / off (Applied, takes effect immediately)
-# ==============================================================
 Describe "Invoke-Rdp - on and off" {
 
     It "on clears fDenyTSConnections and enables the Remote Desktop firewall group" {
@@ -155,9 +134,6 @@ Describe "Invoke-Rdp - on and off" {
     }
 }
 
-# ==============================================================
-# SUBACTION — h264-on / h264-off (PendingReboot)
-# ==============================================================
 Describe "Invoke-Rdp - H.264/UDP" {
 
     It "h264-on prefers AVC444 and sets SelectTransport to both, warning about the restart" {

@@ -1,18 +1,4 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Testes do src/Win/bootstrap.ps1 — o ambiente que as acoes assumem pronto.
-
-.DESCRIPTION
-    ESTES TESTES RODAM SEM ELEVACAO, e e' de proposito: o bootstrap so checa
-    Administrador no despachante, nao no carregamento, justamente para poder
-    ser testado num terminal comum. A recusa por falta de elevacao e' um dos
-    casos cobertos aqui.
-
-    O QUE ELES COBREM: a arvore, o encoding de cada .ps1, o que veio do upstream
-    intocado, o ambiente ($root, $sync.configs) e o despachante. O comportamento
-    de cada acao e' testado nos arquivos ao lado, um por acao.
-#>
 
 BeforeAll {
     $Script:RaizProjeto = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -22,9 +8,6 @@ BeforeAll {
     . $Script:Bootstrap
 }
 
-# ==============================================================
-# ARQUIVOS E ENCODING
-# ==============================================================
 Describe 'bootstrap - arvore e encoding' {
 
     It 'bootstrap.ps1 existe em src/Win' {
@@ -39,7 +22,7 @@ Describe 'bootstrap - arvore e encoding' {
         $erros.Count | Should -Be 0
     }
 
-    It 'bootstrap.ps1 tem BOM UTF-8 — sem ele o 5.1 le como ANSI' {
+    It 'bootstrap.ps1 tem BOM UTF-8, sem ele o 5.1 le como ANSI' {
         $bytes = [System.IO.File]::ReadAllBytes($Script:Bootstrap)
         $bytes[0] | Should -Be 0xEF
         $bytes[1] | Should -Be 0xBB
@@ -49,7 +32,6 @@ Describe 'bootstrap - arvore e encoding' {
     It 'bootstrap.ps1 tem CRLF' {
         $texto = [System.IO.File]::ReadAllText($Script:Bootstrap)
         $texto | Should -Match "`r`n"
-        # Nenhum LF solto: todo \n precisa vir precedido de \r.
         [regex]::Matches($texto, "(?<!`r)`n").Count | Should -Be 0
     }
 
@@ -72,9 +54,6 @@ Describe 'bootstrap - arvore e encoding' {
     }
 }
 
-# ==============================================================
-# ARQUIVOS COPIADOS — intocados
-# ==============================================================
 Describe 'bootstrap - o que veio do upstream' {
 
     It 'lib/ tem as doze primitivas vivas, e so elas' {
@@ -97,7 +76,7 @@ Describe 'bootstrap - o que veio do upstream' {
         )
     }
 
-    It 'os arquivos copiados sao ASCII puro — por isso nao levam BOM' {
+    It 'os arquivos copiados sao ASCII puro, por isso nao levam BOM' {
         $suspeitos = @()
 
         Get-ChildItem -Path (Join-Path $Script:PastaWin 'lib') -Filter '*.ps1' -File |
@@ -128,9 +107,6 @@ Describe 'bootstrap - o que veio do upstream' {
     }
 }
 
-# ==============================================================
-# ACTIONS — as quinze, e o tripwire de encoding
-# ==============================================================
 Describe 'bootstrap - as acoes migradas' {
 
     It 'actions/ tem as dezessete, e so elas' {
@@ -138,9 +114,6 @@ Describe 'bootstrap - as acoes migradas' {
             Select-Object -ExpandProperty BaseName | Sort-Object)
 
         $nomes.Count | Should -Be 17
-        # Ordem do Sort-Object, que ignora caixa: Debloat antes de DNS, Gdid
-        # antes de GPU, Hyperv e HypervVm entre GPU e Install, Rdp e Sunshine
-        # entre Processes e Tweaks.
         $nomes | Should -Be @(
             'Invoke-Audit', 'Invoke-Debloat', 'Invoke-DNS', 'Invoke-Exporter',
             'Invoke-Gdid', 'Invoke-GPU', 'Invoke-Hyperv', 'Invoke-HypervVm', 'Invoke-Install',
@@ -149,15 +122,6 @@ Describe 'bootstrap - as acoes migradas' {
         )
     }
 
-    <#
-        O TRIPWIRE DA REGRA DE ENCODING.
-
-        Invoke-Gdid.ps1 e Invoke-Optimize.ps1 tem bytes acima de 0x7F e nao tem
-        BOM (ver THIRD-PARTY.md). Hoje isso e' inofensivo: os bytes estao so em
-        comentario. Se alguem escrever um travessao dentro de string num
-        arquivo sem BOM, o 5.1 le o 0x94 como aspa de fechamento e o parser
-        quebra — e ESTE teste e' quem avisa, apontando o arquivo.
-    #>
     It 'todo Invoke-*.ps1 de actions/ parseia sem erro' {
         $ruins = @()
 
@@ -173,7 +137,7 @@ Describe 'bootstrap - as acoes migradas' {
         $ruins | Should -BeNullOrEmpty
     }
 
-    It 'so dois arquivos de actions/ carregam byte alto sem BOM — e sao os conhecidos' {
+    It 'nenhum arquivo de actions/ carrega byte alto sem BOM' {
         $semBom = @()
 
         Get-ChildItem -Path (Join-Path $Script:PastaWin 'actions') -Filter 'Invoke-*.ps1' -File |
@@ -184,7 +148,7 @@ Describe 'bootstrap - as acoes migradas' {
                 if ($temAlto -and -not $temBom) { $semBom += $_.BaseName }
             }
 
-        @($semBom | Sort-Object) | Should -Be @('Invoke-Gdid', 'Invoke-Optimize')
+        @($semBom).Count | Should -Be 0 -Because ($semBom -join ', ')
     }
 
     It 'nenhuma acao pergunta: Read-Host nao existe mais em actions/' {
@@ -210,9 +174,6 @@ Describe 'bootstrap - as acoes migradas' {
     }
 }
 
-# ==============================================================
-# WRITE-STATUS
-# ==============================================================
 Describe 'bootstrap - Write-Status' {
 
     It 'Write-Status esta disponivel' {
@@ -236,17 +197,14 @@ Describe 'bootstrap - Write-Status' {
     }
 }
 
-# ==============================================================
-# AMBIENTE — $root e $sync
-# ==============================================================
 Describe 'bootstrap - o ambiente que as acoes assumem' {
 
-    It '$root aponta para src/Win — e o Invoke-Audit depende disso' {
+    It '$root aponta para src/Win, e o Invoke-Audit depende disso' {
         $global:root | Should -Be $Script:PastaWin
         Test-Path (Join-Path $global:root 'audit\audit.ps1') | Should -BeTrue
     }
 
-    It '$root tem a pasta tools — e o Invoke-Memory depende disso' {
+    It '$root tem a pasta tools, e o Invoke-Memory depende disso' {
         Test-Path (Join-Path $global:root 'tools') | Should -BeTrue
     }
 
@@ -271,27 +229,6 @@ Describe 'bootstrap - o ambiente que as acoes assumem' {
         }
     }
 
-    <#
-        BURACO CONHECIDO NOS DADOS DO UPSTREAM, achado ao migrar e deixado como
-        estava: 'WPFTweaksDVR' e' citado pelos presets Standard e Advanced e NAO
-        EXISTE em tweaks.json. Conferido no winutil-cli antes da copia — chegou
-        assim, os arquivos aqui sao byte a byte iguais (hashes no
-        THIRD-PARTY.md).
-
-        O efeito em producao e' silencioso e por isso merece teste: o
-        Invoke-WinUtilTweaks nao acha service, registry nem script, pula as tres
-        pontas sem reclamar, e o Invoke-Tweaks escreve "[ OK ] WPFTweaksDVR" —
-        um sucesso relatado para um tweak que nao aconteceu.
-
-        Nao foi corrigido aqui de proposito: consertar dado do upstream dentro
-        do commit que so muda endereco e' misturar duas mudancas, e quebraria a
-        comparacao byte a byte que da sentido ao THIRD-PARTY.md.
-
-        Os dois testes abaixo se sustentam: um garante que TODO o resto resolve,
-        o outro fixa o buraco. Se o dado for corrigido um dia, o segundo falha e
-        avisa que a excecao do primeiro pode sair.
-    #>
-
     It 'todo tweak citado pelos presets existe em tweaks.json, fora o buraco conhecido' {
         $conhecido = @('WPFTweaksDVR')
         $faltando  = @()
@@ -308,16 +245,13 @@ Describe 'bootstrap - o ambiente que as acoes assumem' {
         $faltando | Should -BeNullOrEmpty
     }
 
-    It 'WPFTweaksDVR continua ausente de tweaks.json — o buraco herdado' {
+    It 'WPFTweaksDVR continua ausente de tweaks.json, o buraco herdado' {
         $global:sync.configs.preset.Standard | Should -Contain 'WPFTweaksDVR'
         $global:sync.configs.tweaks.WPFTweaksDVR |
             Should -BeNullOrEmpty -Because 'se isto passar a existir, tire a excecao do teste acima'
     }
 }
 
-# ==============================================================
-# DESPACHANTE
-# ==============================================================
 Describe 'bootstrap - despachante' {
 
     It 'Invoke-PhportoWinAction esta disponivel' {
@@ -363,9 +297,6 @@ Describe 'bootstrap - despachante' {
     It 'recusa acao mapeada cuja funcao nao foi carregada' {
         Mock Test-PhportoElevado { $true }
 
-        # Entrada fantasma: com actions/ cheia, este e' o unico jeito de
-        # exercitar o ramo — e ele existe para o dia em que um arquivo de
-        # actions/ sumir sem o mapa saber.
         $global:PhportoWinActions['fantasma'] = 'Invoke-Fantasma'
         try {
             { Invoke-PhportoWinAction -Action 'fantasma' } |
@@ -398,7 +329,7 @@ Describe 'bootstrap - despachante' {
             Should -Throw -ExpectedMessage 'PHPorto: sem elevacao'
     }
 
-    It 'recusa sem elevacao mesmo com acao desconhecida — a elevacao vem primeiro' {
+    It 'recusa sem elevacao mesmo com acao desconhecida, a elevacao vem primeiro' {
         Mock Test-PhportoElevado { $false }
         { Invoke-PhportoWinAction -Action 'rm-rf' } |
             Should -Throw -ExpectedMessage 'PHPorto: sem elevacao'

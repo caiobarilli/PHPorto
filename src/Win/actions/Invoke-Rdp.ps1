@@ -53,9 +53,6 @@
             Write-Status INFO "H.264/AVC 444 video: off (AVC444ModePreferred=$avc)."
         }
 
-        # The message named fClientDisableUDP for UDP, but that value is a client
-        # lever under \Client and is absent on this host; the server transport
-        # lives in SelectTransport (0 both, 1 TCP only, 2 either).
         $transport = Get-RdpValue $tsPolicy 'SelectTransport'
         if ($null -eq $transport) {
             Write-Status INFO "UDP transport: Windows default (SelectTransport not set; UDP available)."

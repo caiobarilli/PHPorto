@@ -80,7 +80,7 @@ foreach ($view->tweaks as $tw) {
     <a href="/config">configuração</a>
   </div>
   <p class="sub">
-    As treze ações do Windows, executadas por um PowerShell com privilégio de
+    As ações do Windows, executadas por um PowerShell com privilégio de
     Administrador. Cada ação é registrada no banco com tipo <code>windows</code>.
   </p>
 

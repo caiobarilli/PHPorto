@@ -32,6 +32,8 @@ enum WinAction: string
 
     public const MAX_PARAM_BYTES = 4096;
 
+    public const WINGET_ID_PATTERN = '/\A[A-Za-z0-9][A-Za-z0-9_+-]*(?:\.[A-Za-z0-9_+-]+)+\z/';
+
     public const DNS_EXTRA = ['DHCP'];
 
     public const TWEAK_PRESETS = ['standard', 'minimal', 'advanced'];
@@ -378,17 +380,19 @@ enum WinAction: string
 
         $itens = array_values(array_filter(array_map('trim', explode(',', $apps)), static fn (string $i): bool => $i !== ''));
 
-        if ($marcados === '') {
-            if ($itens === []) {
-                throw new InvalidArgumentException('Informe ao menos um app, separados por vírgula, ou marque um dos principais.');
-            }
+        if ($marcados === '' && $itens === []) {
+            throw new InvalidArgumentException('Informe ao menos um app, separados por vírgula, ou marque um dos principais.');
+        }
 
-            return ['Apps' => $apps];
+        foreach ($itens as $id) {
+            if (preg_match(self::WINGET_ID_PATTERN, $id) !== 1) {
+                throw new InvalidArgumentException('App fora do formato de ID do winget (Editor.Nome): ' . $id . '.');
+            }
         }
 
         $jaTem = array_map('strtolower', $itens);
 
-        foreach (explode(',', $marcados) as $id) {
+        foreach ($marcados === '' ? [] : explode(',', $marcados) as $id) {
             if (!in_array(strtolower($id), $jaTem, true)) {
                 $itens[] = $id;
                 $jaTem[]  = strtolower($id);

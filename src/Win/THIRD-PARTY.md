@@ -34,7 +34,7 @@ sha256sum src/Win/lib/*.ps1 src/Win/config/{dns,preset,tweaks}.json
 
 | Arquivo | SHA-256 |
 |---|---|
-| `lib/Install-WinUtilProgramWinget.ps1` ⚠ editado | `3033060596ec8ee00a037b053d598b3ca46b12cf4fb1ef9b3e970b5013cb4005` |
+| `lib/Install-WinUtilProgramWinget.ps1` ⚠ editado | `f601ff68f7eb0ece80e2991fc48c075dc2a358c2dc8a59c2c01762a8ce7500bc` |
 | `lib/Install-WinUtilWinget.ps1` | `c97374d0d64ccd597c34407a7c0aa7e7b7efcb2c8a4b4a85261046c4ab7da499` |
 | `lib/Invoke-WinUtilExplorerUpdate.ps1` ⚠ editado | `a60d7020607f49c6ca891d1b5e56b8639c8d02249be90e5fa174699a6beb038e` |
 | `lib/Invoke-WinUtilRemoveEdge.ps1` | `ca2b9ebd53c4fc715245056503cf10535f9e07d55f234af5e763cdfcd5252a7c` |
@@ -88,7 +88,7 @@ daqui; o da origem está abaixo, para a divergência ser conferível.
 | Arquivo | SHA-256 da origem (checkout de `153900a`) | O que mudou, e por quê |
 |---|---|---|
 | `lib/Invoke-WinUtilExplorerUpdate.ps1` | `e5299b43cae5a8d92896889f7ea1a69a4773e9262e9705789798f4dad5f5baa0` | O aviso ao shell (`SendMessageTimeout` com `WM_SETTINGCHANGE`) roda **síncrono**, no próprio fluxo, em vez de dentro de `Invoke-WPFRunspace`. Aquele helper usa `$sync.runspace`, o pool de runspaces da janela do WinUtil, que não existe no worker. O retorno da chamada vai para `Out-Null`, porque fora do pool ele cairia na saída da ação. O modo `restart` ficou como estava. |
-| `lib/Install-WinUtilProgramWinget.ps1` | `6f6c8c7dcc89e18140ac23c8c6eae13506152726a2b0eb9c0ef4f6f8e79d7740` | Instala **um pacote por vez**, por `--id` com `--exact`, com `--accept-source-agreements` e `--disable-interactivity`, e **devolve o código de saída** de cada um (`-Wait -PassThru`). Na origem era um `winget install` só, com a lista juntada por espaço, busca por nome e sem aceitar os termos da fonte: nome ambíguo e primeira execução numa máquina limpa fazem o winget perguntar, e dentro do worker elevado não há quem responda. E sem `-PassThru` o código de saída se perdia. |
+| `lib/Install-WinUtilProgramWinget.ps1` | `6f6c8c7dcc89e18140ac23c8c6eae13506152726a2b0eb9c0ef4f6f8e79d7740` | Instala **um pacote por vez**, por `--id` com `--exact`, com `--accept-source-agreements` e `--disable-interactivity`, e **devolve o código de saída** de cada um (`-Wait -PassThru`). Na origem era um `winget install` só, com a lista juntada por espaço, busca por nome e sem aceitar os termos da fonte: nome ambíguo e primeira execução numa máquina limpa fazem o winget perguntar, e dentro do worker elevado não há quem responda. E sem `-PassThru` o código de saída se perdia. Depois, os argumentos passaram a ir como lista, e cada ID é conferido contra o formato do winget (`Editor.Nome`) antes de chegar ao `Start-Process`, para que um ID nunca vire opção a mais. |
 | `lib/Invoke-WinutilThemeChange.ps1` | `0984330830806ca60ea617b70673993f3870b59e53f17f75e01c56c72c0fc1a4` | O corpo saiu e a função **não faz nada**, com a mesma assinatura. Na origem ela repinta a janela do WinUtil (`$sync.Form`, temas, preferências); aqui não há janela. O modo escuro do Windows é a parte de registro do `WPFToggleDarkMode`, que continua sendo aplicada. |
 
 ### Por que três JSON, e não cinco
@@ -166,22 +166,18 @@ tela oferece, e o nome das três categorias, pela chave do `tweaks.json`. O
 tabela prova. Tweak sem tradução, ou arquivo ausente, aparece na tela com o
 texto original; só a exibição usa este arquivo, e nenhuma ação o lê.
 
-### Uma divergência conhecida da regra de encoding
+### Uma divergência que deixou de existir
 
-`Invoke-Gdid.ps1` e `Invoke-Optimize.ps1` carregam bytes acima de `0x7F` e
-**não têm BOM** — são os únicos `.ps1` daqui nessa situação.
+`Invoke-Gdid.ps1` e `Invoke-Optimize.ps1` não têm BOM e carregavam bytes acima
+de `0x7F` só em comentário (caixas de `─` e travessões). Os comentários dos
+`.ps1` do projeto saíram, e com eles esses bytes: hoje os dois são ASCII puro,
+e a falta de BOM não tem o que estragar. O teste que parseia os `Invoke-*.ps1`
+passou a exigir que nenhum deles tenha byte alto sem BOM. O `Invoke-Optimize`
+continua montando as palavras acentuadas com `[char]0x00E9`, em vez de
+escrevê-las.
 
-Medido: em ambos, esses bytes estão **só em comentário** (caixas de `─` e
-travessões), e os dois parseiam sem erro. O `Invoke-Optimize` já contornava a
-falta de BOM à mão, montando as palavras acentuadas com `[char]0x00E9` em vez
-de escrevê-las: os textos comparados com o `query session` são construídos, não
-literais.
-
-Ficaram sem BOM porque pôr um é mudar bytes num commit que só muda endereço. É
-tripwire, não conserto: o teste que parseia todo `Invoke-*.ps1` falha na hora em
-que alguém escrever um travessão dentro de string num desses dois arquivos —
-que é exatamente o acidente descrito no `bootstrap.ps1`. Pôr o BOM nos dois é
-commit próprio, de uma linha cada.
+Os arquivos de `lib/` são do upstream e ficaram com os comentários: tirar
+mudaria os hashes da tabela da seção 1, que provam a cópia byte a byte.
 
 ---
 

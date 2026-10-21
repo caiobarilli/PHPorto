@@ -1,6 +1,6 @@
 # A tela do Windows
 
-`/win` executa treze ações de manutenção do Windows. Elas exigem Administrador,
+`/win` executa as ações de manutenção do Windows. Elas exigem Administrador,
 e por isso rodam num PowerShell elevado, aberto pela tela `/config`.
 
 ## Ligar o PowerShell elevado

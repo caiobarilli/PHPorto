@@ -15,7 +15,6 @@ function Invoke-Tweaks {
         $rotulo = 'Selection'
         $alvo   = 'selection'
     } elseif ($Preset) {
-        # preset.json uses Title-Case keys (Standard / Minimal / Advanced)
         $key = (Get-Culture).TextInfo.ToTitleCase($Preset.ToLower())
 
         $list = $sync.configs.preset.$key
@@ -60,14 +59,6 @@ function Invoke-Tweaks {
     Write-Status OK "$rotulo $($modo.ToLower()) successfully."
 }
 
-<#
-    Lists the commands a tweak's script would reach that do not exist here.
-
-    Receives the tweak key and whether it is an undo. Follows every function
-    the script calls that is not part of a module into that function's own
-    body. Returns the missing command names, empty when all of them resolve
-    or the tweak has no script for that direction.
-#>
 function Get-PhportoMissingTweakCommand {
     param(
         [string]$CheckBox,
@@ -86,12 +77,6 @@ function Get-PhportoMissingTweakCommand {
     return $ausentes.ToArray()
 }
 
-<#
-    Walks one script AST and records the commands it calls that do not exist.
-
-    Receives the AST, the list that collects missing names and the set of
-    functions already walked. Returns nothing; fills the list.
-#>
 function Find-PhportoMissingCommand {
     param(
         [System.Management.Automation.Language.Ast]$Ast,

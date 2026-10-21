@@ -11,8 +11,6 @@ function Invoke-Audit {
                 return
             }
             Write-Status INFO "Generating system audit..."
-            # Pelo texto conferido, e nao pelo caminho: elevado, o audit.ps1
-            # so roda se bater com o manifesto (ver Read-PhportoFonte).
             & ([scriptblock]::Create((Read-PhportoFonte 'audit/audit.ps1')))
             Write-Status OK "Audit complete."
         }
@@ -26,17 +24,6 @@ function Invoke-Audit {
     }
 }
 
-<#
-    Opens the audit log folder in the Explorer of the machine running the server.
-
-    Receives nothing. Opens today's C:\log\DD.MM.YYYY when it exists, C:\log
-    when only older audits exist, and writes an ERROR when there is no log
-    yet. Returns nothing.
-
-    The execution record of this subaction says exit 0 every time: explorer.exe
-    hands the path to the shell that is already running and returns at once, so
-    the exit code does not prove that any window opened.
-#>
 function Open-PhportoAuditFolder {
     $raiz = 'C:\log'
     $hoje = Join-Path $raiz (Get-Date -Format 'dd.MM.yyyy')

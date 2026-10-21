@@ -48,7 +48,7 @@ O `tweaks.json` do upstream também traz uma lacuna de dados conhecida: o
 
 ## Código do projeto que veio do winutil-cli
 
-`src/Win/actions/` (as treze ações) e `src/Win/audit/audit.ps1` vieram do
+`src/Win/actions/` (as treze ações originais) e `src/Win/audit/audit.ps1` vieram do
 `winutil-cli`, mas são de autoria própria, não do upstream, e não têm hash
 declarado. Foram editados depois da migração — para não perguntar nada dentro do
 processo elevado, para não relatar sucesso do que não aconteceu, e para aceitar

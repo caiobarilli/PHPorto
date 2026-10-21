@@ -15,7 +15,6 @@ function Invoke-Exporter {
             return
         }
         try {
-            # Uses Start-Process instead of Windows service (fails with "Incorrect function" on Win11)
             Start-Process -FilePath $exePath -WindowStyle Hidden
             Write-Status OK "windows_exporter started via Start-Process."
         } catch {
@@ -54,7 +53,6 @@ function Invoke-Exporter {
 
         Write-Status INFO "Fetching latest release of windows_exporter..."
         try {
-            # TLS 1.2 required for download to work on PS 5.1
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             $apiUrl  = 'https://api.github.com/repos/prometheus-community/windows_exporter/releases/latest'
             $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing

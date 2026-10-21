@@ -1,24 +1,9 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Pester 5+ tests for src/Win/actions/Invoke-Gdid.ps1
-.DESCRIPTION
-    Mock-based unit tests for each SubAction. The hosts file is exercised for real
-    against a temporary %WINDIR% tree, so encoding preservation is covered too.
-
-    Migrated from winutil-cli. Two things changed, and only these two: the
-    environment now comes from src/Win/bootstrap.ps1 instead of being rebuilt by
-    hand from the old entry point via AST, and the transcript to C:\log\ is
-    gone — the gate reads the Pester exit code, and C:\log\ belongs to the audit
-    action.
-#>
 
 BeforeAll {
     $Script:RaizProjeto = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
     $Script:PastaWin    = Join-Path $Script:RaizProjeto 'src\Win'
 
-    # Loads Write-Status, $sync, $root, lib/ (Set-WinUtilService,
-    # Set-WinUtilRegistry) and every action.
     . (Join-Path $Script:PastaWin 'bootstrap.ps1')
 
     $Script:StateFile = Join-Path $global:runtime 'gdid-state.json'
@@ -29,8 +14,6 @@ BeforeAll {
     )
     $Script:Utf8Enc   = [System.Text.UTF8Encoding]::new($false)
 
-    # Redirects %WINDIR% and %LOCALAPPDATA% to a throwaway tree so the real hosts
-    # file and the real profile are never touched by the suite.
     function Use-FakeEnvironment {
         param([string[]]$HostsLines, [System.Text.Encoding]$Encoding)
 
@@ -54,7 +37,6 @@ BeforeAll {
         return @($Encoding.GetString([System.IO.File]::ReadAllBytes($file)) -split "`r`n|`n|`r")
     }
 
-    # Called from an AfterEach in every Describe that redirects the environment.
     function Reset-FakeEnvironment {
         if ($Script:OldWinDir) { $env:WINDIR = $Script:OldWinDir; $Script:OldWinDir = $null }
         if ($Script:OldLocal)  { $env:LOCALAPPDATA = $Script:OldLocal; $Script:OldLocal = $null }
@@ -65,10 +47,6 @@ BeforeAll {
     }
 }
 
-
-# ==============================================================
-# SANITY
-# ==============================================================
 Describe "Invoke-Gdid - Sanity" {
 
     It "Invoke-Gdid.ps1 exists in scripts/" {
@@ -99,9 +77,6 @@ Describe "Invoke-Gdid - Sanity" {
     }
 }
 
-# ==============================================================
-# SUBACTION — missing / unknown
-# ==============================================================
 Describe "Invoke-Gdid - SubAction validation" {
 
     It "emits [ ERROR ] and lists the options when no subaction is given" {
@@ -117,9 +92,6 @@ Describe "Invoke-Gdid - SubAction validation" {
     }
 }
 
-# ==============================================================
-# SUBACTION — status
-# ==============================================================
 Describe "Invoke-Gdid - SubAction status" {
 
     AfterEach { Reset-FakeEnvironment }
@@ -191,9 +163,6 @@ Describe "Invoke-Gdid - SubAction status" {
     }
 }
 
-# ==============================================================
-# SUBACTION — disable
-# ==============================================================
 Describe "Invoke-Gdid - SubAction disable" {
 
     AfterEach { Reset-FakeEnvironment }
@@ -230,7 +199,6 @@ Describe "Invoke-Gdid - SubAction disable" {
             -ParameterFilter { $Name -eq 'CDPSvc' -and $StartupType -eq 'Disabled' }
         Should -Invoke -CommandName Set-WinUtilService -Times 1 `
             -ParameterFilter { $Name -eq 'CDPUserSvc' -and $StartupType -eq 'Disabled' }
-        # CDPUserSvc template + CDPUserSvc_4a2f1 instance + CDPSvc
         Should -Invoke -CommandName Stop-Service -Times 3
         Should -Invoke -CommandName Set-WinUtilRegistry -Times 3 `
             -ParameterFilter { $Path -eq 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -and $Value -eq '0' }
@@ -310,9 +278,6 @@ Describe "Invoke-Gdid - SubAction disable" {
     }
 }
 
-# ==============================================================
-# HOSTS ENCODING — accented lines must survive the rewrite
-# ==============================================================
 Describe "Invoke-Gdid - hosts encoding" {
 
     AfterEach { Reset-FakeEnvironment }
@@ -364,9 +329,6 @@ Describe "Invoke-Gdid - hosts encoding" {
     }
 }
 
-# ==============================================================
-# SUBACTION — enable
-# ==============================================================
 Describe "Invoke-Gdid - SubAction enable" {
 
     AfterEach { Reset-FakeEnvironment }

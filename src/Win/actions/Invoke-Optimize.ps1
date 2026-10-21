@@ -23,8 +23,6 @@ function Invoke-Optimize {
         'backgroundTaskHost', 'CrossDeviceResume'
     )
 
-    # Service-backed processes: disable before stopping to prevent SCM auto-restart.
-    # Entries absent from this map fall back to Stop-Process.
     $serviceMap = @{
         'SearchHost'       = 'WSearch'
         'TextInputHost'    = 'TextInputManagementService'
@@ -33,7 +31,6 @@ function Invoke-Optimize {
         'WslService'       = 'WslService'
     }
 
-    # ── UNDO ─────────────────────────────────────────────────────────────────
     if ($Undo) {
         if (-not (Test-Path $stateFile)) {
             Write-Status ERROR "State file not found: $stateFile. Nothing to undo."
@@ -57,7 +54,6 @@ function Invoke-Optimize {
         return
     }
 
-    # ── APPLY ─────────────────────────────────────────────────────────────────
     $targets = [System.Collections.Generic.List[string]]::new()
 
     if ($Preset) {
@@ -67,21 +63,20 @@ function Invoke-Optimize {
                 foreach ($p in $sshProcesses) { $targets.Add($p) }
             }
             'kill-rdp' {
-                # ── SESSION LOGOFF ─────────────────────────────────────────────
                 $currentProc      = Get-Process -Id $PID -ErrorAction SilentlyContinue
                 $currentSessionId = if ($currentProc) { $currentProc.SessionId } else { -1 }
 
                 $disconnectedStates = @(
-                    'Disc',                                                                                                   # en
-                    'Disco',                                                                                                  # pt-BR/PT
-                    'Descon',                                                                                                 # es
-                    "D$([char]0x00E9)co",                                                                                    # fr: Déco
-                    'Getrennt',                                                                                               # de
-                    'Disconn',                                                                                                # it
-                    "$([char]0x5207)$([char]0x65AD)",                                                                        # ja: 切断
-                    "$([char]0x5DF2)$([char]0x65AD)$([char]0x5F00)",                                                         # zh-CN: 已断开
-                    "$([char]0xC5F0)$([char]0xACB0) $([char]0xB04A)$([char]0xAE40)",                                        # ko: 연결 끊김
-                    "$([char]0x041E)$([char]0x0442)$([char]0x043A)$([char]0x043B)"                                          # ru: Откл
+                    'Disc',
+                    'Disco',
+                    'Descon',
+                    "D$([char]0x00E9)co",
+                    'Getrennt',
+                    'Disconn',
+                    "$([char]0x5207)$([char]0x65AD)",
+                    "$([char]0x5DF2)$([char]0x65AD)$([char]0x5F00)",
+                    "$([char]0xC5F0)$([char]0xACB0) $([char]0xB04A)$([char]0xAE40)",
+                    "$([char]0x041E)$([char]0x0442)$([char]0x043A)$([char]0x043B)"
                 )
 
                 $rawSessions  = @(query session)
@@ -138,7 +133,6 @@ function Invoke-Optimize {
                     }
                 }
 
-                # ── PROCESS CLEANUP ────────────────────────────────────────────
                 Write-Status INFO "Preset 'kill-rdp': stopping RDP session remnants..."
                 foreach ($p in $killRdpProcesses) { $targets.Add($p) }
             }

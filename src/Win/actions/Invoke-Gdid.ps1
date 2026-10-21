@@ -10,7 +10,6 @@ function Invoke-Gdid {
     $markStart = '#GDID-BLOCKER START'
     $markEnd   = '#GDID-BLOCKER END'
 
-    # CDPUserSvc is a per-user service: one template plus a CDPUserSvc_<luid> instance per session.
     $coreService = 'CDPSvc'
     $userService = 'CDPUserSvc'
 
@@ -18,19 +17,16 @@ function Invoke-Gdid {
     $policyVals = @('EnableActivityFeed', 'PublishUserActivities', 'UploadUserActivities')
 
     $domains = @(
-        # Connected Devices Platform — device discovery and cross-device handoff
         'dds.microsoft.com'
         'fd.dds.microsoft.com'
         'cs.dds.microsoft.com'
         'aad.cs.dds.microsoft.com'
         'continuum.dds.microsoft.com'
         'cdpcs.access.microsoft.com'
-        # Activity History (Timeline)
         'activity.windows.com'
         'activity.microsoft.com'
         'assets.activity.windows.com'
         'ppe.activity.windows.com'
-        # WNS — carries GDID traffic and also Store/system push notifications
         'client.wns.windows.com'
         'global.notify.windows.com'
         'sinnc-df.notify.windows.com'
@@ -39,10 +35,7 @@ function Invoke-Gdid {
         'db3p.notify.windows.com'
     )
 
-    # ── HOSTS FILE ───────────────────────────────────────────────────────────
     function Read-GdidHostsFile {
-        # Reads hosts preserving its on-disk encoding. Rewriting the whole file as
-        # ASCII (or as UTF-8 when it is ANSI) would corrupt accented lines already there.
         if (-not (Test-Path $hostsFile)) {
             return [PSCustomObject]@{ Lines = @(); Encoding = [System.Text.UTF8Encoding]::new($false) }
         }
@@ -52,7 +45,6 @@ function Invoke-Gdid {
         $body   = if ($hasBom) { [byte[]]@($bytes | Select-Object -Skip 3) } else { $bytes }
 
         try {
-            # Strict UTF-8 throws on invalid sequences, which means a legacy ANSI file.
             $text     = [System.Text.UTF8Encoding]::new($false, $true).GetString($body)
             $encoding = [System.Text.UTF8Encoding]::new($hasBom)
         } catch {
@@ -63,7 +55,6 @@ function Invoke-Gdid {
         }
 
         $lines = @($text -split "`r`n|`n|`r")
-        # Drop the empty element produced by the file's final newline.
         if ($lines.Count -gt 0 -and $lines[-1] -eq '') {
             $lines = @($lines | Select-Object -First ($lines.Count - 1))
         }
@@ -152,10 +143,7 @@ function Invoke-Gdid {
         Write-Status OK "DNS resolver cache flushed."
     }
 
-    # ── SERVICES ─────────────────────────────────────────────────────────────
     function Get-GdidUserServices {
-        # Get-Service enumeration leaves the per-user service template out, so it is
-        # looked up by name and merged with the CDPUserSvc_<luid> session instances.
         $found    = [System.Collections.Generic.List[object]]::new()
         $template = @(Get-Service -Name $userService -ErrorAction SilentlyContinue) | Select-Object -First 1
         if ($template) { $found.Add($template) }
@@ -179,8 +167,6 @@ function Invoke-Gdid {
             }
         }
 
-        # Services already recorded keep their first reading, so running 'disable'
-        # twice never overwrites the original startup type with 'Disabled'.
         foreach ($name in @($coreService, $userService)) {
             if ($saved.ContainsKey($name)) { continue }
             $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
@@ -220,7 +206,6 @@ function Invoke-Gdid {
         }
     }
 
-    # ── CACHE ────────────────────────────────────────────────────────────────
     function Clear-GdidCache {
         if (-not (Test-Path $cacheDir)) {
             Write-Status INFO "CDP cache not found: $cacheDir"
@@ -230,12 +215,10 @@ function Invoke-Gdid {
             Remove-Item -Path $cacheDir -Recurse -Force -ErrorAction Stop
             Write-Status OK "CDP cache removed: $cacheDir"
         } catch {
-            # Files still held open by a running CDP instance stay behind; harmless.
             Write-Status WARNING "CDP cache only partially removed ($cacheDir): $($_.Exception.Message)"
         }
     }
 
-    # ── STATUS ───────────────────────────────────────────────────────────────
     function Show-GdidStatus {
         $core = Get-Service -Name $coreService -ErrorAction SilentlyContinue
         if ($core) {
@@ -282,11 +265,9 @@ function Invoke-Gdid {
         }
     }
 
-    # ── DISABLE ──────────────────────────────────────────────────────────────
     function Disable-GdidPipeline {
         Save-GdidServiceState
 
-        # Disable before stopping so the SCM does not bring the services straight back.
         Set-WinUtilService -Name $coreService -StartupType 'Disabled'
         Set-WinUtilService -Name $userService -StartupType 'Disabled'
         Stop-GdidServices
@@ -304,7 +285,6 @@ function Invoke-Gdid {
         Write-Status OK "GDID pipeline disabled."
     }
 
-    # ── ENABLE ───────────────────────────────────────────────────────────────
     function Enable-GdidPipeline {
         $saved = @{}
         if (Test-Path $stateFile) {
@@ -363,7 +343,6 @@ function Invoke-Gdid {
         Write-Status OK "GDID pipeline enabled."
     }
 
-    # ── DISPATCH ─────────────────────────────────────────────────────────────
     if (-not $SubAction) {
         Write-Status ERROR "No subaction specified."
         Write-Status INFO "Options: status, disable, enable"

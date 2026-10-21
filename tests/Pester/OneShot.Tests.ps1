@@ -1,26 +1,4 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Testes do stub do uso unico: o -EncodedCommand que o OneShot.php monta.
-
-.DESCRIPTION
-    O STUB E' A PECA QUE RODA ELEVADA ANTES DE TUDO, e e' texto gerado pelo
-    PHP. Estes testes rodam um stub com o MESMO texto (copiado de
-    OneShot::stub, e o teste de PHP confere a forma dele) num powershell de
-    verdade, SEM elevacao:
-
-      hash errado          -> sai 97 sem rodar nada;
-      hash certo           -> roda o worker.ps1, que recusa por falta de
-                              Administrador (exit 1) e nao toca no pedido;
-      sonda no lugar do    -> prova o que o worker precisa do stub: os dois
-      worker                  parametros chegam, o $script: de dentro das
-                              funcoes e' o mesmo escopo do codigo de cima
-                              (por isso dot-source, e nao &), o BOM sai, e o
-                              exit de dentro vira o codigo do processo.
-
-    O QUE FICA DE FORA: o prompt de UAC e o worker elevado de verdade. Isso
-    so se confere no Windows, a mao (ver docs/seguranca.md).
-#>
 
 BeforeAll {
     $Script:RaizProjeto = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -32,7 +10,6 @@ BeforeAll {
 
     function ConvertTo-Lit([string]$s) { "'" + $s.Replace("'", "''") + "'" }
 
-    # O mesmo texto de OneShot::stub. Se um mudar, o outro tem de mudar junto.
     function New-Stub([string]$worker, [string]$workerSha, [string]$pedido, [string]$pedidoSha) {
         '$b=[IO.File]::ReadAllBytes(' + (ConvertTo-Lit $worker) + ');' +
         'if((Get-FileHash -InputStream ([IO.MemoryStream]::new($b)) -Algorithm SHA256).Hash -ne ' +
@@ -51,8 +28,6 @@ BeforeAll {
 
     function Get-Sha([string]$caminho) { (Get-FileHash -LiteralPath $caminho -Algorithm SHA256).Hash.ToLowerInvariant() }
 
-    # Uma copia do worker numa pasta com espaco e apostrofo no nome: o stub
-    # recebe o caminho como literal, e um caminho assim nao pode partir nada.
     $Script:PastaW = Join-Path $Script:Trabalho "src it's Win"
     New-Item -ItemType Directory -Path $Script:PastaW | Out-Null
     $Script:CopiaW = Join-Path $Script:PastaW 'worker.ps1'
@@ -84,10 +59,6 @@ Describe 'uso unico - o stub' {
     Context 'com uma sonda no lugar do worker' {
 
         BeforeAll {
-            # A sonda imita o que o worker faz de delicado: CmdletBinding com
-            # dois conjuntos, $PSCmdlet, $Dir tirado do pedido, uma funcao
-            # gravando $script:filho e o codigo de cima lendo $filho, e o exit
-            # do resultado de uma funcao.
             $Script:Resultado = Join-Path $Script:Trabalho 'sonda.txt'
             $sonda = @(
                 "[CmdletBinding(DefaultParameterSetName = 'Laco')]"
@@ -107,7 +78,6 @@ Describe 'uso unico - o stub' {
                 'exit (Invoke-UmaVez)'
             ) -join "`r`n"
             $Script:Sonda = Join-Path $Script:PastaW 'sonda.ps1'
-            # Com BOM, como todo .ps1 do repositorio: o stub tem de tira-lo.
             [System.IO.File]::WriteAllText($Script:Sonda, $sonda, [System.Text.UTF8Encoding]::new($true))
             $Script:R = Invoke-Stub (New-Stub $Script:Sonda (Get-Sha $Script:Sonda) $Script:Pedido ('ab' * 32))
             $Script:Lido = if (Test-Path -LiteralPath $Script:Resultado) { Get-Content -Raw -LiteralPath $Script:Resultado } else { '' }
