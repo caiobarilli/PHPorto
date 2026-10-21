@@ -127,7 +127,7 @@ O processo elevado recebe trabalho por arquivo, e o arquivo carrega
 Cada ação declara os parâmetros que aceita e os valores permitidos; o que não
 estiver declarado é recusado antes de executar. Campo de texto livre tem teto
 de 4096 bytes nas duas listas. Um teste de paridade exige que as duas conheçam
-as mesmas treze ações.
+as mesmas ações.
 
 Os valores validados entram no script gerado como dado, num JSON em base64, e
 chegam na ação como parâmetro; nada do que a tela manda vira código.

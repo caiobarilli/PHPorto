@@ -343,6 +343,19 @@ Describe 'worker - o arquivo de conclusao' {
 # desta.
 Describe 'worker - a allowlist do lado elevado' {
 
+    It 'um parametro de lista no meio nao apaga a allowlist da acao para os parametros seguintes' {
+        $item = @(Get-PhportoListaPermitida 'tweaks')[0]
+        $job  = [PSCustomObject]@{
+            nonce  = $global:Nonce
+            acao   = 'tweaks'
+            params = [PSCustomObject]@{ Items = $item; Undo = $true }
+        }
+
+        $ok = Test-Job $job
+        $ok.params['Items'] | Should -Be @($item)
+        $ok.params['Undo']  | Should -BeTrue
+    }
+
     It 'conhece as dezessete acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',

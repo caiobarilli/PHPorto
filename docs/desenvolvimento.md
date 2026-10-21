@@ -18,7 +18,7 @@ src/                 todo o código PHP (PSR-4, namespace App\)
   Win/               o motor do Windows: PHP e PowerShell lado a lado
     worker.ps1       o processo elevado, com a allowlist que tranca
     bootstrap.ps1    monta o ambiente das ações e despacha por nome
-    actions/         as treze ações, um Invoke-*.ps1 cada
+    actions/         as ações, um Invoke-*.ps1 cada
     lib/             primitivas do WinUtil (upstream)
     config/          dns, preset e tweaks (upstream); debloat e tweaks.pt-BR (do projeto)
     audit/           audit.ps1

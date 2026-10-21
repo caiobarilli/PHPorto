@@ -642,14 +642,14 @@ function Test-Job($job, [ValidateSet('Laco', 'UmaVez')] [string]$Modo = 'Laco') 
                     }
                     if ($texto.Contains([char]0)) { throw "'$nome' tem byte nulo" }
 
-                    $permitidos = @(Get-PhportoListaPermitida $regra.fonte)
-                    if ($permitidos.Count -eq 0) { throw "lista '$($regra.fonte)' indisponivel" }
+                    $daLista = @(Get-PhportoListaPermitida $regra.fonte)
+                    if ($daLista.Count -eq 0) { throw "lista '$($regra.fonte)' indisponivel" }
 
                     $itens = New-Object System.Collections.Generic.List[string]
                     foreach ($bruto in ($texto -split ',')) {
                         $item = $bruto.Trim()
                         if ($item -eq '') { continue }
-                        $casou = $permitidos | Where-Object { $_ -ieq $item } | Select-Object -First 1
+                        $casou = $daLista | Where-Object { $_ -ieq $item } | Select-Object -First 1
                         if (-not $casou) { throw "item fora da lista em '$nome': '$item'" }
                         if ($itens.Contains([string]$casou)) { throw "item repetido em '$nome': '$casou'" }
                         $itens.Add([string]$casou)
