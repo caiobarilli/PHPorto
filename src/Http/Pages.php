@@ -688,6 +688,21 @@ final class Pages
             $this->handleHypervPost();
         }
 
+        $parte = self::hypervParte($_GET['parte'] ?? null);
+
+        if ($parte === HypervView::PARTE_CASCA) {
+            Respond::html('PHPorto — Hyper-V', Respond::render('hyperv.php', new HypervView(
+                tz: $this->config['tz'],
+                blocked: null,
+                listing: null,
+                readAtUtc: gmdate(DATE_ATOM),
+                notice: $this->takeFlash(),
+                csrfToken: Csrf::token(),
+                csrfField: Csrf::fieldName(),
+                parte: HypervView::PARTE_CASCA,
+            )));
+        }
+
         $blocked  = $this->winBlockingReason();
         $listing  = null;
         $timedOut = false;
@@ -719,13 +734,27 @@ final class Pages
             listing: $listing,
             readAtUtc: gmdate(DATE_ATOM),
             timedOut: $timedOut,
-            notice: $this->takeFlash(),
+            notice: $parte === HypervView::PARTE_TABELA ? null : $this->takeFlash(),
             csrfToken: Csrf::token(),
             csrfField: Csrf::fieldName(),
             actionsBlocked: $this->elevation->configProblem(),
+            parte: $parte,
         );
 
+        if ($parte === HypervView::PARTE_TABELA) {
+            Respond::partial(Respond::render('hyperv.php', $view));
+        }
+
         Respond::html('PHPorto — Hyper-V', Respond::render('hyperv.php', $view));
+    }
+
+    public static function hypervParte(mixed $valor): string
+    {
+        return match ($valor) {
+            null, ''                     => HypervView::PARTE_CASCA,
+            HypervView::PARTE_TABELA     => HypervView::PARTE_TABELA,
+            default                      => HypervView::PARTE_COMPLETA,
+        };
     }
 
     private function handleHypervPost(): never

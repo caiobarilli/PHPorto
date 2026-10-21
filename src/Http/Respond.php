@@ -46,6 +46,17 @@ final class Respond
         exit;
     }
 
+    public static function partial(string $content): never
+    {
+        header('Content-Type: text/html; charset=utf-8');
+        header('X-Content-Type-Options: nosniff');
+        header('Referrer-Policy: no-referrer');
+        header('Cache-Control: no-store');
+
+        echo $content;
+        exit;
+    }
+
     /**
      * @param array<string, mixed> $payload
      */

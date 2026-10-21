@@ -12,6 +12,7 @@ function hypervHtml(
     bool $timedOut = false,
     ?string $notice = null,
     ?string $actionsBlocked = null,
+    string $parte = HypervView::PARTE_COMPLETA,
 ): string {
     return Respond::render('hyperv.php', new HypervView(
         tz: 'America/Sao_Paulo',
@@ -23,6 +24,7 @@ function hypervHtml(
         csrfToken: 'tok-123',
         csrfField: '_csrf',
         actionsBlocked: $actionsBlocked,
+        parte: $parte,
     ));
 }
 
@@ -39,7 +41,7 @@ it('leitura cancelada no teto: diz que demorou e oferece Atualizar, sem mandar r
     $html = hypervHtml(timedOut: true);
 
     expect($html)->toContain('A leitura demorou demais e foi cancelada.')
-        ->and($html)->toContain('href="/hyperv">Atualizar</a>')
+        ->and($html)->toContain('href="/hyperv?parte=completa" data-atualizar>Atualizar</a>')
         ->and($html)->not->toContain('reiniciar o computador')
         ->and($html)->not->toContain('<table');
 });
@@ -82,7 +84,7 @@ it('saída do worker antigo, sem motivo: NÃO manda reiniciar', function () {
 it('hospedeiro ligado: o Atualizar é um GET simples ao lado do "lido em"', function () {
     $html = hypervHtml(listing: HypervListing::fromOutput('{"hyperv":true,"vms":[]}'));
 
-    expect($html)->toContain('<a href="/hyperv" id="hyperv-atualizar">Atualizar</a>')
+    expect($html)->toContain('<a href="/hyperv?parte=completa" id="hyperv-atualizar" data-atualizar>Atualizar</a>')
         ->and($html)->not->toContain('<form');
 });
 
@@ -188,7 +190,8 @@ it('copiar não faz requisição: botão comum, sem form, que só o JS revela', 
 
     expect($html)->toContain('<button type="button"')
         ->and($html)->not->toContain('<form')
-        ->and($html)->not->toContain('fetch(')
+        ->and(substr_count($html, 'fetch('))->toBe(1)
+        ->and($html)->toContain("fetch('/hyperv?parte=tabela'")
         ->and($html)->toContain('navigator.clipboard');
 });
 
@@ -290,7 +293,8 @@ it('desligar e reiniciar confirmam no <dialog>; ligar não', function () {
         ->and($html)->toContain('id="btn-confirmar-vm"')
         ->and($html)->toContain('data-fechar>Cancelar</button>')
         ->and($html)->toContain('form.requestSubmit()')
-        ->and($html)->not->toContain('fetch(');
+        ->and(substr_count($html, 'fetch('))->toBe(1)
+        ->and($html)->toContain("fetch('/hyperv?parte=tabela'");
 });
 
 it('o modal fica fora do miolo que o sem-reload troca', function () {
@@ -356,4 +360,84 @@ it('checkout sem os .ps1: todos os botões desabilitados, e a faixa diz por quê
 it('o aviso da última ação aparece com data-aviso, para o sem-reload repetir', function () {
     expect(hypervHtml(listing: vmJson('Off'), notice: 'Ubuntu: VM ligando.'))
         ->toContain('<div class="alert alert-note" data-aviso>Ubuntu: VM ligando.</div>');
+});
+
+it('sem reload: a casca abre na hora com o aviso de leitura, sem tabela e sem ler nada', function () {
+    $html = hypervHtml(parte: HypervView::PARTE_CASCA);
+
+    expect($html)->toContain('<div id="hyperv-leitura" data-ler="/hyperv?parte=tabela" aria-live="polite">')
+        ->and($html)->toContain('Lendo as máquinas virtuais…')
+        ->and($html)->not->toContain('<table')
+        ->and($html)->not->toContain('id="hyperv-faixa"')
+        ->and($html)->toContain('<dialog id="modal-vm">');
+});
+
+it('sem reload: sem JS, a casca oferece o link que lê a página inteira', function () {
+    expect(hypervHtml(parte: HypervView::PARTE_CASCA))
+        ->toContain('<noscript><p><a class="btn btn-sm" href="/hyperv?parte=completa">Ler as máquinas virtuais</a></p></noscript>');
+});
+
+it('sem reload: a parte tabela é só o bloco da leitura, sem layout, sem script e sem modal', function () {
+    $html = hypervHtml(listing: vmJson('Running'), parte: HypervView::PARTE_TABELA);
+
+    expect($html)->toStartWith('<div id="hyperv-leitura">')
+        ->and(rtrim($html))->toEndWith('</div>')
+        ->and($html)->toContain('<table id="hyperv-tabela">')
+        ->and($html)->toContain('rodando')
+        ->and($html)->toContain('name="VmId"')
+        ->and($html)->toContain('value="tok-123"')
+        ->and($html)->not->toContain('<div class="wrap">')
+        ->and($html)->not->toContain('<script')
+        ->and($html)->not->toContain('<dialog')
+        ->and($html)->not->toContain('<html')
+        ->and($html)->not->toContain('data-ler=');
+});
+
+it('sem reload: a parte tabela traz as faixas de bloqueio e de teto do mesmo template', function () {
+    expect(hypervHtml(blocked: 'desligado', parte: HypervView::PARTE_TABELA))->toContain('id="hyperv-faixa"')
+        ->and(hypervHtml(timedOut: true, parte: HypervView::PARTE_TABELA))->toContain('A leitura demorou demais e foi cancelada.');
+});
+
+it('sem reload: a completa é a de antes, com a leitura dentro do miolo', function () {
+    $html = hypervHtml(listing: vmJson('Running'));
+
+    expect($html)->toContain('<div class="wrap">')
+        ->and($html)->toContain('<div id="hyperv-leitura">')
+        ->and($html)->toContain('<table id="hyperv-tabela">')
+        ->and($html)->not->toContain('data-ler=');
+});
+
+it('sem reload: a leitura só sai por clique ou ao abrir a casca, nunca por sondagem', function () {
+    $html = hypervHtml(parte: HypervView::PARTE_CASCA);
+
+    expect($html)->not->toContain('setInterval')
+        ->and($html)->not->toContain('setTimeout(ler')
+        ->and($html)->toContain("closest('[data-atualizar]')")
+        ->and($html)->toContain("credentials: 'same-origin'")
+        ->and($html)->toContain("mode: 'same-origin'")
+        ->and($html)->not->toContain('innerHTML')
+        ->and(substr_count($html, '.submit()'))->toBe(1);
+});
+
+it('a query parte escolhe casca, tabela ou completa', function (mixed $valor, string $esperado) {
+    expect(App\Http\Pages::hypervParte($valor))->toBe($esperado);
+})->with([
+    'ausente'    => [null, HypervView::PARTE_CASCA],
+    'vazia'      => ['', HypervView::PARTE_CASCA],
+    'tabela'     => ['tabela', HypervView::PARTE_TABELA],
+    'completa'   => ['completa', HypervView::PARTE_COMPLETA],
+    'outra'      => ['x', HypervView::PARTE_COMPLETA],
+    'lista'      => [['tabela'], HypervView::PARTE_COMPLETA],
+]);
+
+it('a parte tabela sai pelo Respond::partial, com no-store, e passa pelo portão como o resto', function () {
+    $pages   = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    $respond = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Respond.php');
+    $parcial = substr($respond, (int) strpos($respond, 'public static function partial'), 400);
+
+    expect($pages)->toContain("Respond::partial(Respond::render('hyperv.php', \$view));")
+        ->and($parcial)->toContain("header('Cache-Control: no-store');")
+        ->and($parcial)->toContain("header('X-Content-Type-Options: nosniff');")
+        ->and($parcial)->not->toContain('layout.php')
+        ->and((string) file_get_contents(dirname(__DIR__, 2) . '/public/index.php'))->toContain("'/hyperv' => \$pages->hyperv(\$method),");
 });
