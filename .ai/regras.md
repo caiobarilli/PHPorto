@@ -16,10 +16,17 @@
 - Sem marca de ferramenta no código. Não criar `CLAUDE.md`, `AGENTS.md`, nem arquivo com nome de ferramenta ou de pessoa.
 - `docs/` é documentação de uso: não mover, não apagar. `.claude/` não mexe.
 
+## Código
+
+- No código, só anotação de tipo/retorno do PHPStan (`@phpstan-type`, `@param`, `@return`, `@var`, sem prosa). Texto de o que faz ou por quê não mora no código.
+- Uso em `docs/`. Memória de agente em `.ai/`.
+- A trava é o `composer sem-comentario` (PHP) e o tokenizador nos `.ps1`.
+
 ## Proibições
 
 - Comentário acima de função descrevendo o que faz, recebe ou retorna.
 - Rodapé de coautoria de IA.
+- Comentário `shortcut:` no código.
 - `curl -s`.
 - Aspas tipográficas e travessão em string de `.ps1`.
 - `sed -i` em `.ps1`.
