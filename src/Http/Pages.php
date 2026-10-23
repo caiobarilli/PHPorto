@@ -23,6 +23,8 @@ use App\Win\HypervListing;
 use App\Win\JobChannel;
 use App\Win\OneShot;
 use App\Win\PsResult;
+use App\Win\PsTerminal;
+use App\Win\PsTerminalCommand;
 use App\Win\UacPolicy;
 use App\Win\WinAction;
 use App\Win\WinConfig;
@@ -61,6 +63,7 @@ final class Pages
         private readonly HypervGate $hyperv,
         private readonly OneShot $oneShot,
         private readonly UacPolicy $uac,
+        private readonly PsTerminal $terminal,
     ) {
     }
 
@@ -460,6 +463,9 @@ final class Pages
             tz: $this->config['tz'],
             maxOutputBytes: OutputCap::MAX_OUTPUT_BYTES,
             maxParamBytes: WinAction::MAX_PARAM_BYTES,
+            terminalMaxCommandBytes: PsTerminalCommand::MAX_COMMAND_BYTES,
+            terminalMaxOutputBytes: PsTerminalCommand::MAX_OUTPUT_BYTES,
+            terminalTimeout: PsTerminalCommand::TIMEOUT_SECONDS,
             debloatPackages: $debloat,
             debloatProblem: $debloatProblem,
             debloatChecked: $debloatMarcados,
@@ -502,6 +508,11 @@ final class Pages
             } catch (Throwable $e) {
                 $this->flash('Falha ao limpar: ' . $e->getMessage());
             }
+            Respond::redirect($aba->url());
+        }
+
+        if ($acaoBruta === PsTerminalCommand::ACTION) {
+            $this->runTerminal($_POST['cmd'] ?? null);
             Respond::redirect($aba->url());
         }
 
@@ -1317,6 +1328,23 @@ final class Pages
             $record,
             $kind,
         );
+    }
+
+    private function runTerminal(mixed $raw): void
+    {
+        try {
+            $execution = PsTerminalCommand::execute($this->terminal, $raw);
+        } catch (InvalidArgumentException $e) {
+            $this->flash($e->getMessage());
+
+            return;
+        }
+
+        try {
+            ($this->makeService)()->record($execution);
+        } catch (Throwable $e) {
+            $this->flash('O comando executou, mas o registro falhou: ' . $e->getMessage());
+        }
     }
 
     /**

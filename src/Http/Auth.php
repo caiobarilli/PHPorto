@@ -94,7 +94,7 @@ final class Auth
 
         if (preg_match('/^(\d{1,12})\.([0-9a-f]{64})$/D', $cookie, $m) !== 1
             || !hash_equals($this->sign((int) $m[1]), $m[2])) {
-            return $this->fail($estado['falhas'], $agora);
+            return new AuthDecision(AuthOutcome::Wrong);
         }
 
         $ate = (int) $m[1];

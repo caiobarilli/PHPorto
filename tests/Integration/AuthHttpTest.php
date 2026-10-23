@@ -195,8 +195,8 @@ it('TOKEN ERRADO devolve o formulário com aviso neutro, o quinto erro bloqueia 
         ->and($post)->toBe(429);
 });
 
-it('COOKIE FALSO devolve o formulário, apaga o cookie e conta como erro', function () {
-    foreach (range(1, Auth::MAX_FAILURES - 1) as $_) {
+it('COOKIE FALSO devolve o formulário e apaga o cookie, sem contar como erro', function () {
+    foreach (range(1, Auth::MAX_FAILURES + 1) as $_) {
         [$status, $cabecalhos, $corpo] = $GLOBALS['auth_falso']->request('GET', '/config', null, [], ['Cookie: ' . Auth::COOKIE . '=1.' . str_repeat('a', 64)]);
 
         expect($status)->toBe(401)
@@ -207,7 +207,15 @@ it('COOKIE FALSO devolve o formulário, apaga o cookie e conta como erro', funct
 
     [$status] = $GLOBALS['auth_falso']->request('GET', '/config', null, [], ['Cookie: ' . Auth::COOKIE . '=lixo']);
 
-    expect($status)->toBe(429);
+    expect($status)->toBe(401);
+});
+
+it('HOST DE FORA é recusado com 421 antes do portão', function () {
+    [$status, $cabecalhos, $corpo] = $GLOBALS['auth_falso']->request('GET', '/config', null, [], ['Host: evil:' . $GLOBALS['auth_falso']->port]);
+
+    expect($status)->toBe(421)
+        ->and($corpo)->toContain('Host recusado')
+        ->and(setCookieDe($cabecalhos, Auth::COOKIE))->toBe('');
 });
 
 it('SEM PHPORTO_AUTH_TOKEN a aplicação RECUSA SERVIR, mesmo com credencial', function (string $caminho, ?string $senha) {

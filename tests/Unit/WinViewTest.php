@@ -25,6 +25,7 @@ function winHtml(
     ?string $sensitiveBlocked = null,
     array $rows = [],
     array $distros = [],
+    ?\App\Domain\Execution $result = null,
 ): string {
     $tweaks = [];
     foreach (['A', 'B', 'C'] as $k) {
@@ -33,7 +34,7 @@ function winHtml(
 
     return Respond::render('win.php', new WinView(
         rows: $rows,
-        result: null,
+        result: $result,
         blocked: $blocked,
         notice: null,
         csrfToken: 't',
@@ -155,10 +156,10 @@ function winAcoes(string $html): array
     return $m[1];
 }
 
-it('a página tem quatro partes, nesta ordem: saída, principais, abas, histórico', function () {
+it('a página tem quatro partes, nesta ordem: terminal, principais, abas, histórico', function () {
     $html  = winHtml();
     $ordem = array_map(static fn (string $marca): int|false => strpos($html, $marca), [
-        'Última execução do Windows', '<div class="principais">', '<nav class="abas"', 'Histórico do Windows',
+        '<section id="terminal">', '<div class="principais">', '<nav class="abas"', 'Histórico do Windows',
     ]);
 
     expect($ordem)->not->toContain(false)
@@ -464,4 +465,85 @@ it('com o caminho sensível travado, Ligar e Instalar do openssh nascem desabili
 
     expect($s)->toContain('data-uac disabled>Ligar o SSH')
         ->and($s)->toContain('data-uac disabled>Instalar o OpenSSH Server');
+});
+
+function winTerminal(string $html): string
+{
+    $ini = (int) strpos($html, '<section id="terminal">');
+
+    return substr($html, $ini, (int) strpos($html, '</section>', $ini) - $ini);
+}
+
+it('o terminal é um console de linha única, sem recarregar, com CSRF e ação própria', function () {
+    $term = winTerminal(winHtml());
+
+    expect($term)->toContain('<div class="term" aria-label="Console PowerShell">')
+        ->and($term)->toMatch('/<form method="post" id="ps-form" class="term-prompt" data-sem-reload>/')
+        ->and($term)->toContain('<input type="hidden" name="acao" value="terminal">')
+        ->and($term)->toContain('<input type="hidden" name="_csrf" value="t">')
+        ->and($term)->toMatch('/<input type="text" id="ps-cmd" name="cmd" required/')
+        ->and($term)->toContain('maxlength="4096"')
+        ->and($term)->toContain('<button type="submit" class="term-go" id="ps-enviar">Enviar</button>')
+        ->and($term)->toContain('<pre class="term-scroll" id="ps-saida">')
+        ->and($term)->not->toContain('<textarea')
+        ->and($term)->toContain('sem elevação');
+});
+
+it('o terminal diz os limites: 4096 bytes, 60 s e 256 KiB', function () {
+    $term = winTerminal(winHtml());
+
+    expect($term)->toContain('4.096 bytes')
+        ->and($term)->toContain('<strong>60 s</strong>')
+        ->and($term)->toContain('262.144 bytes')
+        ->and($term)->toContain('<code>PS&gt; </code>');
+});
+
+it('O TERMINAL FUNCIONA COM O POWERSHELL ELEVADO DESLIGADO: nada nele fica desabilitado', function () {
+    $term = winTerminal(winHtml(blocked: 'O PowerShell elevado está desligado.', sensitiveBlocked: 'x'));
+
+    expect($term)->not->toContain('disabled')
+        ->and($term)->toContain('id="ps-enviar"');
+});
+
+it('o console mostra o comando e a saída da última execução, escapados, e o código', function () {
+    $ultima = new \App\Domain\Execution(
+        command: 'PS> Write-Output "<b>"',
+        output: "<b>\n",
+        exitCode: 0,
+        durationMs: 1500,
+        kind: \App\Domain\ExecutionKind::Windows,
+        timedOut: false,
+        createdAt: '2026-10-23 12:00:00',
+    );
+
+    $html = winHtml(rows: [$ultima], result: $ultima);
+    $term = winTerminal($html);
+
+    expect($term)->toContain('<span class="term-cmd">PS&gt; Write-Output &quot;&lt;b&gt;&quot;</span>')
+        ->and($term)->toContain('&lt;b&gt;')
+        ->and($term)->not->toContain('<b>')
+        ->and($term)->toContain('<strong class="ok">0</strong>')
+        ->and($term)->toContain('1,50')
+        ->and(strpos($html, 'Histórico do Windows'))->toBeGreaterThan(strpos($html, '<section id="terminal">'));
+});
+
+it('tempo esgotado e saída diferente de zero aparecem no rodapé do console', function () {
+    $ultima = new \App\Domain\Execution('PS> Start-Sleep 999', '', null, 60000, \App\Domain\ExecutionKind::Windows, true, '2026-10-23 12:00:00');
+
+    expect(winTerminal(winHtml(rows: [$ultima], result: $ultima)))->toContain('timeout &middot;')
+        ->and(winTerminal(winHtml(rows: [$ultima], result: $ultima)))->toContain('<strong class="bad">-</strong>');
+});
+
+it('o terminal não puxa nada de fora: sem CDN, sem script nem estilo externo', function () {
+    $html = winHtml();
+
+    expect($html)->not->toMatch('/<script[^>]+src=|<link[^>]+href=/i')
+        ->and(winTerminal($html))->not->toMatch('/https?:\/\//i');
+});
+
+it('o layout estiliza o input de linha única do console', function () {
+    $layout = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Views/layout.php');
+
+    expect($layout)->toContain('.term-prompt textarea, .term-prompt input[type=text] {')
+        ->and($layout)->toContain('.term-cmd {');
 });

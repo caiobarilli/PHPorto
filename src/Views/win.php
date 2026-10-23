@@ -106,41 +106,52 @@ foreach ($view->tweaks as $tw) {
     </div>
   <?php endif; ?>
 
-  <section>
-    <h2>Última execução do Windows</h2>
+  <section id="terminal">
+    <h2>Terminal PowerShell</h2>
+    <p class="dica" style="margin-top:0">
+      PowerShell livre, como o usuário logado e <strong>sem elevação</strong>: roda pelo próprio servidor
+      PHP, fora do PowerShell elevado das ações. O console mostra a última execução do Windows, desta
+      linha ou de uma ação.
+    </p>
 
-    <?php if ($view->result === null): ?>
-      <p class="empty">Nada executado ainda por esta tela.</p>
-    <?php else: ?>
-      <div class="row" style="margin-top:0">
-        <span class="tag">windows</span>
-        <span class="meta">
-          <?= Respond::e(Respond::dateTime($view->result->createdAt, $view->tz)) ?>
-          &middot; <?= number_format($view->result->durationSeconds(), 1, ',', '.') ?> s
-          &middot;
-          <?php if ($view->result->timedOut): ?>
-            <span class="bad">cancelada por tempo esgotado</span>
-          <?php elseif ($view->result->exitCode === 0): ?>
-            <span class="ok">saída 0</span>
-          <?php elseif ($view->result->exitCode === null): ?>
-            <span class="bad">sem código de saída</span>
-          <?php else: ?>
-            <span class="bad">saída <?= (int) $view->result->exitCode ?></span>
-          <?php endif; ?>
-        </span>
+    <div class="term" aria-label="Console PowerShell">
+      <div class="term-bar">
+        <span><strong>powershell</strong> &middot; usuário, sem elevação &middot; <?= (int) $view->terminalTimeout ?>s</span>
+        <div class="term-btns">
+          <button type="button" class="term-btn" id="ps-copiar">Copiar</button>
+        </div>
       </div>
-      <div class="campo" style="margin-top:10px">
-        <textarea readonly disabled><?= Respond::e($view->result->command) ?></textarea>
+      <pre class="term-scroll" id="ps-saida"><?php if ($view->result !== null): ?><span class="term-cmd"><?= Respond::e($view->result->command) ?></span>
+<?= Respond::e($view->result->output) ?><?php endif; ?></pre>
+      <form method="post" id="ps-form" class="term-prompt" data-sem-reload>
+        <input type="hidden" name="acao" value="<?= Respond::e(\App\Win\PsTerminalCommand::ACTION) ?>">
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <span class="term-ps" aria-hidden="true">PS&gt;</span>
+        <input type="text" id="ps-cmd" name="cmd" required spellcheck="false" autocomplete="off" aria-label="comando de PowerShell"
+               maxlength="<?= (int) $view->terminalMaxCommandBytes ?>"
+               placeholder="comando de PowerShell, roda como você, sem elevação">
+        <button type="submit" class="term-go" id="ps-enviar">Enviar</button>
+      </form>
+      <div class="term-meta">
+        <span>Enter envia. Não é PTY: nada interativo. <span id="ps-estado" aria-live="polite"></span></span>
+        <?php if ($view->result !== null): ?>
+          <span>
+            <?= $view->result->timedOut ? 'timeout &middot; ' : '' ?>
+            exit
+            <strong class="<?= $view->result->exitCode === 0 ? 'ok' : 'bad' ?>"><?= $view->result->exitCode === null ? '-' : (int) $view->result->exitCode ?></strong>
+            &middot; <?= Respond::e(number_format($view->result->durationSeconds(), 2, ',', '.')) ?>s
+            &middot; <?= Respond::e(Respond::dateTime($view->result->createdAt, $view->tz)) ?>
+          </span>
+        <?php endif; ?>
       </div>
-      <div class="campo">
-        <textarea readonly disabled><?= Respond::e($view->result->output) ?></textarea>
-      </div>
-    <?php endif; ?>
-
-    <p class="dica">
-      Saída cortada em <?= number_format($view->maxOutputBytes, 0, ',', '.') ?> bytes por execução;
-      o corte aparece na própria saída. Cada ação é cancelada depois de
-      <strong><?= (int) $view->timeout ?> s</strong>.
+    </div>
+    <p class="dica term-dica">
+      Comando de até <?= number_format($view->terminalMaxCommandBytes, 0, ',', '.') ?> bytes, cancelado com a árvore
+      de processos depois de <strong><?= (int) $view->terminalTimeout ?> s</strong>. A saída do terminal é cortada em
+      <?= number_format($view->terminalMaxOutputBytes, 0, ',', '.') ?> bytes; a das ações, em
+      <?= number_format($view->maxOutputBytes, 0, ',', '.') ?> bytes, e cada ação é cancelada depois de
+      <strong><?= (int) $view->timeout ?> s</strong>. O corte aparece na própria saída. Cada comando entra no
+      histórico abaixo com o prefixo <code><?= Respond::e(\App\Win\PsTerminalCommand::RECORD_PREFIX) ?></code>.
     </p>
   </section>
 
@@ -1024,5 +1035,73 @@ foreach ($view->tweaks as $tw) {
     });
     history.replaceState(null, '', link.getAttribute('href'));
   });
+
+  var psRelogio = null;
+  var psVeio = false;
+
+  function psCopiar(texto) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(texto).catch(function () { psCopiarVelho(texto); });
+        return;
+      }
+    } catch (e) { }
+    psCopiarVelho(texto);
+  }
+
+  function psCopiarVelho(texto) {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = texto;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) { }
+  }
+
+  function psFim() {
+    var saida = document.getElementById('ps-saida');
+    if (saida) { saida.scrollTop = saida.scrollHeight; }
+  }
+
+  document.addEventListener('submit', function (ev) {
+    psVeio = ev.target.id === 'ps-form';
+    if (!psVeio) { return; }
+
+    var saida = document.getElementById('ps-saida');
+    var estado = document.getElementById('ps-estado');
+    var campo = document.getElementById('ps-cmd');
+    var t0 = Date.now();
+    if (saida) { saida.textContent = 'PS> ' + (campo ? campo.value : '') + '\nexecutando...\n'; }
+    clearInterval(psRelogio);
+    psRelogio = setInterval(function () {
+      if (estado) { estado.textContent = ((Date.now() - t0) / 1000).toFixed(1) + 's'; }
+    }, 100);
+  });
+
+  document.addEventListener('phporto:trocou', function () {
+    clearInterval(psRelogio);
+    psFim();
+    if (psVeio) {
+      var campo = document.getElementById('ps-cmd');
+      if (campo) { campo.focus({ preventScroll: true }); }
+    }
+  });
+
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('#ps-copiar');
+    if (!b) { return; }
+    var saida = document.getElementById('ps-saida');
+    psCopiar(saida ? saida.textContent : '');
+    var antes = b.textContent;
+    b.textContent = 'Copiado';
+    setTimeout(function () { b.textContent = antes; }, 900);
+  });
+
+  psFim();
 })();
 </script>
