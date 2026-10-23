@@ -28,6 +28,7 @@ $F_CANCELAR  = Join-Path $Dir 'win-ordem-cancelar'
 $F_PROVA     = Join-Path $Dir ('win-prova-' + $Nonce + '.txt')
 $F_LOG       = Join-Path $Dir 'win-worker.log'
 $F_MANIFESTO = Join-Path $Dir 'win-manifesto.json'
+$F_IMPORTADAS = Join-Path $Dir 'win-importadas.txt'
 
 $PROTEGIDA   = Join-Path $Dir 'win-protected'
 
@@ -640,6 +641,47 @@ function Write-Recusa([string]$id, [string]$motivo) {
     Clear-Filho
 }
 
+function Clear-PhportoImportadas([string]$lista, [string]$protegida, [int]$tetoBytes = 65536) {
+    if ([string]::IsNullOrEmpty($lista) -or [string]::IsNullOrEmpty($protegida)) { return 0 }
+
+    $info = Get-Item -LiteralPath $lista -Force -ErrorAction SilentlyContinue
+    if ($null -eq $info -or $info.PSIsContainer) { return 0 }
+
+    if ($info.Length -gt $tetoBytes) {
+        Write-Log "lista de execucoes ja importadas com $($info.Length) bytes, acima do teto: ignorada"
+        return 0
+    }
+
+    try {
+        $texto = [System.IO.File]::ReadAllText($lista)
+    } catch {
+        Write-Log "falha ao ler a lista de execucoes ja importadas: $($_.Exception.Message)"
+        return 0
+    }
+
+    $ids = New-Object System.Collections.Generic.List[string]
+    foreach ($linha in ($texto -split '\r?\n')) {
+        if ($linha -cmatch '\A[0-9a-f]{12}\z' -and -not $ids.Contains($linha)) { $ids.Add($linha) }
+    }
+
+    $apagados = 0
+    foreach ($id in $ids) {
+        foreach ($nome in @(('win-done-' + $id + '.json'), ('win-out-' + $id + '.txt'))) {
+            $alvo = Join-Path $protegida $nome
+            if (-not (Test-Path -LiteralPath $alvo -PathType Leaf)) { continue }
+            try {
+                Remove-Item -LiteralPath $alvo -Force -ErrorAction Stop
+                $apagados++
+            } catch {
+                Write-Log "falha ao apagar $nome ja importado: $($_.Exception.Message)"
+            }
+        }
+    }
+
+    if ($apagados -gt 0) { Write-Log "apagados $apagados arquivos de execucoes ja importadas" }
+    return $apagados
+}
+
 function Read-PhportoPedido([string]$caminho, [string]$sha256) {
     $nome = [System.IO.Path]::GetFileName($caminho)
     if ($nome -cnotmatch '\Awin-oneshot-([0-9a-f]{12})\.json\z') { throw "pedido com nome fora do formato: '$nome'" }
@@ -732,6 +774,7 @@ function Invoke-UmaVez {
 
     Set-Content -LiteralPath $estado -Value "ACEITO=$PID" -Encoding ASCII
     Write-Log "uso unico pid=$PID pai=$($p.php_pid) id=$($p.id) acao=$($p.acao)"
+    Clear-PhportoImportadas $F_IMPORTADAS $PROTEGIDA | Out-Null
 
     $code = $null
     try {
@@ -852,6 +895,7 @@ while ($true) {
 
         if ($null -ne $bruto) {
             $ultimaAtividade = Get-Date
+            Clear-PhportoImportadas $F_IMPORTADAS $PROTEGIDA | Out-Null
             $id = [guid]::NewGuid().ToString('N').Substring(0, 12)
 
             try {

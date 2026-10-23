@@ -14,6 +14,10 @@ final class JobChannel
 
     public const ID_PATTERN = '/^[0-9a-f]{12}$/D';
 
+    public const MAX_IMPORTADAS = 500;
+
+    private const MAX_IMPORTADAS_BYTES = 65536;
+
     /** @var array<string, true>|null */
     private ?array $preexisting = null;
 
@@ -137,6 +141,8 @@ final class JobChannel
         $falhas = $this->discardPair($done['id']);
 
         if ($falhas !== []) {
+            $this->noteImported($done['id']);
+
             $saida = self::withNewline($saida) . sprintf(
                 "[phporto] Não foi possível apagar %s da pasta protegida; o par ficou no disco.\n",
                 implode(', ', $falhas)
@@ -176,12 +182,13 @@ final class JobChannel
     {
         clearstatcache();
 
-        $orfas = [];
+        $orfas      = [];
+        $importadas = $this->importedIds();
 
         foreach (glob($this->resultPath('win-done-*.json')) ?: [] as $arquivo) {
             $done = self::parseDone($arquivo);
 
-            if ($done === null) {
+            if ($done === null || isset($importadas[$done['id']])) {
                 continue;
             }
 
@@ -209,19 +216,99 @@ final class JobChannel
         return $orfas;
     }
 
-    public function discardOrphan(string $id): void
+    public function discardOrphan(string $id): bool
     {
         if (!self::validId($id)) {
-            return;
+            return false;
         }
+
+        $sobrou = false;
 
         foreach (['win-done-' . $id . '.json', 'win-out-' . $id . '.txt'] as $nome) {
             $caminho = $this->resultPath($nome);
 
-            if (is_file($caminho)) {
-                @unlink($caminho);
+            if (is_file($caminho) && !self::tryUnlink($caminho)) {
+                $sobrou = true;
             }
         }
+
+        return !$sobrou || $this->noteImported($id);
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    public function importedIds(): array
+    {
+        $caminho = $this->path(Elevation::F_IMPORTADAS);
+
+        if (!is_file($caminho)) {
+            return [];
+        }
+
+        $raw = @file_get_contents($caminho, false, null, 0, self::MAX_IMPORTADAS_BYTES);
+
+        return is_string($raw) ? self::parseImported($raw) : [];
+    }
+
+    private function noteImported(string $id): bool
+    {
+        set_error_handler(static fn (): bool => true);
+
+        try {
+            $handle = fopen($this->path(Elevation::F_IMPORTADAS), 'c+');
+        } finally {
+            restore_error_handler();
+        }
+
+        if ($handle === false) {
+            return false;
+        }
+
+        try {
+            if (!flock($handle, LOCK_EX)) {
+                return false;
+            }
+
+            $raw = stream_get_contents($handle, self::MAX_IMPORTADAS_BYTES);
+            $ids = self::parseImported(is_string($raw) ? $raw : '');
+
+            unset($ids[$id]);
+
+            $vivas = array_filter(
+                array_keys($ids),
+                fn (string $velha): bool => is_file($this->resultPath('win-done-' . $velha . '.json'))
+                    || is_file($this->resultPath('win-out-' . $velha . '.txt'))
+            );
+
+            $lista   = array_slice([...$vivas, $id], -self::MAX_IMPORTADAS);
+            $gravado = ftruncate($handle, 0)
+                && rewind($handle)
+                && fwrite($handle, implode("\n", $lista) . "\n") !== false
+                && fflush($handle);
+
+            flock($handle, LOCK_UN);
+
+            return $gravado;
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private static function parseImported(string $raw): array
+    {
+        $ids = [];
+
+        foreach (preg_split('/\r?\n/', $raw) ?: [] as $linha) {
+            if (self::validId($linha)) {
+                $ids[$linha] = true;
+            }
+        }
+
+        return $ids;
     }
 
     /**
