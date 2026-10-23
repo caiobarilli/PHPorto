@@ -37,6 +37,8 @@ final class Elevation
 
     public const F_MANIFESTO = 'win-manifesto.json';
 
+    public const F_IMPORTADAS = 'win-importadas.txt';
+
     public const DIR_PROTEGIDA = 'win-protected';
 
     public const SCRIPT_WORKER = 'worker.ps1';

@@ -601,6 +601,7 @@ final class Pages
         }
 
         $gravadas = 0;
+        $presas   = 0;
 
         foreach ($orfas as $orfa) {
             $acao = WinAction::tryFrom($orfa->acao);
@@ -630,16 +631,26 @@ final class Pages
 
             $this->applyWinState($acao, $orfa->params, $orfa->result->exitCode, $orfa->result->timedOut);
 
-            $canal->discardOrphan($orfa->id);
+            if (!$canal->discardOrphan($orfa->id)) {
+                $presas++;
+            }
+
             $gravadas++;
         }
 
         $this->flash(
-            $gravadas === 1
+            ($gravadas === 1
                 ? 'Uma execução do Windows terminou sem ser registrada e acabou de entrar no histórico, '
                     . 'com a hora real de término.'
                 : $gravadas . ' execuções do Windows terminaram sem registro e acabaram de entrar no '
-                    . 'histórico, com a hora real de término.'
+                    . 'histórico, com a hora real de término.')
+            . match (true) {
+                $presas === 0 => '',
+                $presas === 1 => ' Uma não pôde ser apagada nem marcada como já importada e pode voltar '
+                    . 'ao histórico na próxima visita.',
+                default => ' ' . $presas . ' não puderam ser apagadas nem marcadas como já importadas e '
+                    . 'podem voltar ao histórico na próxima visita.',
+            }
         );
     }
 
