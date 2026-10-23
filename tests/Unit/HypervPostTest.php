@@ -45,11 +45,12 @@ it('o POST da /hyperv não leva Name nem outro campo ao worker', function () {
         ->toBe(['SubAction' => 'stop', 'VmId' => POST_VM_ID]);
 });
 
-it('a /win recusa o hyperv-vm, e só ele', function () {
-    expect(Pages::winPostRefusal(WinAction::HypervVm))->toBe('Ligar, desligar e reiniciar VM é pela tela do Hyper-V, não pela /win.');
+it('a /win recusa o hyperv-vm e o wsl, e só eles', function () {
+    expect(Pages::winPostRefusal(WinAction::HypervVm))->toBe('Ligar, desligar e reiniciar VM é pela tela do Hyper-V, não pela /win.')
+        ->and(Pages::winPostRefusal(WinAction::Wsl))->toBe('Desligar e acordar o WSL é pela configuração, não pela /win.');
 
     foreach (WinAction::cases() as $acao) {
-        if ($acao !== WinAction::HypervVm) {
+        if ($acao !== WinAction::HypervVm && $acao !== WinAction::Wsl) {
             expect(Pages::winPostRefusal($acao))->toBeNull();
         }
     }

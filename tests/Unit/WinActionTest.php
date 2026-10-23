@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 use App\Win\WinAction;
 
-it('tem as dezenove ações: as dezessete do menu em ordem, e as duas da /hyperv fora dele', function () {
+it('tem as vinte ações: as dezessete do menu em ordem, as duas da /hyperv e a do WSL da /config fora dele', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
             'gdid', 'rdp', 'sunshine', 'openssh', 'ssh-keys',
             'hyperv', 'hyperv-vm',
+            'wsl',
         ]);
 });
 
@@ -632,6 +633,45 @@ it('a allowlist do hyperv-vm no worker tem as mesmas subações, o mesmo padrão
     expect($padrao[1])->toBe(WinAction::HYPERV_VM_ID_PATTERN)
         ->and($campos['VmId'])->toContain('max = ' . WinAction::HYPERV_VM_ID_BYTES)
         ->and($campos['VmId'])->toContain('min = ' . WinAction::HYPERV_VM_ID_BYTES);
+});
+
+it('wsl aceita <sub> e normaliza a caixa', function (string $sub) {
+    expect(WinAction::Wsl->validate(['SubAction' => strtoupper($sub)]))->toBe(['SubAction' => $sub]);
+})->with(['shutdown', 'wake']);
+
+it('wsl exige a subação', function () {
+    WinAction::Wsl->validate([]);
+})->throws(InvalidArgumentException::class);
+
+it('wsl recusa subação fora de shutdown e wake', function (string $sub) {
+    WinAction::Wsl->validate(['SubAction' => $sub]);
+})->throws(InvalidArgumentException::class)->with([
+    'terminate'    => ['terminate'],
+    'unregister'   => ['unregister'],
+    'comando'      => ['shutdown; wsl --unregister x'],
+]);
+
+it('wsl não é sensível: desligar e acordar vão pelo worker sem UAC', function (string $sub) {
+    expect(WinAction::Wsl->isSensitive(['SubAction' => $sub]))->toBeFalse()
+        ->and(array_key_exists('wsl', WinAction::SENSITIVE))->toBeFalse();
+})->with(['shutdown', 'wake']);
+
+it('wsl não afirma nada sobre estado da /win', function () {
+    expect(WinAction::Wsl->stateChange(['SubAction' => 'shutdown']))->toBeNull();
+});
+
+it('a allowlist do wsl no worker tem as mesmas subações que a WinAction', function () {
+    $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+
+    expect(preg_match("/^    'wsl'\\s*=\\s*@\\{\\r?\\n(.*?)\\r?\\n    \\}/ms", $worker, $bloco))->toBe(1);
+    preg_match_all("/^\\s+'([A-Za-z]+)'\\s*=\\s*@\\{(.*)\\}\\s*$/m", $bloco[1], $linhas, PREG_SET_ORDER);
+
+    expect(count($linhas))->toBe(1)
+        ->and($linhas[0][1])->toBe('SubAction');
+
+    expect(preg_match('/valores\s*=\s*@\(([^)]*)\)/', $linhas[0][2], $valores))->toBe(1);
+    preg_match_all("/'([a-z-]+)'/", $valores[1], $subs);
+    expect($subs[1])->toBe(WinAction::WSL_SUBACTIONS);
 });
 
 it('optimize recusa chamada que não faria nada', function () {

@@ -32,6 +32,8 @@ enum WinAction: string
 
     case HypervVm = 'hyperv-vm';
 
+    case Wsl = 'wsl';
+
     public const MAX_PARAM_BYTES = 4096;
 
     public const WINGET_ID_PATTERN = '/\A[A-Za-z0-9][A-Za-z0-9_+-]*(?:\.[A-Za-z0-9_+-]+)+\z/';
@@ -109,6 +111,8 @@ enum WinAction: string
 
     public const HYPERV_VM_ID_BYTES = 36;
 
+    public const WSL_SUBACTIONS = ['shutdown', 'wake'];
+
     public const AUDIT_SUBACTIONS = ['run', 'open'];
 
     public const PERFORMANCE_STATES = ['on', 'off'];
@@ -160,6 +164,7 @@ enum WinAction: string
             self::SshKeys   => $this->sshKeys($input),
             self::Optimize  => $this->optimize($input),
             self::HypervVm  => $this->hypervVm($input),
+            self::Wsl       => ['SubAction' => $this->pick($input, 'SubAction', self::WSL_SUBACTIONS, obrigatorio: true)],
         };
     }
 

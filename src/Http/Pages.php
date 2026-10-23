@@ -108,7 +108,8 @@ final class Pages
 
         $dbPath = $provider === 'sqlite' ? $this->config['sqlite']['path'] : '';
 
-        $win = $this->elevation->state();
+        $win        = $this->elevation->state();
+        $wslDistros = $this->distroChecker->registered();
 
         $view = new ConfigView(
             provider: $provider === '' ? 'desconhecido' : $provider,
@@ -130,6 +131,8 @@ final class Pages
             uacOk: $this->uac->blockingReason() === null,
             uacSummary: $this->uac->summary(),
             tz: $this->config['tz'],
+            wslDistros: $wslDistros,
+            wslRunning: $wslDistros === null ? null : $this->distroChecker->running(),
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view));
@@ -176,6 +179,10 @@ final class Pages
             $this->handleHypervToggle(($_POST['hyperv_enabled'] ?? '') === '1');
         }
 
+        if ($action === WinAction::Wsl->value) {
+            $this->handleWslPost();
+        }
+
         if ($action === 'fabrica') {
             $apagarBanco = ($_POST['apagar_banco'] ?? '') === '1';
             $partes      = self::factoryResetParts(Flags::reset(), $this->hyperv);
@@ -190,6 +197,89 @@ final class Pages
 
         $this->flash('Ação desconhecida.');
         Respond::redirect('/config');
+    }
+
+    private function handleWslPost(): never
+    {
+        try {
+            $params = self::wslPostParams($_POST);
+        } catch (InvalidArgumentException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/config');
+        }
+
+        $blocked = $this->winBlockingReason();
+
+        if ($blocked !== null) {
+            $this->flash($blocked);
+            Respond::redirect('/config');
+        }
+
+        $nonce = $this->elevation->nonce();
+
+        if ($nonce === null) {
+            $this->flash('O PowerShell elevado não está mais de pé. Ligue de novo nesta tela.');
+            Respond::redirect('/config');
+        }
+
+        try {
+            $run = (new JobChannel($this->filesDir))
+                ->dispatch(WinAction::Wsl, $params, $nonce, $this->config['winutil']['timeout']);
+        } catch (RuntimeException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/config');
+        }
+
+        $aviso = self::wslNotice((string) $params['SubAction'], $run);
+
+        try {
+            ($this->makeService)()->record(new Execution(
+                command: self::describe(WinAction::Wsl, $params),
+                output: $run->output,
+                exitCode: $run->exitCode,
+                durationMs: $run->durationMs,
+                kind: ExecutionKind::Windows,
+                timedOut: $run->timedOut,
+            ));
+        } catch (Throwable $e) {
+            $aviso .= ' A ação executou, mas o registro falhou: ' . $e->getMessage();
+        }
+
+        $this->flash($aviso);
+        Respond::redirect('/config');
+    }
+
+    /**
+     * @param array<mixed> $post
+     * @return array<string, string|int|bool>
+     * @throws InvalidArgumentException
+     */
+    public static function wslPostParams(array $post): array
+    {
+        $sub = $post['SubAction'] ?? null;
+
+        return WinAction::Wsl->validate(is_string($sub) ? ['SubAction' => $sub] : []);
+    }
+
+    public static function wslNotice(string $sub, PsResult $run): string
+    {
+        $desligar = $sub === 'shutdown';
+
+        if ($run->timedOut) {
+            return ($desligar ? 'Desligar' : 'Acordar')
+                . ' o WSL demorou demais e foi cancelado. A saída está no histórico da /win.';
+        }
+
+        if ($run->exitCode !== 0) {
+            return 'Falha ao ' . ($desligar ? 'desligar' : 'acordar') . ' o WSL (código '
+                . ($run->exitCode === null ? 'nenhum' : $run->exitCode)
+                . '). A saída está no histórico da /win.';
+        }
+
+        return $desligar
+            ? 'WSL desligado: todas as distros e a VM do WSL 2 pararam. A saída está no histórico da /win.'
+            : 'WSL acordado: a distro padrão subiu. Sem nada rodando dentro, o WSL pode parar de novo '
+                . 'depois de um tempo ocioso. A saída está no histórico da /win.';
     }
 
     private function handlePowerShellToggle(bool $ligar): never
@@ -890,9 +980,11 @@ final class Pages
 
     public static function winPostRefusal(WinAction $acao): ?string
     {
-        return $acao === WinAction::HypervVm
-            ? 'Ligar, desligar e reiniciar VM é pela tela do Hyper-V, não pela /win.'
-            : null;
+        return match ($acao) {
+            WinAction::HypervVm => 'Ligar, desligar e reiniciar VM é pela tela do Hyper-V, não pela /win.',
+            WinAction::Wsl      => 'Desligar e acordar o WSL é pela configuração, não pela /win.',
+            default             => null,
+        };
     }
 
     public function wsl(string $method): never

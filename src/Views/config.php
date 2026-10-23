@@ -159,6 +159,61 @@ use App\Http\Respond;
     </form>
   </section>
 
+  <?php if ($view->wslDistros !== null): ?>
+    <section id="wsl">
+      <h2>WSL</h2>
+
+      <form method="post" id="form-wsl" data-sem-reload>
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="wsl">
+
+        <div class="linha-acao">
+          <button type="submit" class="btn btn-sm" name="SubAction" value="wake" id="btn-wsl-acordar"
+                  <?= $view->win->on && $view->wslDistros !== [] ? '' : 'disabled' ?>>Acordar</button>
+          <button type="button" class="btn btn-danger btn-sm" id="btn-wsl-desligar"
+                  <?= $view->win->on ? '' : 'disabled' ?>>Desligar…</button>
+        </div>
+
+        <p class="nota-estado" id="wsl-estado">
+          <?php if ($view->wslRunning === null): ?>
+            Não foi possível ler quais distros estão rodando.
+          <?php elseif ($view->wslRunning === []): ?>
+            Nenhuma distro rodando.
+          <?php else: ?>
+            Rodando: <strong><?= Respond::e(implode(', ', $view->wslRunning)) ?></strong>.
+          <?php endif; ?>
+          <?php if ($view->wslDistros === []): ?>
+            Nenhuma distro instalada.
+          <?php else: ?>
+            Instaladas: <?= Respond::e(implode(', ', $view->wslDistros)) ?>.
+          <?php endif; ?>
+          <br>
+          <strong>Acordar</strong> sobe a distro padrão do Windows sem abrir janela. Sem nada
+          rodando dentro, o WSL pode parar de novo depois de um tempo ocioso.
+          <strong>Desligar</strong> para todas as distros e a VM do WSL 2.
+          <?php if (!$view->win->on): ?>
+            <br>
+            <strong>Precisa do PowerShell elevado ligado, acima.</strong>
+          <?php endif; ?>
+        </p>
+
+        <dialog id="modal-wsl">
+          <div class="modal-corpo">
+            <h3>Desligar o WSL?</h3>
+            <p>
+              Para <strong>todas as distros</strong> e a VM do WSL 2. Um comando da tela WSL que
+              esteja no meio é interrompido, e o que não foi salvo dentro das distros se perde.
+            </p>
+          </div>
+          <div class="modal-acoes">
+            <button type="button" class="btn btn-ghost btn-sm" data-fechar>Cancelar</button>
+            <button type="submit" class="btn btn-danger btn-sm" name="SubAction" value="shutdown">Desligar</button>
+          </div>
+        </dialog>
+      </form>
+    </section>
+  <?php endif; ?>
+
   <section id="php">
     <h2>PHP</h2>
 
@@ -358,6 +413,8 @@ use App\Http\Respond;
 
   document.addEventListener('click', function (ev) {
     if (ev.target.closest('#btn-fabrica')) { document.getElementById('modal-fabrica').showModal(); }
+
+    if (ev.target.closest('#btn-wsl-desligar')) { document.getElementById('modal-wsl').showModal(); }
 
     if (ev.target.closest('#btn-retentar')) { document.getElementById('form-ps').setAttribute('data-confirmado', ''); }
 
