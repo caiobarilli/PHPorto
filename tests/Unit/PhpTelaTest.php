@@ -197,20 +197,10 @@ it('o texto da medida é escapado', function () {
         ->and($html)->not->toContain('<b>');
 });
 
-it('a tela só lê: sem formulário, sem UAC, sem abas das próximas fatias', function () {
-    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Views/php.php');
-
-    expect($fonte)->not->toContain('<form')
-        ->and($fonte)->not->toContain('data-uac')
-        ->and($fonte)->not->toContain('<script')
-        ->and($fonte)->not->toContain('class="abas"')
-        ->and($fonte)->not->toContain('https://');
-});
-
-it('a rota /php existe no index e no router, e só lê', function () {
+it('a rota /php existe no index e no router, e recebe o método', function () {
     $raiz = dirname(__DIR__, 2);
 
-    expect((string) file_get_contents($raiz . '/public/index.php'))->toContain("'/php'    => \$pages->php(),")
+    expect((string) file_get_contents($raiz . '/public/index.php'))->toContain("'/php'    => \$pages->php(\$method),")
         ->and((string) file_get_contents($raiz . '/public/router.php'))->toContain("'/hyperv', '/php']");
 });
 

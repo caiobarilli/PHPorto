@@ -7,9 +7,11 @@ declare(strict_types=1);
  */
 
 use App\Http\Respond;
+use App\Php\PhpIni;
 
 $ativo  = $view->active;
 $medido = $view->pathBuild;
+$ini    = $view->ini;
 
 ?>
 <div class="wrap">
@@ -18,7 +20,11 @@ $medido = $view->pathBuild;
     <a href="/">voltar</a>
     <a href="/config">configuração</a>
   </div>
-  <p class="sub">O interpretador que serve o PHPorto, medido no próprio processo do servidor. Esta tela só lê: trocar a versão ou mudar o <code>php.ini</code> exige fechar o <code>php -S</code> e subir de novo.</p>
+  <p class="sub">O interpretador que serve o PHPorto, medido no próprio processo do servidor. O que for gravado no <code>php.ini</code> só vale depois de fechar o <code>php -S</code> e subir de novo.</p>
+
+  <?php if ($view->notice !== null): ?>
+    <div class="alert alert-note" data-aviso><?= Respond::e($view->notice) ?></div>
+  <?php endif; ?>
 
   <?php if ($ativo === null): ?>
     <div class="alert alert-block" id="php-falha">Não deu para medir o PHP deste Windows. Confira se <code>php.exe</code> existe e se o PATH está no processo do servidor.</div>
@@ -68,5 +74,90 @@ $medido = $view->pathBuild;
         <?php endif; ?>
       </section>
     <?php endif; ?>
+    <section id="php-ini">
+      <h2>php.ini</h2>
+      <?php if ($ini === null): ?>
+        <p class="dica" style="margin-top:0">Sem <code>php.ini</code> carregado, esta tela não grava. Crie o arquivo ao lado do <code>php.exe</code> e suba o <code>php -S</code> de novo.</p>
+      <?php elseif ($ini->error !== null): ?>
+        <div class="alert alert-block" id="ini-erro"><?= Respond::e($ini->error) ?></div>
+      <?php else: ?>
+        <p class="dica" style="margin-top:0">Não é editor livre: só as chaves abaixo. Antes de gravar, o arquivo atual vira <code><?= Respond::e(basename($ini->path) . PhpIni::BACKUP_SUFFIX) ?></code> na mesma pasta. O resto do arquivo fica igual, byte a byte.</p>
+        <?php if (!$ini->writable): ?>
+          <div class="alert alert-block" id="ini-somente-leitura">Este usuário não pode gravar <code><?= Respond::e($ini->path) ?></code> ou a pasta dele. Esta tela não grava com UAC: edite à mão ou use um PHP numa pasta sua, como <code>C:\php</code>.</div>
+        <?php endif; ?>
+        <form method="post" action="/php" id="form-ini" data-sem-reload>
+          <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+          <input type="hidden" name="<?= PhpIni::HASH_FIELD ?>" value="<?= Respond::e($ini->hash) ?>">
+          <table>
+            <thead>
+              <tr><th style="width:32%">Chave</th><th style="width:28%">No arquivo</th><th>Situação</th></tr>
+            </thead>
+            <tbody>
+              <?php foreach ($ini->rows as $linha): ?>
+                <?php $campo = PhpIni::FIELD . '[' . $linha->key->value . ']'; ?>
+                <tr data-chave="<?= Respond::e($linha->key->value) ?>">
+                  <td><label for="ini-<?= Respond::e($linha->key->name) ?>"><code><?= Respond::e($linha->key->value) ?></code></label></td>
+                  <td>
+                    <?php if ($linha->key->isSwitch()): ?>
+                      <select name="<?= Respond::e($campo) ?>" id="ini-<?= Respond::e($linha->key->name) ?>">
+                        <option value="On"<?= $linha->value === 'On' ? ' selected' : '' ?>>On</option>
+                        <option value="Off"<?= $linha->value === 'Off' ? ' selected' : '' ?>>Off</option>
+                      </select>
+                    <?php else: ?>
+                      <input type="text" name="<?= Respond::e($campo) ?>" id="ini-<?= Respond::e($linha->key->name) ?>" value="<?= Respond::e($linha->value) ?>" maxlength="64" spellcheck="false" autocomplete="off">
+                    <?php endif; ?>
+                  </td>
+                  <td>
+                    <?php if ($linha->differsFromDefault()): ?>
+                      <span class="tag" data-difere>difere do padrão</span> padrão <code><?= Respond::e($linha->key->default()) ?></code>
+                    <?php else: ?>
+                      <span class="tag">padrão</span>
+                    <?php endif; ?>
+                    <?php if (!$linha->inFile): ?>
+                      <br><span class="dica">Não declarada no arquivo.</span>
+                    <?php endif; ?>
+                    <?php if ($linha->pendingRestart()): ?>
+                      <br><span class="dica" data-pendente>Em uso agora: <code><?= Respond::e((string) $linha->running) ?></code>, até subir o <code>php -S</code> de novo.</span>
+                    <?php endif; ?>
+                    <?php if ($linha->overriddenBy !== null): ?>
+                      <br><span class="dica bad">Declarada também em <code><?= Respond::e($linha->overriddenBy) ?></code>, que vence.</span>
+                    <?php endif; ?>
+                    <br><span class="dica"><?= Respond::e($linha->key->hint()) ?></span>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+          <div class="row">
+            <?php if ($ini->writable): ?>
+              <button type="button" class="btn btn-sm" id="btn-salvar-ini">Salvar…</button>
+            <?php endif; ?>
+            <a href="/php" class="btn btn-sm btn-ghost" id="btn-reler-ini">Reler do disco</a>
+          </div>
+          <p class="nota-estado">Depois de gravar, feche o <code>php -S</code> e suba de novo: o servidor continua com os valores antigos até lá.</p>
+
+          <?php if ($ini->writable): ?>
+            <dialog id="modal-ini">
+              <div class="modal-corpo">
+                <h3>Gravar php.ini?</h3>
+                <p>Vai copiar o atual para <code><?= Respond::e(basename($ini->path) . PhpIni::BACKUP_SUFFIX) ?></code> e mudar só as chaves desta lista que você alterou. O servidor continua com o valor antigo até o <code>php -S</code> subir de novo.</p>
+              </div>
+              <div class="modal-acoes">
+                <button type="button" class="btn btn-ghost btn-sm" data-fechar>Cancelar</button>
+                <button type="submit" class="btn btn-sm" id="btn-gravar-ini">Gravar</button>
+              </div>
+            </dialog>
+          <?php endif; ?>
+        </form>
+      <?php endif; ?>
+    </section>
   <?php endif; ?>
 </div>
+
+<script>
+(function () {
+  document.addEventListener('click', function (ev) {
+    if (ev.target.closest('#btn-salvar-ini')) { document.getElementById('modal-ini').showModal(); }
+  });
+})();
+</script>

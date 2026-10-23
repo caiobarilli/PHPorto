@@ -125,6 +125,6 @@ match ($path) {
     '/wsl'    => $pages->wsl($method),
     '/win'    => $pages->win($method),
     '/hyperv' => $pages->hyperv($method),
-    '/php'    => $pages->php(),
+    '/php'    => $pages->php($method),
     default   => Respond::notFound(),
 };

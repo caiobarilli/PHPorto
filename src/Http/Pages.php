@@ -12,6 +12,7 @@ use App\Domain\OutputCap;
 use App\Domain\WinState;
 use App\Domain\WinStateScope;
 use App\Php\PhpBuild;
+use App\Php\PhpIni;
 use App\Php\PhpProbe;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
@@ -861,18 +862,93 @@ final class Pages
         Respond::html('PHPorto — Hyper-V', Respond::render('hyperv.php', $view));
     }
 
-    public function php(): never
+    public function php(string $method = 'GET'): never
     {
+        if ($method === 'POST') {
+            $this->handlePhpPost();
+        }
+
         $caminho = getenv('PATH');
+        $ativo   = PhpProbe::current();
 
         $view = PhpView::make(
-            active: PhpProbe::current(),
+            active: $ativo,
             pathBinary: PhpProbe::onPath(is_string($caminho) ? $caminho : '', PATH_SEPARATOR, PhpProbe::executable()),
             ignorarCaixa: PhpProbe::windows(),
             medir: static fn (string $binario): ?PhpBuild => PhpProbe::measure($binario),
+        )->with(
+            ini: $ativo === null ? null : PhpIni::load($ativo->ini, self::scannedInis(), static fn (string $chave): string|false => ini_get($chave)),
+            notice: $this->takeFlash(),
+            csrfToken: Csrf::token(),
+            csrfField: Csrf::fieldName(),
         );
 
         Respond::html('PHPorto — PHP', Respond::render('php.php', $view));
+    }
+
+    private function handlePhpPost(): never
+    {
+        if (!Csrf::consume()) {
+            $this->flash('Sessão expirada ou formulário antigo. Releia a página e tente de novo. Nada foi gravado.');
+            Respond::redirect('/php');
+        }
+
+        $this->flash(self::phpIniSave(
+            php_ini_loaded_file(),
+            self::scannedInis(),
+            $_POST[PhpIni::HASH_FIELD] ?? null,
+            $_POST[PhpIni::FIELD] ?? null,
+        ));
+        Respond::redirect('/php');
+    }
+
+    /**
+     * @param list<string> $escaneados
+     */
+    public static function phpIniSave(string|false $ini, array $escaneados, mixed $hash, mixed $enviado): string
+    {
+        if ($ini === false) {
+            return 'Nenhum php.ini carregado. Esta tela só grava num php.ini que o PHP já leu. Nada foi gravado.';
+        }
+
+        $form = PhpIni::load($ini, $escaneados, static fn (string $chave): false => false);
+
+        if ($form === null || $form->error !== null) {
+            return ($form->error ?? 'Não deu para ler o php.ini.') . ' Nada foi gravado.';
+        }
+
+        if (!is_string($hash) || preg_match('/\A[0-9a-f]{64}\z/', $hash) !== 1) {
+            return 'Formulário sem a marca do php.ini lido. Releia a página. Nada foi gravado.';
+        }
+
+        try {
+            $novos = PhpIni::changes($form->rows, $enviado);
+
+            if ($novos === []) {
+                return 'Nenhum valor mudou. O php.ini não foi tocado.';
+            }
+
+            PhpIni::write($ini, $hash, $novos);
+        } catch (InvalidArgumentException|RuntimeException $e) {
+            return $e->getMessage();
+        }
+
+        $partes = [];
+
+        foreach ($novos as $nome => $valor) {
+            $partes[] = $nome . ' = ' . $valor;
+        }
+
+        return 'php.ini gravado: ' . implode(', ', $partes) . '. A versão anterior ficou em '
+            . basename($ini) . PhpIni::BACKUP_SUFFIX . '. Feche e suba o php -S de novo para valer.';
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function scannedInis(): array
+    {
+        return PhpProbe::iniFiles(null, php_ini_scanned_files());
     }
 
     public static function hypervParte(mixed $valor): string
