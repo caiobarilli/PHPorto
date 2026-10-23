@@ -11,6 +11,8 @@ use App\Domain\ExecutionKind;
 use App\Domain\OutputCap;
 use App\Domain\WinState;
 use App\Domain\WinStateScope;
+use App\Php\PhpBuild;
+use App\Php\PhpProbe;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
 use App\Win\HypervGate;
@@ -767,6 +769,20 @@ final class Pages
         }
 
         Respond::html('PHPorto — Hyper-V', Respond::render('hyperv.php', $view));
+    }
+
+    public function php(): never
+    {
+        $caminho = getenv('PATH');
+
+        $view = PhpView::make(
+            active: PhpProbe::current(),
+            pathBinary: PhpProbe::onPath(is_string($caminho) ? $caminho : '', PATH_SEPARATOR, PhpProbe::executable()),
+            ignorarCaixa: PhpProbe::windows(),
+            medir: static fn (string $binario): ?PhpBuild => PhpProbe::measure($binario),
+        );
+
+        Respond::html('PHPorto — PHP', Respond::render('php.php', $view));
     }
 
     public static function hypervParte(mixed $valor): string
