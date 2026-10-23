@@ -273,11 +273,30 @@ Describe 'worker - a allowlist do lado elevado' {
         $ok.params['Undo']  | Should -BeTrue
     }
 
-    It 'conhece as vinte acoes' {
+    It 'conhece as vinte e uma acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
-            'memory', 'network', 'openssh', 'optimize', 'performance', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl'
+            'memory', 'network', 'openssh', 'optimize', 'performance', 'php-update', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl'
         )
+    }
+
+    It 'php-update: so passa com UAC proprio, e a pasta fora do formato nao passa' {
+        $sha = 'ab' * 32
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'php-update'; params = [PSCustomObject]@{ Version = '8.5.13'; Sha256 = $sha; PhpDir = 'C:\php' } }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage '*so roda com UAC proprio*'
+        $ok = Test-Job $job -Modo UmaVez
+        $ok.params['Version'] | Should -Be '8.5.13'
+        $ok.params['Sha256']  | Should -Be $sha
+        $ok.params['PhpDir']  | Should -Be 'C:\php'
+
+        foreach ($pasta in @('C:\', 'C:\..\x', 'C:/php', 'C:\php\', '\\srv\php')) {
+            $ruim = [PSCustomObject]@{ acao = 'php-update'; params = [PSCustomObject]@{ Version = '8.5.13'; Sha256 = $sha; PhpDir = $pasta } }
+            { Test-Job $ruim -Modo UmaVez } | Should -Throw -ExpectedMessage "'PhpDir' fora do formato"
+        }
+
+        $curto = [PSCustomObject]@{ acao = 'php-update'; params = [PSCustomObject]@{ Version = '8.5.13'; Sha256 = 'ab'; PhpDir = 'C:\php' } }
+        { Test-Job $curto -Modo UmaVez } | Should -Throw -ExpectedMessage "'Sha256' abaixo do minimo de bytes"
     }
 
     It 'ssh-keys: authorize so passa com UAC proprio, e a linha com opcoes na frente nao passa' {

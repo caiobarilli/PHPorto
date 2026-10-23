@@ -14,6 +14,8 @@ use App\Domain\WinStateScope;
 use App\Php\PhpBuild;
 use App\Php\PhpIni;
 use App\Php\PhpProbe;
+use App\Php\PhpReleases;
+use App\Php\PhpUpdate;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
 use App\Win\HypervGate;
@@ -881,6 +883,16 @@ final class Pages
             notice: $this->takeFlash(),
             csrfToken: Csrf::token(),
             csrfField: Csrf::fieldName(),
+            update: PhpReleases::plan(
+                $ativo,
+                PhpProbe::windows(),
+                static fn (): ?string => PhpReleases::cached(
+                    dirname(__DIR__, 2) . '/storage/php-releases.json',
+                    time(),
+                    static fn (): ?string => PhpReleases::fetch(PhpReleases::LISTING_URL),
+                ),
+                static fn (string $binario): ?string => PhpProbe::measure($binario)?->version,
+            ),
         );
 
         Respond::html('PHPorto — PHP', Respond::render('php.php', $view));
@@ -893,6 +905,10 @@ final class Pages
             Respond::redirect('/php');
         }
 
+        if (array_key_exists(PhpReleases::POST_FIELD, $_POST)) {
+            $this->handlePhpUpdate($_POST[PhpReleases::POST_FIELD]);
+        }
+
         $this->flash(self::phpIniSave(
             php_ini_loaded_file(),
             self::scannedInis(),
@@ -900,6 +916,104 @@ final class Pages
             $_POST[PhpIni::FIELD] ?? null,
         ));
         Respond::redirect('/php');
+    }
+
+    private function handlePhpUpdate(mixed $versao): never
+    {
+        $plano = PhpReleases::plan(
+            PhpProbe::current(),
+            PhpProbe::windows(),
+            static fn (): ?string => PhpReleases::fetch(PhpReleases::LISTING_URL),
+            static fn (string $binario): ?string => PhpProbe::measure($binario)?->version,
+        );
+
+        try {
+            $params = self::phpUpdateParams($plano, $versao);
+        } catch (InvalidArgumentException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/php');
+        }
+
+        $bloqueio = $this->oneShot->blockingReason();
+
+        if ($bloqueio !== null) {
+            $this->flash($bloqueio);
+            Respond::redirect('/php');
+        }
+
+        try {
+            $run = $this->oneShot->dispatch(WinAction::PhpUpdate, $params, $this->config['winutil']['timeout']);
+        } catch (RuntimeException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/php');
+        }
+
+        $aviso = self::phpUpdateNotice($params, $run);
+
+        try {
+            ($this->makeService)()->record(new Execution(
+                command: self::describe(WinAction::PhpUpdate, $params),
+                output: $run->output,
+                exitCode: $run->exitCode,
+                durationMs: $run->durationMs,
+                kind: ExecutionKind::Windows,
+                timedOut: $run->timedOut,
+            ));
+        } catch (Throwable $e) {
+            $aviso .= ' A ação executou, mas o registro falhou: ' . $e->getMessage();
+        }
+
+        $this->flash($aviso);
+        Respond::redirect('/php');
+    }
+
+    /**
+     * @return array<string, string|int|bool>
+     * @throws InvalidArgumentException
+     */
+    public static function phpUpdateParams(PhpUpdate $plano, mixed $versao): array
+    {
+        if (!$plano->available() || $plano->release === null || $plano->dir === null) {
+            throw new InvalidArgumentException($plano->status . ' Nada foi feito.');
+        }
+
+        if ($versao !== $plano->release->version) {
+            throw new InvalidArgumentException('A lista oficial mudou desde que a tela abriu: agora o patch é o '
+                . $plano->release->version . '. Releia a página. Nada foi feito.');
+        }
+
+        return WinAction::PhpUpdate->validate([
+            'Version' => $plano->release->version,
+            'Sha256'  => $plano->release->sha256,
+            'PhpDir'  => $plano->dir,
+        ]);
+    }
+
+    /**
+     * @param array<string, string|int|bool> $params
+     */
+    public static function phpUpdateNotice(array $params, PsResult $run): string
+    {
+        $versao = (string) ($params['Version'] ?? '');
+
+        if ($run->timedOut) {
+            return 'A atualização do PHP passou do prazo. Confira a pasta do PHP e o histórico do Windows antes de subir o php -S.';
+        }
+
+        if ($run->exitCode !== 0) {
+            $motivo = preg_match_all('/^\[ ERROR \] (.+)$/m', $run->output, $erros) > 0
+                ? ' ' . trim((string) end($erros[1]))
+                : '';
+
+            return 'A atualização do PHP para ' . $versao . ' não foi feita.' . $motivo . ' Detalhes no histórico do Windows.';
+        }
+
+        if (preg_match('/^\[ OK \] Backup: (.+)$/m', $run->output, $backup) === 1) {
+            return 'PHP atualizado para ' . $versao . ' na mesma pasta. A versão anterior ficou em '
+                . trim($backup[1]) . '. Feche o php -S e suba de novo para usar a versão nova.';
+        }
+
+        return 'O php.exe da pasta já é o ' . $versao . '. Nada mudou. Feche o php -S e suba de novo para usar a versão nova.';
     }
 
     /**
@@ -1057,9 +1171,10 @@ final class Pages
     public static function winPostRefusal(WinAction $acao): ?string
     {
         return match ($acao) {
-            WinAction::HypervVm => 'Ligar, desligar e reiniciar VM é pela tela do Hyper-V, não pela /win.',
-            WinAction::Wsl      => 'Desligar e acordar o WSL é pela configuração, não pela /win.',
-            default             => null,
+            WinAction::HypervVm  => 'Ligar, desligar e reiniciar VM é pela tela do Hyper-V, não pela /win.',
+            WinAction::Wsl       => 'Desligar e acordar o WSL é pela configuração, não pela /win.',
+            WinAction::PhpUpdate => 'Atualizar o PHP é pela tela do PHP, não pela /win.',
+            default              => null,
         };
     }
 

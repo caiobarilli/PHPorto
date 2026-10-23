@@ -34,6 +34,8 @@ enum WinAction: string
 
     case Wsl = 'wsl';
 
+    case PhpUpdate = 'php-update';
+
     public const MAX_PARAM_BYTES = 4096;
 
     public const WINGET_ID_PATTERN = '/\A[A-Za-z0-9][A-Za-z0-9_+-]*(?:\.[A-Za-z0-9_+-]+)+\z/';
@@ -113,6 +115,16 @@ enum WinAction: string
 
     public const WSL_SUBACTIONS = ['shutdown', 'wake'];
 
+    public const PHP_UPDATE_VERSION_PATTERN = '\A([0-9]{1,2})\.([0-9]{1,2})\.([0-9]{1,3})\z';
+
+    public const PHP_UPDATE_SHA256_PATTERN = '\A[0-9a-f]{64}\z';
+
+    public const PHP_UPDATE_DIR_PATTERN = '\A[A-Za-z]:(?:\x5C(?!\.{1,2}(?:\x5C|\z))[^\x5C\x2F:*?"<>|\x00-\x1F]+)+\z';
+
+    public const PHP_UPDATE_DIR_MAX = 200;
+
+    public const PHP_UPDATE_FIELDS = ['Version', 'Sha256', 'PhpDir'];
+
     public const AUDIT_SUBACTIONS = ['run', 'open'];
 
     public const PERFORMANCE_STATES = ['on', 'off'];
@@ -121,14 +133,15 @@ enum WinAction: string
      * @var array<string, '*'|list<string>>
      */
     public const SENSITIVE = [
-        'install'   => '*',
-        'rdp'       => ['on'],
-        'sunshine'  => ['install', 'firewall-open', 'set-creds', 'pair'],
-        'openssh'   => ['install', 'enable'],
-        'ssh-keys'  => ['puttygen', 'authorize', 'remove', 'wsl-user'],
-        'exporter'  => ['install', 'firewall'],
-        'gpu'       => ['install'],
-        'hyperv-vm' => '*',
+        'install'    => '*',
+        'rdp'        => ['on'],
+        'sunshine'   => ['install', 'firewall-open', 'set-creds', 'pair'],
+        'openssh'    => ['install', 'enable'],
+        'ssh-keys'   => ['puttygen', 'authorize', 'remove', 'wsl-user'],
+        'exporter'   => ['install', 'firewall'],
+        'gpu'        => ['install'],
+        'hyperv-vm'  => '*',
+        'php-update' => '*',
     ];
 
     public const NETWORK_DURATION_MIN = 1;
@@ -165,6 +178,7 @@ enum WinAction: string
             self::Optimize  => $this->optimize($input),
             self::HypervVm  => $this->hypervVm($input),
             self::Wsl       => ['SubAction' => $this->pick($input, 'SubAction', self::WSL_SUBACTIONS, obrigatorio: true)],
+            self::PhpUpdate => $this->phpUpdate($input),
         };
     }
 
@@ -731,6 +745,35 @@ enum WinAction: string
         }
 
         return ['SubAction' => $sub, 'VmId' => strtolower($id)];
+    }
+
+    /**
+     * @param array<string, string> $input
+     * @return array{Version: string, Sha256: string, PhpDir: string}
+     */
+    private function phpUpdate(array $input): array
+    {
+        $versao = trim($input['Version'] ?? '');
+        $hash   = strtolower(trim($input['Sha256'] ?? ''));
+        $dir    = trim($input['PhpDir'] ?? '');
+
+        if ($versao === '' || $hash === '' || $dir === '') {
+            throw new InvalidArgumentException('Preencha Version, Sha256 e PhpDir.');
+        }
+
+        if (preg_match('/' . self::PHP_UPDATE_VERSION_PATTERN . '/', $versao) !== 1) {
+            throw new InvalidArgumentException('Version não é uma versão x.y.z.');
+        }
+
+        if (preg_match('/' . self::PHP_UPDATE_SHA256_PATTERN . '/', $hash) !== 1) {
+            throw new InvalidArgumentException('Sha256 não é um SHA256 em hexadecimal.');
+        }
+
+        if (strlen($dir) > self::PHP_UPDATE_DIR_MAX || preg_match('/' . self::PHP_UPDATE_DIR_PATTERN . '/', $dir) !== 1) {
+            throw new InvalidArgumentException('PhpDir não é uma pasta local do Windows aceita.');
+        }
+
+        return ['Version' => $versao, 'Sha256' => $hash, 'PhpDir' => $dir];
     }
 
     /**

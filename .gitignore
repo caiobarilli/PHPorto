@@ -30,6 +30,10 @@
 # marcador acima.
 /storage/auth-falhas.json
 
+# A lista oficial de versões do PHP para Windows, guardada por uma hora para a
+# tela do PHP não consultar a rede a cada visita. Cache, refeito sozinho.
+/storage/php-releases.json
+
 # Pasta de trabalho do motor: o cmd.sh descartável guarda o último comando
 # executado, e os .tmp guardam a saída.
 /files/*

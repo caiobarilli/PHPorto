@@ -410,10 +410,11 @@ it('sem permissão de escrita a tela não oferece salvar', function () {
         ->and($html)->toContain('id="btn-reler-ini"');
 });
 
-it('o fonte da tela não traz UAC, abas, CDN nem instalação', function () {
+it('o fonte da tela não traz abas, CDN nem instalação, e o único UAC é o da atualização', function () {
     $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Views/php.php');
 
-    expect($fonte)->not->toContain('data-uac')
+    expect(substr_count($fonte, 'data-uac'))->toBe(1)
+        ->and($fonte)->toContain('id="btn-confirmar-atualizar" data-uac>')
         ->and($fonte)->not->toContain('class="abas"')
         ->and($fonte)->not->toContain('https://')
         ->and($fonte)->not->toContain('.zip')

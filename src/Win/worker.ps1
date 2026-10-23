@@ -122,6 +122,12 @@ $ALLOWLIST = @{
     'wsl'         = @{
         'SubAction' = @{ tipo = 'set'; valores = @('shutdown', 'wake') }
     }
+
+    'php-update'  = @{
+        'Version' = @{ tipo = 'text'; max = 10; padrao = '\A([0-9]{1,2})\.([0-9]{1,2})\.([0-9]{1,3})\z' }
+        'Sha256'  = @{ tipo = 'text'; max = 64; min = 64; padrao = '\A[0-9a-f]{64}\z' }
+        'PhpDir'  = @{ tipo = 'text'; max = 200; padrao = '\A[A-Za-z]:(?:\x5C(?!\.{1,2}(?:\x5C|\z))[^\x5C\x2F:*?"<>|\x00-\x1F]+)+\z' }
+    }
 }
 
 $SENSIVEIS = @{
@@ -133,6 +139,7 @@ $SENSIVEIS = @{
     'exporter'  = @('install', 'firewall')
     'gpu'       = @('install')
     'hyperv-vm' = '*'
+    'php-update' = '*'
 }
 
 $SEGREDOS = @{
