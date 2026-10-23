@@ -118,6 +118,10 @@ $ALLOWLIST = @{
         'SubAction' = @{ tipo = 'set'; valores = @('start', 'stop', 'restart') }
         'VmId'      = @{ tipo = 'text'; max = 36; min = 36; padrao = '\A[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\z' }
     }
+
+    'wsl'         = @{
+        'SubAction' = @{ tipo = 'set'; valores = @('shutdown', 'wake') }
+    }
 }
 
 $SENSIVEIS = @{

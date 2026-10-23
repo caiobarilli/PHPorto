@@ -74,6 +74,14 @@ final class Distro
     /**
      * @return list<string>|null
      */
+    public function running(): ?array
+    {
+        return $this->listing(self::ARGS_RUNNING);
+    }
+
+    /**
+     * @return list<string>|null
+     */
     private function listing(string $args): ?array
     {
         $descriptors = [

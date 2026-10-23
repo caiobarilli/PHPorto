@@ -25,6 +25,8 @@ final readonly class ConfigView
      * @param bool $uacOk
      * @param string $uacSummary
      * @param string $tz
+     * @param list<string>|null $wslDistros
+     * @param list<string>|null $wslRunning
      */
     public function __construct(
         public string $provider,
@@ -46,6 +48,8 @@ final readonly class ConfigView
         public bool $uacOk,
         public string $uacSummary,
         public string $tz,
+        public ?array $wslDistros = null,
+        public ?array $wslRunning = null,
     ) {
     }
 }

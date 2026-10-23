@@ -273,10 +273,10 @@ Describe 'worker - a allowlist do lado elevado' {
         $ok.params['Undo']  | Should -BeTrue
     }
 
-    It 'conhece as dezenove acoes' {
+    It 'conhece as vinte acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
-            'memory', 'network', 'openssh', 'optimize', 'performance', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks'
+            'memory', 'network', 'openssh', 'optimize', 'performance', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl'
         )
     }
 

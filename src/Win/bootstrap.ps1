@@ -84,6 +84,7 @@ $global:PhportoWinActions = [ordered]@{
     'ssh-keys'    = 'Invoke-SshKeys'
     'hyperv'      = 'Invoke-Hyperv'
     'hyperv-vm'   = 'Invoke-HypervVm'
+    'wsl'         = 'Invoke-Wsl'
 }
 
 function Invoke-PhportoWinAction {
