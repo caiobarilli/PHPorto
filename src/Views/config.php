@@ -222,7 +222,7 @@ use App\Http\Respond;
     </div>
 
     <p class="nota-estado">
-      Versão, binário e <code>php.ini</code> do PHP que serve o PHPorto. Só leitura.
+      Versão, binário e <code>php.ini</code> do PHP que serve o PHPorto, e uma lista fechada de chaves do <code>php.ini</code> para gravar.
     </p>
   </section>
 

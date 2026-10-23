@@ -344,8 +344,39 @@ declara a chave). A entrada fica em `/config`, na seção **PHP**.
 
 A medição é feita no próprio processo do servidor, sem PowerShell e sem UAC.
 Se o primeiro `php` do PATH for outro binário, a tela avisa e mostra os dois;
-esse outro é medido com `php -r`, com teto de 5 s. A tela só lê: não grava no
-`php.ini`, não baixa versão e não grava no histórico.
+esse outro é medido com `php -r`, com teto de 5 s. A tela não baixa versão e
+não grava no histórico.
+
+### Gravar o php.ini
+
+Abaixo da medida, a tela lista uma lista fechada de chaves do `php.ini`
+carregado, com o valor do arquivo, a etiqueta de quem difere do padrão e o valor
+em uso quando ele ainda é o antigo:
+
+| Chave | Aceita |
+|---|---|
+| `session.upload_progress.enabled` | `On` ou `Off` |
+| `upload_max_filesize` | `1M` a `16G`, com `K`, `M` ou `G` |
+| `post_max_size` | `1M` a `16G`, nunca menor que `upload_max_filesize` |
+| `memory_limit` | `32M` a `16G`, ou `-1` |
+| `max_execution_time` | `0` a `3600` segundos |
+| `date.timezone` | um fuso da lista do PHP |
+| `display_errors` | `On` ou `Off` |
+
+Nenhuma outra chave e nenhum texto livre de ini: o POST com chave fora da lista
+ou valor inválido é recusado inteiro. Só as chaves que mudaram são escritas.
+Antes de gravar, o arquivo atual é copiado para `php.ini.bak` na mesma pasta; a
+troca é atômica (temporário na mesma pasta e rename) e o resto do arquivo fica
+igual, byte a byte, inclusive CRLF e BOM. Se o `php.ini` mudou no disco depois
+que a tela abriu, nada é gravado.
+
+Quem grava é o próprio `php -S`, com o usuário comum. Por isso o `php.ini`
+precisa estar numa pasta que esse usuário pode gravar, como `C:\php`. Se não
+puder (por exemplo, dentro de `C:\Program Files`), a tela explica e não oferece
+salvar: não há caminho com UAC para o `php.ini`. Sem `php.ini` carregado, a tela
+também não grava.
+
+O valor novo só vale depois de fechar o `php -S` e subir de novo.
 
 ## Reversíveis e não reversíveis
 
