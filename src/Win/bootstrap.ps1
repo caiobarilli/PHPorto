@@ -85,6 +85,7 @@ $global:PhportoWinActions = [ordered]@{
     'hyperv'      = 'Invoke-Hyperv'
     'hyperv-vm'   = 'Invoke-HypervVm'
     'wsl'         = 'Invoke-Wsl'
+    'php-update'  = 'Invoke-PhpUpdate'
 }
 
 function Invoke-PhportoWinAction {

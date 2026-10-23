@@ -344,8 +344,30 @@ declara a chave). A entrada fica em `/config`, na seção **PHP**.
 
 A medição é feita no próprio processo do servidor, sem PowerShell e sem UAC.
 Se o primeiro `php` do PATH for outro binário, a tela avisa e mostra os dois;
-esse outro é medido com `php -r`, com teto de 5 s. A tela não baixa versão e
-não grava no histórico.
+esse outro é medido com `php -r`, com teto de 5 s. A medida não grava no
+histórico.
+
+### Atualizar o PHP
+
+Abaixo da medida, a tela compara a versão com a lista oficial de builds do PHP
+para Windows (`https://downloads.php.net/~windows/releases/releases.json`). A
+lista fica em `storage/php-releases.json` por 1 h (5 min quando a consulta
+falha); o pedido de atualização sempre consulta de novo. O botão
+**Atualizar PHP…** só aparece quando há um patch mais novo na **mesma linha**
+(`8.5.11` para `8.5.12`, nunca `8.5` para `8.6`) e o PHP é NTS x64 numa pasta
+local. Com TS, x86, versão de teste ou outra linha, a tela explica e não oferece.
+
+A atualização é ação sensível e abre o UAC. A versão e o SHA256 vêm da lista
+oficial, conferida de novo pelo próprio worker, só por `https` no
+`downloads.php.net` e sem seguir redirecionamento. O zip é o NTS x64 oficial; se
+o SHA256 não bater, nada é trocado. Antes de trocar, a pasta inteira é copiada
+para uma irmã com a versão antiga no nome (`C:\php-8.5.11`); se já existir, vai
+para `C:\php-8.5.11-2`, `-3` e assim até `-9`, sem sobrescrever backup. O zip
+é extraído na própria pasta, o `php.ini` anterior volta para o lugar e o
+`php.exe -v` precisa responder a versão nova. Se qualquer passo falhar, a pasta
+volta como estava. PATH e permissões não mudam.
+
+O PHP que está rodando continua o antigo: feche o `php -S` e suba de novo.
 
 ### Gravar o php.ini
 

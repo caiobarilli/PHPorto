@@ -8,10 +8,12 @@ declare(strict_types=1);
 
 use App\Http\Respond;
 use App\Php\PhpIni;
+use App\Php\PhpReleases;
 
 $ativo  = $view->active;
 $medido = $view->pathBuild;
 $ini    = $view->ini;
+$update = $view->update;
 
 ?>
 <div class="wrap">
@@ -55,6 +57,39 @@ $ini    = $view->ini;
         <p class="dica">Nenhum <code>php</code> no PATH do processo do servidor.</p>
       <?php endif; ?>
     </section>
+
+    <?php if ($update !== null): ?>
+      <section id="php-atualizar">
+        <h2>Atualizar</h2>
+        <p class="dica" style="margin-top:0"><?= Respond::e($update->status) ?></p>
+        <?php if ($update->available() && $update->release !== null && $update->dir !== null): ?>
+          <form method="post" action="/php" id="form-atualizar" data-sem-reload>
+            <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+            <input type="hidden" name="<?= PhpReleases::POST_FIELD ?>" value="<?= Respond::e($update->release->version) ?>">
+            <dl class="kv">
+              <dt>Zip oficial</dt><dd><?= Respond::e($update->release->url()) ?></dd>
+              <dt>SHA256</dt><dd><code><?= Respond::e($update->release->sha256) ?></code></dd>
+              <dt>Pasta</dt><dd><?= Respond::e($update->dir) ?></dd>
+            </dl>
+            <div class="row">
+              <button type="button" class="btn btn-sm" id="btn-atualizar-php">Atualizar PHP…</button>
+            </div>
+            <dialog id="modal-atualizar">
+              <div class="modal-corpo">
+                <h3>Atualizar para o <?= Respond::e($update->release->version) ?>?</h3>
+                <p>Abre o UAC. Baixa o zip oficial, confere o SHA256 e só então copia a pasta atual para <code><?= Respond::e($update->dir . '-' . $ativo->version) ?></code> ao lado dela. Se já existir, usa <code>-2</code>, <code>-3</code> e assim por diante, sem sobrescrever.</p>
+                <p>Extrai na mesma pasta, devolve o <code>php.ini</code> de antes e confere o <code>php -v</code>. Se algo falhar, a versão anterior volta. PATH e permissões ficam como estão.</p>
+                <p>Depois, feche o <code>php -S</code> e suba de novo: até lá, o servidor segue no <?= Respond::e($ativo->version) ?>.</p>
+              </div>
+              <div class="modal-acoes">
+                <button type="button" class="btn btn-ghost btn-sm" data-fechar>Cancelar</button>
+                <button type="submit" class="btn btn-sm" id="btn-confirmar-atualizar" data-uac>Atualizar</button>
+              </div>
+            </dialog>
+          </form>
+        <?php endif; ?>
+      </section>
+    <?php endif; ?>
 
     <?php if ($view->pathDiverges): ?>
       <section id="php-path">
@@ -158,6 +193,7 @@ $ini    = $view->ini;
 (function () {
   document.addEventListener('click', function (ev) {
     if (ev.target.closest('#btn-salvar-ini')) { document.getElementById('modal-ini').showModal(); }
+    if (ev.target.closest('#btn-atualizar-php')) { document.getElementById('modal-atualizar').showModal(); }
   });
 })();
 </script>

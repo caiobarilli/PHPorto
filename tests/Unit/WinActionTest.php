@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Win\WinAction;
 
-it('tem as vinte ações: as dezessete do menu em ordem, as duas da /hyperv e a do WSL da /config fora dele', function () {
+it('tem as vinte e uma ações: as dezessete do menu em ordem, as duas da /hyperv, a do WSL da /config e a da tela do PHP fora dele', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
@@ -12,6 +12,7 @@ it('tem as vinte ações: as dezessete do menu em ordem, as duas da /hyperv e a 
             'gdid', 'rdp', 'sunshine', 'openssh', 'ssh-keys',
             'hyperv', 'hyperv-vm',
             'wsl',
+            'php-update',
         ]);
 });
 

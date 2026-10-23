@@ -202,13 +202,13 @@ it('os seis painéis vêm na página, e só o da aba aberta está visível', fun
     expect($html)->toContain('Histórico do Windows');
 })->with(WinTab::cases());
 
-it('as dezessete ações do menu aparecem uma vez só na página, e as da /hyperv e a do WSL da /config não', function () {
+it('as dezessete ações do menu aparecem uma vez só na página, e as da /hyperv, a do WSL da /config e a da tela do PHP não', function () {
     $todas = winAcoes(winHtml());
     sort($todas);
 
     $menu = array_filter(
         App\Win\WinAction::cases(),
-        static fn (App\Win\WinAction $a): bool => !in_array($a, [App\Win\WinAction::Hyperv, App\Win\WinAction::HypervVm, App\Win\WinAction::Wsl], true),
+        static fn (App\Win\WinAction $a): bool => !in_array($a, [App\Win\WinAction::Hyperv, App\Win\WinAction::HypervVm, App\Win\WinAction::Wsl, App\Win\WinAction::PhpUpdate], true),
     );
     $enum = array_map(static fn (App\Win\WinAction $a): string => $a->value, $menu);
     sort($enum);

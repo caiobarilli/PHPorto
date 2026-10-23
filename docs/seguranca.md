@@ -303,6 +303,7 @@ pede um prompt de UAC próprio:
 | `exporter` | `install`, `firewall` |
 | `gpu` | `install` (cria uma tarefa agendada como SYSTEM) |
 | `openssh` | `install`, `enable` (sobe o `sshd` e abre a porta 22 na rede privada) |
+| `php-update` | todas (troca os arquivos do PHP pelo zip oficial de um patch da mesma linha) |
 
 A lista mora em dois lugares, `WinAction::SENSITIVE` (PHP, escolhe o caminho) e
 `$SENSIVEIS` (`worker.ps1`, a tranca), e um teste confere que são a mesma.
