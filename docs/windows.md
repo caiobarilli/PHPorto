@@ -335,6 +335,18 @@ menu Iniciar dela, e não corta a energia. Reiniciar também, quando o Hyper-V
 sabe; quando não sabe, faz um reset. O estado é conferido de novo na hora, e o
 que não cabe mais é recusado com o motivo.
 
+## A tela do PHP
+
+`/php` mostra o PHP que serve o PHPorto: versão, TS ou NTS, binário,
+`php.ini` carregado, compilador e arquitetura, SAPI e o valor de
+`session.upload_progress.enabled` (com a etiqueta `default` quando nenhum ini
+declara a chave). A entrada fica em `/config`, na seção **PHP**.
+
+A medição é feita no próprio processo do servidor, sem PowerShell e sem UAC.
+Se o primeiro `php` do PATH for outro binário, a tela avisa e mostra os dois;
+esse outro é medido com `php -r`, com teto de 5 s. A tela só lê: não grava no
+`php.ini`, não baixa versão e não grava no histórico.
+
 ## Reversíveis e não reversíveis
 
 | ação | como se desfaz |

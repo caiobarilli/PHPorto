@@ -159,6 +159,18 @@ use App\Http\Respond;
     </form>
   </section>
 
+  <section id="php">
+    <h2>PHP</h2>
+
+    <div class="linha-acao">
+      <a href="/php" class="btn btn-sm btn-ghost" id="link-php">Ver o PHP em uso</a>
+    </div>
+
+    <p class="nota-estado">
+      Versão, binário e <code>php.ini</code> do PHP que serve o PHPorto. Só leitura.
+    </p>
+  </section>
+
   <section id="aparencia">
     <h2>Aparência</h2>
 

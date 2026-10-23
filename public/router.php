@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-const PHPORTO_ROUTES = ['/', '/config', '/wsl', '/win', '/hyperv'];
+const PHPORTO_ROUTES = ['/', '/config', '/wsl', '/win', '/hyperv', '/php'];
 
 const PHPORTO_API_PREFIX = '/api/';
 
