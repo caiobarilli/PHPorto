@@ -1518,6 +1518,86 @@ Describe 'worker - a trava abre duas vezes' {
     }
 }
 
+Describe 'worker - apaga as execucoes que o PHP ja importou' {
+
+    BeforeEach {
+        $Script:Prot  = Join-Path $Script:Trabalho ('importadas-' + [guid]::NewGuid().ToString('N'))
+        $Script:Lista = Join-Path $Script:Prot 'win-importadas.txt'
+        $Script:Pasta = Join-Path $Script:Prot 'win-protected'
+        New-Item -ItemType Directory -Path $Script:Pasta -Force | Out-Null
+        Mock Write-Log { }
+
+        function New-ParDeTeste([string]$id) {
+            foreach ($nome in ('win-done-' + $id + '.json'), ('win-out-' + $id + '.txt'), ('win-exec-' + $id + '.ps1')) {
+                Set-Content -LiteralPath (Join-Path $Script:Pasta $nome) -Value 'x' -Encoding ASCII
+            }
+        }
+    }
+
+    It 'apaga win-done e win-out dos ids da lista, e mais nada' {
+        New-ParDeTeste 'aaaaaaaaaaaa'
+        New-ParDeTeste 'bbbbbbbbbbbb'
+        Set-Content -LiteralPath $Script:Lista -Value "aaaaaaaaaaaa`r`n" -Encoding ASCII -NoNewline
+
+        Clear-PhportoImportadas $Script:Lista $Script:Pasta | Should -Be 2
+
+        Test-Path (Join-Path $Script:Pasta 'win-done-aaaaaaaaaaaa.json') | Should -BeFalse
+        Test-Path (Join-Path $Script:Pasta 'win-out-aaaaaaaaaaaa.txt') | Should -BeFalse
+        Test-Path (Join-Path $Script:Pasta 'win-exec-aaaaaaaaaaaa.ps1') | Should -BeTrue
+        Test-Path (Join-Path $Script:Pasta 'win-done-bbbbbbbbbbbb.json') | Should -BeTrue
+        Test-Path (Join-Path $Script:Pasta 'win-out-bbbbbbbbbbbb.txt') | Should -BeTrue
+    }
+
+    It 'a lista fica como estava: quem poda e o PHP' {
+        New-ParDeTeste 'cccccccccccc'
+        Set-Content -LiteralPath $Script:Lista -Value "cccccccccccc`n" -Encoding ASCII -NoNewline
+
+        Clear-PhportoImportadas $Script:Lista $Script:Pasta | Out-Null
+
+        Get-Content -Raw -LiteralPath $Script:Lista | Should -Be "cccccccccccc`n"
+    }
+
+    It 'linha fora do formato nao vira caminho' {
+        $fora = Join-Path $Script:Prot 'win-done-fora.json'
+        Set-Content -LiteralPath $fora -Value 'fica' -Encoding ASCII
+        New-ParDeTeste 'dddddddddddd'
+        $linhas = @('../win-done-fora', '..\fora', 'DDDDDDDDDDDD', 'dddddddddddd0', ' dddddddddddd', '*', '')
+        Set-Content -LiteralPath $Script:Lista -Value ($linhas -join "`n") -Encoding ASCII
+
+        Clear-PhportoImportadas $Script:Lista $Script:Pasta | Should -Be 0
+
+        Test-Path $fora | Should -BeTrue
+        Test-Path (Join-Path $Script:Pasta 'win-done-dddddddddddd.json') | Should -BeTrue
+    }
+
+    It 'sem lista, nao faz nada e nao quebra' {
+        Clear-PhportoImportadas $Script:Lista $Script:Pasta | Should -Be 0
+        Clear-PhportoImportadas '' $Script:Pasta | Should -Be 0
+    }
+
+    It 'lista acima do teto e ignorada inteira' {
+        New-ParDeTeste 'eeeeeeeeeeee'
+        Set-Content -LiteralPath $Script:Lista -Value ("eeeeeeeeeeee`n" * 10) -Encoding ASCII
+
+        Clear-PhportoImportadas $Script:Lista $Script:Pasta 64 | Should -Be 0
+
+        Test-Path (Join-Path $Script:Pasta 'win-done-eeeeeeeeeeee.json') | Should -BeTrue
+    }
+
+    It 'id repetido conta uma vez so' {
+        New-ParDeTeste 'ffffffffffff'
+        Set-Content -LiteralPath $Script:Lista -Value "ffffffffffff`nffffffffffff`n" -Encoding ASCII -NoNewline
+
+        Clear-PhportoImportadas $Script:Lista $Script:Pasta | Should -Be 2
+    }
+
+    It 'o laco e o uso unico varrem antes de rodar o job' {
+        $texto = Get-Content -Raw $Script:Worker
+        $texto | Should -Match "Join-Path \`$Dir 'win-importadas\.txt'"
+        ([regex]::Matches($texto, 'Clear-PhportoImportadas \$F_IMPORTADAS \$PROTEGIDA')).Count | Should -Be 2
+    }
+}
+
 Describe 'worker - Invoke-UmaVez' {
 
     BeforeEach {
@@ -1559,5 +1639,24 @@ Describe 'worker - Invoke-UmaVez' {
         Invoke-UmaVez | Should -Be 126
         (Get-Content -Raw -LiteralPath $Script:Estado) | Should -Match "^ACEITO=$PID"
         Should -Invoke Write-Recusa -Times 1 -Exactly -ParameterFilter { $motivo -like '*so roda acao sensivel*' }
+    }
+
+    It 'pedido aceito varre as execucoes ja importadas antes do filho' {
+        Mock Read-PhportoPedido { [PSCustomObject]@{ id = $Script:IdUma; acao = 'rdp'; params = [PSCustomObject]@{ SubAction = 'off' }; php_pid = $PID; raiz_win = 'C:\w'; dir = $Script:Trabalho; prazo_s = 615; manifesto = @{} } }
+        Mock Write-Recusa { }
+        Mock Clear-PhportoImportadas { 0 }
+
+        Invoke-UmaVez | Out-Null
+
+        Should -Invoke Clear-PhportoImportadas -Times 1 -Exactly
+    }
+
+    It 'pedido recusado nao varre nada' {
+        Mock Read-PhportoPedido { throw 'pedido expirado' }
+        Mock Clear-PhportoImportadas { 0 }
+
+        Invoke-UmaVez | Out-Null
+
+        Should -Invoke Clear-PhportoImportadas -Times 0 -Exactly
     }
 }
