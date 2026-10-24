@@ -86,6 +86,7 @@ $global:PhportoWinActions = [ordered]@{
     'hyperv-vm'   = 'Invoke-HypervVm'
     'wsl'         = 'Invoke-Wsl'
     'wsl-enable'  = 'Invoke-WslEnable'
+    'wsl-install-distro' = 'Invoke-WslInstallDistro'
     'php-update'  = 'Invoke-PhpUpdate'
 }
 

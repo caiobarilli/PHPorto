@@ -32,6 +32,10 @@ Describe 'Invoke-Wsl - Sanity' {
     It 'the map dispatches wsl-enable to Invoke-WslEnable' {
         $global:PhportoWinActions['wsl-enable'] | Should -Be 'Invoke-WslEnable'
     }
+
+    It 'the map dispatches wsl-install-distro to Invoke-WslInstallDistro' {
+        $global:PhportoWinActions['wsl-install-distro'] | Should -Be 'Invoke-WslInstallDistro'
+    }
 }
 
 Describe 'Invoke-Wsl - SubAction validation' {
@@ -185,6 +189,65 @@ Describe 'Invoke-WslEnable' {
         $output = (Invoke-WslEnable) 6>&1 | Out-String
 
         $output | Should -Match '\[ ERROR \].*wsl\.exe not found'
+        $global:LASTEXITCODE | Should -Be 1
+        Should -Invoke Invoke-PhportoWslExe -Times 0
+    }
+}
+
+Describe 'Invoke-WslInstallDistro' {
+
+    BeforeEach {
+        Mock Test-PhportoWslExe { $true }
+    }
+
+    It 'runs wsl --install -d <name> --no-launch as an argument array' {
+        Mock Invoke-PhportoWslExe { @{ ExitCode = 0; Output = 'Installing: Debian' } }
+
+        $output = (Invoke-WslInstallDistro -Distro 'Debian') 6>&1 | Out-String
+
+        Should -Invoke Invoke-PhportoWslExe -Times 1 -Exactly -ParameterFilter {
+            $Argumentos.Count -eq 4 -and $Argumentos[0] -eq '--install' -and $Argumentos[1] -eq '-d' -and
+            $Argumentos[2] -eq 'Debian' -and $Argumentos[3] -eq '--no-launch'
+        }
+        $output | Should -Match '\[ OK \].*Debian installed'
+        $output | Should -Match 'outside PHPorto'
+        $global:LASTEXITCODE | Should -Be 0
+    }
+
+    It 'builds the call from an array literal, not from a joined string' {
+        $text = Get-Content -Path $Script:Acao -Raw
+        $text | Should -Match 'Invoke-PhportoWslExe -Argumentos @\(''--install'', ''-d'', \$Distro, ''--no-launch''\)'
+        $text | Should -Not -Match 'Invoke-Expression'
+    }
+
+    It 'refuses an invalid name without calling wsl.exe' {
+        Mock Invoke-PhportoWslExe { @{ ExitCode = 0; Output = '' } }
+
+        foreach ($ruim in @('', 'Debian; calc', '-d', '--web-download', 'a b', '../x', ('a' * 65))) {
+            $output = (Invoke-WslInstallDistro -Distro $ruim) 6>&1 | Out-String
+            $output | Should -Match '\[ ERROR \].*Invalid distro name'
+            $global:LASTEXITCODE | Should -Be 1
+        }
+        Should -Invoke Invoke-PhportoWslExe -Times 0
+    }
+
+    It 'reports a failing install as an error with its exit code' {
+        Mock Invoke-PhportoWslExe { @{ ExitCode = -2147023838; Output = 'Error code: 0x80070422' } }
+
+        $output = (Invoke-WslInstallDistro -Distro 'Debian') 6>&1 | Out-String
+
+        $output | Should -Match '0x80070422'
+        $output | Should -Match '\[ ERROR \]'
+        $output | Should -Not -Match 'outside PHPorto'
+        $global:LASTEXITCODE | Should -Be 1
+    }
+
+    It 'reports a missing wsl.exe without calling it' {
+        Mock Test-PhportoWslExe { $false }
+        Mock Invoke-PhportoWslExe { @{ ExitCode = 0; Output = '' } }
+
+        (Invoke-WslInstallDistro -Distro 'Debian') 6>&1 | Out-Null
+
         $global:LASTEXITCODE | Should -Be 1
         Should -Invoke Invoke-PhportoWslExe -Times 0
     }

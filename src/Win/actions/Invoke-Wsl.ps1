@@ -87,3 +87,31 @@ function Invoke-WslEnable {
     Write-Status INFO "Restart Windows to finish enabling WSL."
     $global:LASTEXITCODE = 0
 }
+
+function Invoke-WslInstallDistro {
+    param([string]$Distro)
+
+    $global:LASTEXITCODE = 1
+
+    if (-not $Distro -or $Distro -cnotmatch '\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z') {
+        Write-Status ERROR "Invalid distro name."
+        return
+    }
+
+    if (-not (Test-PhportoWslExe)) {
+        Write-Status ERROR "wsl.exe not found; enable WSL first."
+        return
+    }
+
+    $r = Invoke-PhportoWslExe -Argumentos @('--install', '-d', $Distro, '--no-launch')
+    if ($r.Output) { Write-Host $r.Output }
+    if ($r.ExitCode -ne 0) {
+        Write-Status ERROR "wsl --install -d $Distro --no-launch failed (exit $($r.ExitCode))."
+        $global:LASTEXITCODE = 1
+        return
+    }
+
+    Write-Status OK "Distro $Distro installed without launching it."
+    Write-Status INFO "Open $Distro once outside PHPorto to create the UNIX user."
+    $global:LASTEXITCODE = 0
+}

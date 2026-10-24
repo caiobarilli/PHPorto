@@ -259,11 +259,11 @@ Describe 'bootstrap - despachante' {
             Should -Not -BeNullOrEmpty
     }
 
-    It 'o mapa conhece as vinte e duas acoes' {
+    It 'o mapa conhece as vinte e tres acoes' {
         $chaves = @($global:PhportoWinActions.Keys | Sort-Object)
         $chaves | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
-            'memory', 'network', 'openssh', 'optimize', 'performance', 'php-update', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl', 'wsl-enable'
+            'memory', 'network', 'openssh', 'optimize', 'performance', 'php-update', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl', 'wsl-enable', 'wsl-install-distro'
         )
     }
 

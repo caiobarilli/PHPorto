@@ -45,14 +45,15 @@ it('o POST da /hyperv não leva Name nem outro campo ao worker', function () {
         ->toBe(['SubAction' => 'stop', 'VmId' => POST_VM_ID]);
 });
 
-it('a /win recusa o hyperv-vm, o wsl, o wsl-enable e o php-update, e só eles', function () {
+it('a /win recusa o hyperv-vm, o wsl, o wsl-enable, o wsl-install-distro e o php-update, e só eles', function () {
     expect(Pages::winPostRefusal(WinAction::HypervVm))->toBe('Ligar, desligar e reiniciar VM é pela tela do Hyper-V, não pela /win.')
         ->and(Pages::winPostRefusal(WinAction::Wsl))->toBe('Desligar e acordar o WSL é pela configuração, não pela /win.')
         ->and(Pages::winPostRefusal(WinAction::WslEnable))->toBe('Ativar o WSL é pela configuração, não pela /win.')
+        ->and(Pages::winPostRefusal(WinAction::WslInstallDistro))->toBe('Instalar a distro do WSL é pela configuração, não pela /win.')
         ->and(Pages::winPostRefusal(WinAction::PhpUpdate))->toBe('Atualizar o PHP é pela tela do PHP, não pela /win.');
 
     foreach (WinAction::cases() as $acao) {
-        if (!in_array($acao, [WinAction::HypervVm, WinAction::Wsl, WinAction::WslEnable, WinAction::PhpUpdate], true)) {
+        if (!in_array($acao, [WinAction::HypervVm, WinAction::Wsl, WinAction::WslEnable, WinAction::WslInstallDistro, WinAction::PhpUpdate], true)) {
             expect(Pages::winPostRefusal($acao))->toBeNull();
         }
     }

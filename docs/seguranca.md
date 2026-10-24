@@ -366,6 +366,7 @@ pede um prompt de UAC próprio:
 | `openssh` | `install`, `enable` (sobe o `sshd` e abre a porta 22 na rede privada) |
 | `php-update` | todas (troca os arquivos do PHP pelo zip oficial de um patch da mesma linha) |
 | `wsl-enable` | todas (roda `wsl --install --no-distribution`, que liga os recursos do Windows do WSL; só pelo card WSL da `/config`, a `/win` recusa) |
+| `wsl-install-distro` | todas (roda `wsl --install -d <PHPORTO_DISTRO> --no-launch`; o nome vem só do `.env`, nunca do formulário, e o worker confere de novo o formato; só pelo card WSL da `/config`, a `/win` recusa) |
 
 A lista mora em dois lugares, `WinAction::SENSITIVE` (PHP, escolhe o caminho) e
 `$SENSIVEIS` (`worker.ps1`, a tranca), e um teste confere que são a mesma.
