@@ -124,7 +124,8 @@ final class Pages
         $dbPath = $provider === 'sqlite' ? $this->config['sqlite']['path'] : '';
 
         $win        = $this->elevation->state();
-        $wslDistros = $this->distroChecker->registered();
+        $wslEnabled = $this->distroChecker->enabled();
+        $wslDistros = $wslEnabled ? $this->distroChecker->registered() : null;
 
         $view = new ConfigView(
             provider: $provider === '' ? 'desconhecido' : $provider,
@@ -148,6 +149,7 @@ final class Pages
             tz: $this->config['tz'],
             wslDistros: $wslDistros,
             wslRunning: $wslDistros === null ? null : $this->distroChecker->running(),
+            wslEnabled: $wslEnabled,
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view));
@@ -196,6 +198,10 @@ final class Pages
 
         if ($action === WinAction::Wsl->value) {
             $this->handleWslPost();
+        }
+
+        if ($action === WinAction::WslEnable->value) {
+            $this->handleWslEnablePost();
         }
 
         if ($action === 'fabrica') {
@@ -262,6 +268,62 @@ final class Pages
 
         $this->flash($aviso);
         Respond::redirect('/config');
+    }
+
+    private function handleWslEnablePost(): never
+    {
+        if ($this->distroChecker->enabled()) {
+            $this->flash('O WSL já está ativado no Windows. Nada foi executado.');
+            Respond::redirect('/config');
+        }
+
+        $blocked = $this->oneShot->blockingReason();
+
+        if ($blocked !== null) {
+            $this->flash($blocked);
+            Respond::redirect('/config');
+        }
+
+        try {
+            $run = $this->oneShot->dispatch(WinAction::WslEnable, [], $this->config['winutil']['timeout']);
+        } catch (RuntimeException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/config');
+        }
+
+        $aviso = self::wslEnableNotice($run);
+
+        try {
+            ($this->makeService)()->record(new Execution(
+                command: self::describe(WinAction::WslEnable, []),
+                output: $run->output,
+                exitCode: $run->exitCode,
+                durationMs: $run->durationMs,
+                kind: ExecutionKind::Windows,
+                timedOut: $run->timedOut,
+            ));
+        } catch (Throwable $e) {
+            $aviso .= ' A ação executou, mas o registro falhou: ' . $e->getMessage();
+        }
+
+        $this->flash($aviso);
+        Respond::redirect('/config');
+    }
+
+    public static function wslEnableNotice(PsResult $run): string
+    {
+        if ($run->timedOut) {
+            return 'Ativar o WSL demorou demais e foi cancelado. A saída está no histórico da /win.';
+        }
+
+        if ($run->exitCode !== 0) {
+            return 'Falha ao ativar o WSL (código '
+                . ($run->exitCode === null ? 'nenhum' : $run->exitCode)
+                . '). A saída está no histórico da /win.';
+        }
+
+        return 'WSL ativado, sem instalar distro. Reinicie o Windows para concluir; '
+            . 'até lá o card do WSL continua mostrando o botão Ativar. A saída está no histórico da /win.';
     }
 
     /**
@@ -1308,6 +1370,7 @@ final class Pages
         return match ($acao) {
             WinAction::HypervVm  => 'Ligar, desligar e reiniciar VM é pela tela do Hyper-V, não pela /win.',
             WinAction::Wsl       => 'Desligar e acordar o WSL é pela configuração, não pela /win.',
+            WinAction::WslEnable => 'Ativar o WSL é pela configuração, não pela /win.',
             WinAction::PhpUpdate => 'Atualizar o PHP é pela tela do PHP, não pela /win.',
             default              => null,
         };

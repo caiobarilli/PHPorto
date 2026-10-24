@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 use App\Win\WinAction;
 
-it('tem as vinte e uma ações: as dezessete do menu em ordem, as duas da /hyperv, a do WSL da /config e a da tela do PHP fora dele', function () {
+it('tem as vinte e duas ações: as dezessete do menu em ordem, as duas da /hyperv, as duas do WSL da /config e a da tela do PHP fora dele', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
             'gdid', 'rdp', 'sunshine', 'openssh', 'ssh-keys',
             'hyperv', 'hyperv-vm',
-            'wsl',
+            'wsl', 'wsl-enable',
             'php-update',
         ]);
 });
@@ -906,4 +906,18 @@ it('openssh: o worker tem o mesmo conjunto e as mesmas sensíveis', function () 
 
     expect($worker)->toContain("'SubAction' = @{ tipo = 'set'; valores = @('status', 'install', 'enable', 'disable') }")
         ->and($worker)->toContain("'openssh'   = @('install', 'enable')");
+});
+
+it('wsl-enable não aceita parâmetro e é sensível: abre o UAC a cada clique', function () {
+    expect(WinAction::WslEnable->validate(['Distro' => 'Debian', 'SubAction' => 'x']))->toBe([])
+        ->and(WinAction::WslEnable->isSensitive([]))->toBeTrue()
+        ->and(WinAction::SENSITIVE['wsl-enable'])->toBe('*')
+        ->and(WinAction::WslEnable->stateChange([]))->toBeNull();
+});
+
+it('a allowlist do worker tem wsl-enable sem parâmetro e sensível', function () {
+    $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+
+    expect($worker)->toMatch("/^    'wsl-enable'\\s*=\\s*@\\{\\}\\r?$/m")
+        ->and($worker)->toMatch("/^    'wsl-enable' = '\\*'\\r?$/m");
 });

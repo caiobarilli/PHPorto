@@ -159,7 +159,33 @@ use App\Http\Respond;
     </form>
   </section>
 
-  <?php if ($view->wslDistros !== null): ?>
+  <?php if (!$view->wslEnabled): ?>
+    <section id="wsl">
+      <h2>WSL</h2>
+
+      <form method="post" id="form-wsl-ativar" data-sem-reload>
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="wsl-enable">
+
+        <div class="linha-acao">
+          <button type="submit" class="btn btn-sm" id="btn-wsl-ativar" data-uac
+                  <?= $view->uacOk ? '' : 'disabled' ?>>Ativar WSL · abre o UAC</button>
+        </div>
+
+        <p class="nota-estado" id="wsl-estado">
+          O WSL não está ativado neste Windows (<code>wsl --status</code> não respondeu com sucesso).
+          <br>
+          <strong>Ativar WSL</strong> roda <code>wsl --install --no-distribution</code>: liga os
+          recursos do Windows que o WSL precisa, sem instalar nenhuma distro. Abre o UAC a cada
+          clique. Depois é preciso <strong>reiniciar o Windows</strong>.
+          <?php if (!$view->uacOk): ?>
+            <br>
+            <strong><?= Respond::e($view->uacSummary) ?></strong>
+          <?php endif; ?>
+        </p>
+      </form>
+    </section>
+  <?php elseif ($view->wslDistros !== null): ?>
     <?php $wslRodando = $view->wslRunning !== null && $view->wslRunning !== []; ?>
     <section id="wsl">
       <h2>WSL</h2>

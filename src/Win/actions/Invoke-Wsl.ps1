@@ -66,3 +66,24 @@ function Invoke-Wsl {
     Write-Status INFO "WSL may stop it again after the idle timeout when nothing is running inside."
     $global:LASTEXITCODE = 0
 }
+
+function Invoke-WslEnable {
+    $global:LASTEXITCODE = 1
+
+    if (-not (Test-PhportoWslExe)) {
+        Write-Status ERROR "wsl.exe not found; this Windows cannot enable WSL from here."
+        return
+    }
+
+    $r = Invoke-PhportoWslExe -Argumentos @('--install', '--no-distribution')
+    if ($r.Output) { Write-Host $r.Output }
+    if ($r.ExitCode -ne 0) {
+        Write-Status ERROR "wsl --install --no-distribution failed (exit $($r.ExitCode))."
+        $global:LASTEXITCODE = 1
+        return
+    }
+
+    Write-Status OK "WSL enabled without installing a distro."
+    Write-Status INFO "Restart Windows to finish enabling WSL."
+    $global:LASTEXITCODE = 0
+}

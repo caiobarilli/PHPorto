@@ -273,11 +273,22 @@ Describe 'worker - a allowlist do lado elevado' {
         $ok.params['Undo']  | Should -BeTrue
     }
 
-    It 'conhece as vinte e uma acoes' {
+    It 'conhece as vinte e duas acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
-            'memory', 'network', 'openssh', 'optimize', 'performance', 'php-update', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl'
+            'memory', 'network', 'openssh', 'optimize', 'performance', 'php-update', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl', 'wsl-enable'
         )
+    }
+
+    It 'wsl-enable: so passa com UAC proprio e nao aceita parametro' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'wsl-enable'; params = [PSCustomObject]@{} }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage '*so roda com UAC proprio*'
+        $ok = Test-Job $job -Modo UmaVez
+        $ok.params.Count | Should -Be 0
+
+        $extra = [PSCustomObject]@{ acao = 'wsl-enable'; params = [PSCustomObject]@{ Distro = 'Debian' } }
+        { Test-Job $extra -Modo UmaVez } | Should -Throw
     }
 
     It 'php-update: so passa com UAC proprio, e a pasta fora do formato nao passa' {
