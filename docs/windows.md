@@ -81,7 +81,7 @@ terminar e grava a execução no histórico.
 
 A tela tem quatro partes, nesta ordem:
 
-1. a última execução do Windows;
+1. o terminal PowerShell, com a última execução do Windows no console;
 2. as três ações de um clique, sem parâmetro e sem estado: **Auditoria**,
    **Memória** e **Processos**;
 3. as outras ações, em cinco abas;
@@ -434,6 +434,19 @@ Apagar o histórico do Windows não apaga essa memória. Restaurar de fábrica, 
   quais pacotes.
 - **Os seis ajustes do Explorer**: podem pedir novo login ou reiniciar o
   Explorer, não o Windows.
+
+## Terminal PowerShell
+
+O topo da tela é um console no mesmo padrão do `/wsl`: uma linha de comando,
+Enter envia, e o resultado aparece no console sem recarregar a página. Ele roda
+PowerShell livre como o usuário logado, **sem elevação** e fora do processo
+elevado, então funciona mesmo com o PowerShell elevado desligado. Para o que
+precisa de Administrador, use as ações.
+
+Limites: 4.096 bytes por comando, 60 s (a árvore de processos é encerrada ao
+estourar) e 256 KiB de saída. Cada comando entra no histórico com o prefixo
+`PS> `. Os detalhes estão em
+[Segurança](seguranca.md#terminal-powershell-do-win).
 
 ## Histórico
 

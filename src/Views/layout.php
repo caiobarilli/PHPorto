@@ -349,12 +349,13 @@ use App\Http\Respond;
   }
   .term-prompt { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--term-line); }
   .term-ps { color: var(--t-ok); flex: none; line-height: 1.4; padding-top: 6px; }
-  .term-prompt textarea {
+  .term-prompt textarea, .term-prompt input[type=text] {
     flex: 1; min-width: 0; height: auto; max-height: 160px; padding: 6px 0; resize: none; overflow-y: auto;
     background: transparent; border: 0; border-radius: 0; outline: none;
     color: var(--t-fg); caret-color: var(--t-cursor); font: 13px/1.4 var(--mono-console);
   }
-  .term-prompt textarea::placeholder { color: var(--t-mut); }
+  .term-prompt textarea::placeholder, .term-prompt input[type=text]::placeholder { color: var(--t-mut); }
+  .term-cmd { color: var(--t-mut); }
   .term-go { background: var(--t-go-bg); color: var(--t-go-fg); border: 0; border-radius: 6px; padding: 6px 12px; font: 600 12px/1 var(--sans); cursor: pointer; flex: none; margin-top: 2px; }
   .btn-claro { background: var(--claro-bg); color: var(--claro-fg); border: 1px solid var(--line); font-weight: 600; }
   .btn-claro:hover { background: var(--claro-hover); }

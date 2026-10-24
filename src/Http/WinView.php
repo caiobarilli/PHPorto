@@ -35,6 +35,9 @@ final readonly class WinView
      * @param WinTab $tab
      * @param string|null $sensitiveBlocked
      * @param list<string> $wslDistros
+     * @param int $terminalMaxCommandBytes
+     * @param int $terminalMaxOutputBytes
+     * @param int $terminalTimeout
      */
     public function __construct(
         public array $rows,
@@ -65,6 +68,9 @@ final readonly class WinView
         public WinTab $tab = WinTab::Sistema,
         public ?string $sensitiveBlocked = null,
         public array $wslDistros = [],
+        public int $terminalMaxCommandBytes = \App\Win\PsTerminalCommand::MAX_COMMAND_BYTES,
+        public int $terminalMaxOutputBytes = \App\Win\PsTerminalCommand::MAX_OUTPUT_BYTES,
+        public int $terminalTimeout = \App\Win\PsTerminalCommand::TIMEOUT_SECONDS,
     ) {
     }
 }

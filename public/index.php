@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Api;
 use App\Http\Auth;
 use App\Http\AuthOutcome;
+use App\Http\Front;
 use App\Http\Login;
 use App\Http\Pages;
 use App\Http\Respond;
@@ -12,6 +13,7 @@ use App\Services\ExecutionLogService;
 use App\Win\Elevation;
 use App\Win\HypervGate;
 use App\Win\OneShot;
+use App\Win\PsTerminalProcess;
 use App\Win\UacPolicy;
 use App\Wsl\Distro;
 
@@ -55,6 +57,12 @@ if (!is_string($path) || $path === '') {
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $method = is_string($method) ? strtoupper($method) : 'GET';
+
+$recusa = Front::refusal($_SERVER, $path, $config['api_enabled']);
+
+if ($recusa !== null) {
+    Front::refuse($recusa);
+}
 
 $auth = new Auth(
     $config['auth_token'],
@@ -117,6 +125,7 @@ $pages = new Pages(
     ),
     oneShot: new OneShot($filesDir, $winDir, $elevation, $uac),
     uac: $uac,
+    terminal: new PsTerminalProcess($filesDir),
 );
 
 match ($path) {

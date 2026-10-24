@@ -1,8 +1,9 @@
 # Segurança
 
 O PHPorto executa comando de shell arbitrário na máquina onde roda: no WSL, com
-os privilégios do usuário da distro; na tela `/win`, como Administrador do
-Windows. É uma ferramenta local, de uma pessoa só. Este documento reúne as
+os privilégios do usuário da distro; na tela `/win`, as ações da lista fechada
+rodam como Administrador do Windows e o terminal roda PowerShell livre como o
+usuário logado, sem elevação. É uma ferramenta local, de uma pessoa só. Este documento reúne as
 travas que existem e o que cada uma cobre.
 
 ## Bind no loopback
@@ -31,6 +32,28 @@ O `router.php` é a segunda camada. Ele funciona como lista de permissão — tu
 que não é rota da aplicação é 404 —, barra dotfiles que apareçam em `public/`
 decodificando o caminho antes de comparar (senão `/%2Eenv` passaria) e recusa
 byte nulo.
+
+### O `Host` da requisição
+
+Antes do portão do token, o PHPorto confere o cabeçalho `Host`. Só passam dois
+valores, comparados como texto exato: `127.0.0.1:<porta>` e
+`localhost:<porta>`, onde a porta é a que o `php -S` está servindo (4001 no
+comando acima). Qualquer outro valor, inclusive sem porta, com outra porta, em
+maiúsculas, IPv6 ou ausente, recebe **421** em texto puro, sem página, sem
+cookie e sem tocar no contador de tentativas.
+
+Isso fecha o DNS rebinding: uma página de outro site que faça o nome dela
+apontar para `127.0.0.1` chega com o `Host` daquele nome e para no 421, antes
+de ver o formulário de entrada ou de gastar tentativa. Também impede que alguém
+de fora esgote as cinco tentativas e tranque o dono da máquina por esse
+caminho.
+
+```bash
+curl.exe -H "Host: evil:4001" http://127.0.0.1:4001/
+```
+
+responde `421 Host recusado`. Pelo túnel SSH nada muda: o navegador continua
+pedindo `127.0.0.1:4001`.
 
 ## Acesso remoto: túnel SSH
 
@@ -99,8 +122,9 @@ Toda requisição, telas e API, passa por um portão único antes do roteamento.
   válido por sete dias. `Secure` só quando a requisição chega por HTTPS. O valor
   é `prazo.hmac`: HMAC-SHA256 de um rótulo fixo com o prazo, com o próprio token
   como chave. O token nunca vai no cookie, e trocar o token invalida todos os
-  cookies. Cookie com assinatura errada conta como erro e é apagado; cookie
-  vencido só pede o token de novo.
+  cookies. Cookie com formato ou assinatura errada é apagado (a resposta manda
+  o cookie vencido) e **não** conta como erro; cookie vencido só pede o token
+  de novo.
 - **Entrada na API:** HTTP Basic, com o token no campo de senha e o usuário
   ignorado: `curl -u :TOKEN`. O 401 da API também vem sem `WWW-Authenticate`.
 - **Comparação:** `hash_equals`, em tempo constante.
@@ -118,6 +142,11 @@ responde 429, com `Retry-After` e o tempo que falta.
   navegador vem sem ela. Um acerto zera o contador. Durante o bloqueio, nem o
   cookie válido passa.
 - Durante o bloqueio, nem o token certo passa.
+- Não contam: cookie `phporto_auth` falso ou adulterado (só é apagado),
+  requisição com `Host` de fora (para no 421 antes do portão) e `/api/*` com a
+  API desligada (responde 404 antes do HTTP Basic). Assim, uma página de outro
+  site que mande cookie falso ou chame a API não consegue trancar o dono. Só o
+  token digitado no formulário e a senha do HTTP Basic com a API ligada contam.
 - O contador é um só, não por IP: tudo chega do loopback.
 - O contador fica em `storage/auth-falhas.json` e guarda a impressão SHA-256 do
   token, nunca o token. Trocar o token desfaz o bloqueio do anterior.
@@ -150,6 +179,38 @@ sozinho** em toda requisição para `127.0.0.1:4001` — inclusive no POST que o
 formulário de outro site dispara. O token de acesso não distingue a requisição
 legítima da forjada. Contra isso, quem trava continua sendo o token de
 formulário nas telas e o `Content-Type` obrigatório na API.
+
+## Terminal PowerShell do `/win`
+
+O `/win` tem um console que roda **PowerShell livre**, com qualquer comando que
+o usuário digitar. Ele não é ação da lista fechada e não passa pelo processo
+elevado:
+
+- **Quem executa:** o próprio processo do `php -S`, que roda com integridade
+  média, como o usuário logado. O `powershell.exe` nasce filho dele e herda o
+  mesmo token, sem elevação. Um comando que precise de Administrador falha com
+  acesso negado, como num PowerShell comum.
+- **Fora do processo elevado:** o terminal não escreve na fila do processo
+  elevado, não está em `WinAction` nem no `$ALLOWLIST` do worker, e funciona
+  com o PowerShell elevado desligado. As duas listas abaixo continuam valendo
+  só para as ações.
+- **Como o comando vai:** `proc_open` com lista de argumentos, sem shell:
+  `powershell.exe -NoProfile -NonInteractive -EncodedCommand <base64>`. O texto
+  digitado vai em base64 dentro de um script fixo e nunca é interpolado.
+- **Limites:** comando de até 4.096 bytes, UTF-8 válido e sem byte nulo; 60 s
+  de tempo, e ao estourar a árvore de processos inteira é encerrada
+  (`taskkill /F /T`); a saída guardada e mostrada para em 256 KiB
+  (262.144 bytes), com aviso; se a saída em disco passar de 16 MiB, a árvore é
+  encerrada.
+- **Entrada:** exige login e o CSRF de uso único, como toda ação das telas.
+- **Registro:** cada comando entra no histórico do Windows com o prefixo
+  `PS> `, a saída, o código de saída e a duração. Vale o que está em
+  [O que fica gravado](#o-que-fica-gravado): o que o comando imprimir fica no
+  banco.
+
+Quem tem o token tem um PowerShell como o usuário da máquina. A proteção é a
+mesma das telas: loopback, `Host` conferido, token, limite de tentativas e
+CSRF.
 
 ## Allowlist dupla nas ações do Windows
 

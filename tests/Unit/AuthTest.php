@@ -129,17 +129,40 @@ it('sem cookie é Missing, e não conta como erro', function (?string $cookie) {
     expect(file_exists($this->arquivo))->toBeFalse();
 })->with([[null], ['']]);
 
-it('COOKIE ADULTERADO conta como erro, e o quinto bloqueia', function (string $adulterado) {
-    foreach (range(1, Auth::MAX_FAILURES - 1) as $_) {
+it('COOKIE ADULTERADO é recusado, mas NÃO conta como erro nem bloqueia', function (string $adulterado) {
+    foreach (range(1, Auth::MAX_FAILURES * 2) as $_) {
         expect(portao($this)->checkCookie($adulterado)->outcome)->toBe(AuthOutcome::Wrong);
     }
 
-    expect(portao($this)->checkCookie($adulterado)->outcome)->toBe(AuthOutcome::Locked);
+    expect(file_exists($this->arquivo))->toBeFalse()
+        ->and(portao($this)->check('certo')->outcome)->toBe(AuthOutcome::Allowed);
 })->with([
     'lixo'             => ['qualquer-coisa'],
     'assinatura falsa' => [(1_000_000 + 100) . '.' . str_repeat('a', 64)],
     'hex maiúsculo'    => [(1_000_000 + 100) . '.' . str_repeat('A', 64)],
 ]);
+
+it('A SESSÃO VÁLIDA CONTINUA DEPOIS DE CINCO COOKIES FALSOS', function () {
+    $cookie = portao($this)->issueCookie()['value'];
+
+    foreach (range(1, Auth::MAX_FAILURES) as $_) {
+        portao($this)->checkCookie('1.' . str_repeat('a', 64));
+    }
+
+    expect(portao($this)->checkCookie($cookie)->outcome)->toBe(AuthOutcome::Allowed);
+});
+
+it('cookie falso não zera nem soma no contador dos tokens errados', function () {
+    foreach (range(1, Auth::MAX_FAILURES - 1) as $_) {
+        portao($this)->check('errado');
+    }
+
+    foreach (range(1, 3) as $_) {
+        expect(portao($this)->checkCookie('lixo')->outcome)->toBe(AuthOutcome::Wrong);
+    }
+
+    expect(portao($this)->check('errado')->outcome)->toBe(AuthOutcome::Locked);
+});
 
 it('estender o prazo de um cookie verdadeiro invalida a assinatura', function () {
     [, $mac] = explode('.', portao($this)->issueCookie()['value']);
