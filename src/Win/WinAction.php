@@ -75,7 +75,7 @@ enum WinAction: string
 
     public const SSHKEYS_KEY_SUBACTIONS = ['authorize', 'wsl-user'];
 
-    public const SSHKEYS_FIELDS = ['PublicKey', 'UseGenerated', 'Fingerprint', 'User', 'Distro'];
+    public const SSHKEYS_FIELDS = ['PublicKey', 'UseGenerated', 'Fingerprint', 'User', 'Distro', 'KeyName'];
 
     public const SSH_PUBLIC_KEY_PATTERN = '\A(?:ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) AAAA[A-Za-z0-9+/]{16,2000}={0,2}(?: [A-Za-z0-9@._+-]{1,100})?\z';
 
@@ -562,8 +562,9 @@ enum WinAction: string
         }
 
         $aceitos = match ($sub) {
-            'authorize' => ['PublicKey', 'UseGenerated'],
-            'wsl-user'  => ['PublicKey', 'UseGenerated', 'User', 'Distro'],
+            'status', 'generate' => ['KeyName'],
+            'authorize' => ['PublicKey', 'UseGenerated', 'KeyName'],
+            'wsl-user'  => ['PublicKey', 'UseGenerated', 'User', 'Distro', 'KeyName'],
             'remove'    => ['Fingerprint'],
             default     => [],
         };
@@ -574,6 +575,11 @@ enum WinAction: string
 
         if (in_array($sub, self::SSHKEYS_KEY_SUBACTIONS, true)) {
             $params += $this->sshKey($input);
+        }
+
+        if (in_array($sub, ['status', 'generate'], true) || ($params['UseGenerated'] ?? false) === true) {
+            $bruto = trim($input['KeyName'] ?? '');
+            $params['KeyName'] = SshKeyFolder::name($bruto === '' ? SshKeyFolder::DEFAULT_NAME : $bruto);
         }
 
         if ($sub === 'remove') {

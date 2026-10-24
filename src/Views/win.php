@@ -70,6 +70,8 @@ $sshAplicado   = $aplicado(\App\Win\WinAction::OpenSsh);
 $disChave      = $travado || !$sshAplicado ? ' disabled' : $disSens;
 $disWsl        = $view->wslDistros === [] ? ' disabled' : $disChave;
 $chaveGerada   = \App\Win\SshKeyOutput::generated($view->rows);
+$nomeChave     = $chaveGerada['name'] ?? \App\Win\SshKeyFolder::DEFAULT_NAME;
+$campoNome     = '<input type="hidden" name="KeyName" value="' . Respond::e($nomeChave) . '">';
 $autorizadas   = \App\Win\SshKeyOutput::authorized($view->rows);
 $usuariosWsl   = \App\Win\SshKeyOutput::wslUsers($view->rows);
 
@@ -658,13 +660,21 @@ foreach ($view->tweaks as $tw) {
       </div>
     <?php endif; ?>
     <section id="acao-ssh-keys">
-      <?= $secao('Gerar chave neste Windows', 'Roda o ssh-keygen -t ed25519 nativo e grava em %USERPROFILE%\.ssh\id_ed25519. Só a pública sobe na tela.') ?>
-      <div class="row">
-        <?= $botao('ssh-keys', 'SubAction', 'generate', 'Gerar chave ed25519', false) ?>
-        <?= $botao('ssh-keys', 'SubAction', 'status', 'Ver o estado', true) ?>
-      </div>
+      <?= $secao('Gerar chave neste Windows', 'Roda o ssh-keygen -t ed25519 nativo e grava em %USERPROFILE%\.ssh\<nome>. Se já existir uma chave com esse nome, nada é gerado nem sobrescrito. Só a pública sobe na tela.') ?>
+      <form method="post" data-sem-reload>
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="ssh-keys">
+        <div class="campo">
+          <label for="chave-nome">Nome</label>
+          <input type="text" id="chave-nome" name="KeyName" maxlength="64" pattern="[A-Za-z0-9_\-]{1,64}" value="<?= Respond::e($nomeChave) ?>" placeholder="letras, números, - e _"<?= $dis ?>>
+        </div>
+        <div class="row">
+          <button type="submit" class="btn btn-sm" name="SubAction" value="generate"<?= $dis ?>>Gerar chave ed25519</button>
+          <button type="submit" class="btn btn-sm btn-ghost" name="SubAction" value="status"<?= $dis ?>>Ver o estado</button>
+        </div>
+      </form>
       <?php if ($chaveGerada === null): ?>
-        <p class="empty">Nenhuma chave gerada por esta tela. Se já existir uma em <code>.ssh</code>, ela não é sobrescrita: <strong>Ver o estado</strong> mostra a pública dela.</p>
+        <p class="empty">Nenhuma chave gerada por esta tela. Se já existir uma com o nome escolhido em <code>.ssh</code>, ela não é sobrescrita: <strong>Ver o estado</strong> mostra a pública dela.</p>
       <?php else: ?>
         <div class="campo" style="align-items:flex-start">
           <label for="chave-publica">Pública</label>
@@ -673,7 +683,8 @@ foreach ($view->tweaks as $tw) {
         <dl class="kv" style="margin-top:14px">
           <dt>Tipo</dt><dd>ed25519</dd>
           <dt>Impressão</dt><dd><?= Respond::e($chaveGerada['fingerprint']) ?></dd>
-          <dt>Arquivo</dt><dd>%USERPROFILE%\.ssh\id_ed25519.pub</dd>
+          <dt>Privada</dt><dd><code><?= Respond::e($chaveGerada['path']) ?></code></dd>
+          <dt>Pública</dt><dd><code><?= Respond::e($chaveGerada['path']) ?>.pub</code></dd>
         </dl>
         <p class="nota-estado">A privada ficou no disco. Esta tela e o log não a mostram.</p>
       <?php endif; ?>
@@ -690,12 +701,13 @@ foreach ($view->tweaks as $tw) {
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="ssh-keys">
         <input type="hidden" name="SubAction" value="authorize">
+        <?= $campoNome ?>
         <div class="campo" style="align-items:flex-start">
           <label for="chave-colar">Pública</label>
           <textarea id="chave-colar" name="PublicKey" maxlength="<?= \App\Win\WinAction::SSH_PUBLIC_KEY_MAX ?>" placeholder="ssh-ed25519 AAAA... comentario"<?= $disChave ?>></textarea>
         </div>
         <div class="row">
-          <button type="submit" class="btn btn-sm btn-ghost" name="UseGenerated" value="1" data-usar-gerada data-uac<?= $disChave ?>>Usar a gerada acima<?= Respond::e($avisoUac) ?></button>
+          <button type="submit" class="btn btn-sm btn-ghost" name="UseGenerated" value="1" data-usar-gerada data-uac<?= $disChave ?>>Usar a gerada (<?= Respond::e($nomeChave) ?>)<?= Respond::e($avisoUac) ?></button>
           <button type="submit" class="btn btn-sm" data-uac<?= $disChave ?>>Autorizar<?= Respond::e($avisoUac) ?></button>
           <?= $botao('ssh-keys', 'SubAction', 'list', 'Ver as autorizadas', true) ?>
         </div>
@@ -736,6 +748,7 @@ foreach ($view->tweaks as $tw) {
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
         <input type="hidden" name="acao" value="ssh-keys">
         <input type="hidden" name="SubAction" value="wsl-user">
+        <?= $campoNome ?>
         <div class="campo">
           <label for="wsl-usuario">Usuário</label>
           <input type="text" id="wsl-usuario" name="User" maxlength="32" pattern="[a-z][a-z0-9\-]{0,31}" placeholder="somente minúsculas, números, hífen"<?= $disWsl ?>>
@@ -756,7 +769,7 @@ foreach ($view->tweaks as $tw) {
           <textarea id="wsl-chave" name="PublicKey" maxlength="<?= \App\Win\WinAction::SSH_PUBLIC_KEY_MAX ?>" placeholder="colar ou usar a gerada acima"<?= $disWsl ?>></textarea>
         </div>
         <div class="row">
-          <button type="submit" class="btn btn-sm btn-ghost" name="UseGenerated" value="1" data-usar-gerada data-uac<?= $disWsl ?>>Usar a gerada acima<?= Respond::e($avisoUac) ?></button>
+          <button type="submit" class="btn btn-sm btn-ghost" name="UseGenerated" value="1" data-usar-gerada data-uac<?= $disWsl ?>>Usar a gerada (<?= Respond::e($nomeChave) ?>)<?= Respond::e($avisoUac) ?></button>
           <button type="submit" class="btn btn-sm" data-uac<?= $disWsl ?>>Criar usuário<?= Respond::e($avisoUac) ?></button>
         </div>
       </form>

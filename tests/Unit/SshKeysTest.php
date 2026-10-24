@@ -65,7 +65,7 @@ it('ssh-keys: campo de outra subação não passa', function (array $input) {
 
 it('ssh-keys: authorize pede a colada ou a gerada, não as duas nem nenhuma', function () {
     expect(WinAction::SshKeys->validate(['SubAction' => 'authorize', 'UseGenerated' => '1']))
-        ->toBe(['SubAction' => 'authorize', 'UseGenerated' => true])
+        ->toBe(['SubAction' => 'authorize', 'UseGenerated' => true, 'KeyName' => 'id_ed25519'])
         ->and(WinAction::SshKeys->validate(['SubAction' => 'authorize', 'PublicKey' => '  ' . CHAVE_ED . "\n"]))
         ->toBe(['SubAction' => 'authorize', 'PublicKey' => CHAVE_ED])
         ->and(fn () => WinAction::SshKeys->validate(['SubAction' => 'authorize']))->toThrow(InvalidArgumentException::class)
@@ -118,7 +118,7 @@ it('a saída do worker vira a pública gerada, a lista e os usuários, sem nada 
         sshRow('ssh-keys -SubAction list', '[ INFO ] No authorized key on this Windows.'),
     ];
 
-    expect(SshKeyOutput::generated($rows))->toBe(['key' => CHAVE_ED, 'fingerprint' => DIGITAL_ED])
+    expect(SshKeyOutput::generated($rows))->toBe(['key' => CHAVE_ED, 'fingerprint' => DIGITAL_ED, 'name' => 'id_ed25519', 'path' => '%USERPROFILE%\\.ssh\\id_ed25519'])
         ->and(SshKeyOutput::authorized($rows))->toBe([
             ['kind' => 'ed25519', 'fingerprint' => DIGITAL_ED, 'comment' => 'notebook'],
             ['kind' => 'rsa', 'fingerprint' => 'SHA256:zqsl5TQN3NwFuiemj7Upvu2vNIzY6dQuKMBmnQ6iNQU', 'comment' => ''],

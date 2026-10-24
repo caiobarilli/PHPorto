@@ -111,6 +111,7 @@ $ALLOWLIST = @{
         'Fingerprint'  = @{ tipo = 'text'; max = 50; padrao = '\ASHA256:[A-Za-z0-9+/]{43}\z' }
         'User'         = @{ tipo = 'text'; max = 32; padrao = '\A[a-z][a-z0-9-]{0,31}\z' }
         'Distro'       = @{ tipo = 'text'; max = 64; padrao = '\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z' }
+        'KeyName'      = @{ tipo = 'text'; max = 64; padrao = '\A[A-Za-z0-9_-]{1,64}\z' }
     }
     'hyperv'      = @{}
 

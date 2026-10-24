@@ -12,7 +12,7 @@ final class SshKeyOutput
 
     /**
      * @param list<Execution> $rows
-     * @return array{key: string, fingerprint: string}|null
+     * @return array{key: string, fingerprint: string, name: string, path: string}|null
      */
     public static function generated(array $rows): ?array
     {
@@ -32,7 +32,7 @@ final class SshKeyOutput
     }
 
     /**
-     * @return array{key: string, fingerprint: string}|null
+     * @return array{key: string, fingerprint: string, name: string, path: string}|null
      */
     public static function publicKey(string $saida): ?array
     {
@@ -41,8 +41,11 @@ final class SshKeyOutput
         }
 
         $digital = WinAction::sshFingerprint($m[1]);
+        $nome    = preg_match('/^\[ OK \] Key name: ([A-Za-z0-9_-]{1,64})\r?$/m', $saida, $n) === 1 ? $n[1] : SshKeyFolder::DEFAULT_NAME;
 
-        return $digital === null ? null : ['key' => $m[1], 'fingerprint' => $digital];
+        $caminho = preg_match('/^\[ OK \] Key path: ([^\x00-\x1F]{1,400}?)\r?$/m', $saida, $c) === 1 ? $c[1] : '%USERPROFILE%\\.ssh\\' . $nome;
+
+        return $digital === null ? null : ['key' => $m[1], 'fingerprint' => $digital, 'name' => $nome, 'path' => $caminho];
     }
 
     /**

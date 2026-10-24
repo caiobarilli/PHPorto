@@ -45,12 +45,25 @@ function Get-PhportoSshKeyKind {
     return $tipo -replace '^ssh-', ''
 }
 
+$global:PhportoSshKeyNamePattern = '\A[A-Za-z0-9_-]{1,64}\z'
+
+function Test-PhportoSshKeyName {
+    param([string]$Name)
+
+    if ([string]::IsNullOrEmpty($Name) -or $Name -cnotmatch $global:PhportoSshKeyNamePattern) { return $false }
+    return ($Name.ToLower() -notmatch '\A(?:con|prn|aux|nul|com[1-9]|lpt[1-9])\z')
+}
+
 function Get-PhportoSshPaths {
+    param([string]$KeyName = 'id_ed25519')
+
     $perfil = $env:USERPROFILE
     $dados  = $env:ProgramData
     return @{
-        Private    = Join-Path (Join-Path $perfil '.ssh') 'id_ed25519'
-        Public     = Join-Path (Join-Path $perfil '.ssh') 'id_ed25519.pub'
+        Name       = $KeyName
+        Folder     = Join-Path $perfil '.ssh'
+        Private    = Join-Path (Join-Path $perfil '.ssh') $KeyName
+        Public     = Join-Path (Join-Path $perfil '.ssh') ($KeyName + '.pub')
         AdminKeys  = Join-Path (Join-Path $dados 'ssh') 'administrators_authorized_keys'
         Keygen     = Join-Path $env:WINDIR 'System32\OpenSSH\ssh-keygen.exe'
         Puttygen   = Join-Path $env:ProgramFiles 'PuTTY\puttygen.exe'
@@ -137,7 +150,8 @@ function Invoke-SshKeys {
         [switch]$UseGenerated,
         [string]$Fingerprint,
         [string]$User,
-        [string]$Distro
+        [string]$Distro,
+        [string]$KeyName
     )
 
     $options  = 'status, generate, puttygen, list, authorize, remove, wsl-user'
@@ -149,6 +163,8 @@ function Invoke-SshKeys {
             Write-Status INFO "No key at $($caminhos.Public)."
             return
         }
+        Write-Status OK "Key name: $($caminhos.Name)"
+        Write-Status OK "Key path: $($caminhos.Private)"
         $digital = Get-PhportoSshFingerprint $linha[0]
         if ($null -eq $digital) {
             Write-Status WARNING "$($caminhos.Public) is not a public key line this screen accepts."
@@ -198,8 +214,7 @@ function Invoke-SshKeys {
 
     function New-PhportoSshKey {
         if ((Test-Path -LiteralPath $caminhos.Private) -or (Test-Path -LiteralPath $caminhos.Public)) {
-            Write-Status WARNING "A key already exists at $($caminhos.Private); nothing was overwritten."
-            Show-PhportoSshPublic
+            Write-Status ERROR "A key named $($caminhos.Name) already exists in $($caminhos.Folder); nothing was generated or overwritten. Pick another name."
             return
         }
         if (-not (Test-Path -LiteralPath $caminhos.Keygen -PathType Leaf)) {
@@ -210,9 +225,25 @@ function Invoke-SshKeys {
         if (-not (Test-Path -LiteralPath $pasta -PathType Container)) {
             New-Item -ItemType Directory -Path $pasta -Force | Out-Null
         }
-        $r = Invoke-PhportoSshKeygen -Keygen $caminhos.Keygen -Path $caminhos.Private -Comment (Get-PhportoSshComment)
+        $temp = Join-Path $pasta ('phporto-tmp-' + [guid]::NewGuid().ToString('N'))
+        $r = Invoke-PhportoSshKeygen -Keygen $caminhos.Keygen -Path $temp -Comment (Get-PhportoSshComment)
         if ($r.ExitCode -ne 0) {
+            Remove-Item -LiteralPath $temp, ($temp + '.pub') -Force -ErrorAction SilentlyContinue
             Write-Status ERROR "ssh-keygen failed (exit $($r.ExitCode)): $($r.Error)"
+            return
+        }
+        try {
+            [System.IO.File]::Move($temp, $caminhos.Private)
+        } catch {
+            Remove-Item -LiteralPath $temp, ($temp + '.pub') -Force -ErrorAction SilentlyContinue
+            Write-Status ERROR "A key named $($caminhos.Name) showed up meanwhile; nothing was overwritten."
+            return
+        }
+        try {
+            [System.IO.File]::Move($temp + '.pub', $caminhos.Public)
+        } catch {
+            Remove-Item -LiteralPath $caminhos.Private, ($temp + '.pub') -Force -ErrorAction SilentlyContinue
+            Write-Status ERROR "A file $($caminhos.Name).pub showed up meanwhile; nothing was overwritten."
             return
         }
         Write-Status OK "ed25519 key created at $($caminhos.Private); the private key stays on disk and is not shown."
@@ -305,7 +336,13 @@ function Invoke-SshKeys {
         return
     }
 
-    $caminhos = Get-PhportoSshPaths
+    if ([string]::IsNullOrEmpty($KeyName)) { $KeyName = 'id_ed25519' }
+    if (-not (Test-PhportoSshKeyName $KeyName)) {
+        Write-Status ERROR 'Key name: only letters, digits, - and _, 1 to 64, not a reserved Windows name.'
+        return
+    }
+
+    $caminhos = Get-PhportoSshPaths -KeyName $KeyName
 
     switch ($SubAction.ToLower()) {
         'status'    { Show-PhportoSshStatus }

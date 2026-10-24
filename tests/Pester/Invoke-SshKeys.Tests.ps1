@@ -97,10 +97,71 @@ Describe 'Invoke-SshKeys - with files in TestDrive' {
 
         $output = (Invoke-SshKeys -SubAction 'generate') 6>&1 | Out-String
 
-        $output | Should -Match '\[ WARNING \].*already exists'
-        $output | Should -Match ([regex]::Escape($Script:Digital))
+        $output | Should -Match '\[ ERROR \].*already exists'
         $output | Should -Not -Match 'SEGREDO-PRIVADO'
         Should -Invoke Invoke-PhportoSshKeygen -Times 0
+        Get-Content -LiteralPath $Script:Paths.Private | Should -Be 'SEGREDO-PRIVADO'
+    }
+
+    It 'generate refuses a named key when only <_> exists' -ForEach @('private', 'public') {
+        $p = Get-PhportoSshPaths -KeyName 'trabalho'
+        New-Item -ItemType Directory -Path $p.Folder -Force | Out-Null
+        $alvo = if ($_ -eq 'private') { $p.Private } else { $p.Public }
+        Set-Content -LiteralPath $alvo -Value 'NAO-MEXER'
+        Mock Invoke-PhportoSshKeygen { @{ ExitCode = 0; Error = '' } }
+
+        $output = (Invoke-SshKeys -SubAction 'generate' -KeyName 'trabalho') 6>&1 | Out-String
+
+        $output | Should -Match 'trabalho already exists'
+        Should -Invoke Invoke-PhportoSshKeygen -Times 0
+        Get-Content -LiteralPath $alvo | Should -Be 'NAO-MEXER'
+    }
+
+    It 'generate refuses a bad key name: <_>' -ForEach @('../x', 'a b', 'NUL', 'com1', ('a' * 65)) {
+        Mock Invoke-PhportoSshKeygen { @{ ExitCode = 0; Error = '' } }
+
+        $output = (Invoke-SshKeys -SubAction 'generate' -KeyName $_) 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \] Key name'
+        Should -Invoke Invoke-PhportoSshKeygen -Times 0
+    }
+
+    It 'generate never overwrites a key that shows up while ssh-keygen runs' {
+        $p = Get-PhportoSshPaths -KeyName 'corrida'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $Script:Paths.Keygen) -Force | Out-Null
+        Set-Content -LiteralPath $Script:Paths.Keygen -Value 'x'
+        Mock Invoke-PhportoSshKeygen {
+            Set-Content -LiteralPath $Path -Value 'NOVA'
+            Set-Content -LiteralPath ($Path + '.pub') -Value $Script:Outra
+            Set-Content -LiteralPath (Get-PhportoSshPaths -KeyName 'corrida').Private -Value 'ANTIGA'
+            @{ ExitCode = 0; Error = '' }
+        }
+
+        $output = (Invoke-SshKeys -SubAction 'generate' -KeyName 'corrida') 6>&1 | Out-String
+
+        $output | Should -Match 'nothing was overwritten'
+        Get-Content -LiteralPath $p.Private | Should -Be 'ANTIGA'
+        @(Get-ChildItem -LiteralPath $p.Folder -Filter 'phporto-tmp-*').Count | Should -Be 0
+    }
+
+    It 'generate with a name writes <name> and <name>.pub and reports the name' {
+        $p = Get-PhportoSshPaths -KeyName 'trabalho'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $Script:Paths.Keygen) -Force | Out-Null
+        Set-Content -LiteralPath $Script:Paths.Keygen -Value 'x'
+        New-Item -ItemType Directory -Path $p.Folder -Force | Out-Null
+        Set-Content -LiteralPath $Script:Paths.Private -Value 'PADRAO'
+        Mock Invoke-PhportoSshKeygen {
+            Set-Content -LiteralPath $Path -Value 'SEGREDO-PRIVADO'
+            Set-Content -LiteralPath ($Path + '.pub') -Value $Script:Outra
+            @{ ExitCode = 0; Error = '' }
+        }
+
+        $output = (Invoke-SshKeys -SubAction 'generate' -KeyName 'trabalho') 6>&1 | Out-String
+
+        $output | Should -Match 'Key name: trabalho'
+        $output | Should -Match ([regex]::Escape('Key path: ' + $p.Private))
+        Get-Content -LiteralPath $p.Public | Should -Be $Script:Outra
+        Get-Content -LiteralPath $Script:Paths.Private | Should -Be 'PADRAO'
     }
 
     It 'generate calls ssh-keygen with the fixed path and a sanitized comment' {
@@ -114,7 +175,8 @@ Describe 'Invoke-SshKeys - with files in TestDrive' {
 
         $output = (Invoke-SshKeys -SubAction 'generate') 6>&1 | Out-String
 
-        Should -Invoke Invoke-PhportoSshKeygen -Times 1 -ParameterFilter { $Path -eq $Script:Paths.Private -and $Comment -eq 'mesa01' }
+        Should -Invoke Invoke-PhportoSshKeygen -Times 1 -ParameterFilter { (Split-Path -Leaf $Path) -like 'phporto-tmp-*' -and $Comment -eq 'mesa01' }
+        Get-Content -LiteralPath $Script:Paths.Private | Should -Be 'SEGREDO-PRIVADO'
         $output | Should -Match 'Public key: ssh-ed25519'
         $output | Should -Not -Match 'SEGREDO-PRIVADO'
     }
@@ -142,6 +204,17 @@ Describe 'Invoke-SshKeys - with files in TestDrive' {
         Set-Content -LiteralPath $Script:Paths.Public -Value $Script:Outra
 
         (Invoke-SshKeys -SubAction 'authorize' -UseGenerated) 6>&1 | Out-Null
+
+        @(Get-Content -LiteralPath $Script:Paths.AdminKeys) | Should -Be @($Script:Outra)
+    }
+
+    It 'authorize -UseGenerated -KeyName reads that named .pub' {
+        $p = Get-PhportoSshPaths -KeyName 'trabalho'
+        New-Item -ItemType Directory -Path $p.Folder -Force | Out-Null
+        Set-Content -LiteralPath $Script:Paths.Public -Value $Script:Chave
+        Set-Content -LiteralPath $p.Public -Value $Script:Outra
+
+        (Invoke-SshKeys -SubAction 'authorize' -UseGenerated -KeyName 'trabalho') 6>&1 | Out-Null
 
         @(Get-Content -LiteralPath $Script:Paths.AdminKeys) | Should -Be @($Script:Outra)
     }
