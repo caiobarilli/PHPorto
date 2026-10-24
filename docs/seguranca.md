@@ -550,6 +550,12 @@ sem `..`, e vai para `storage/tcc/`, sem mexer no PATH.
 `true`, qualquer script PHP servido pelo `php -S` também pode usar FFI; o
 PHPorto só usa no processo filho.
 
+Com o TCC instalado e a extensão FFI ainda não carregada, a seção C mostra o
+botão "Ativar extensão FFI". Ele descomenta a linha `;extension=ffi` (ou
+acrescenta `extension=ffi` no fim) no `php.ini` carregado, pelo mesmo caminho
+de gravação da tabela: login, CSRF, checagem de Host, marca SHA256 do arquivo
+lido, cópia em `.bak` e sem UAC. Se a linha já estiver ativa, nada é gravado.
+
 ## O que fica gravado
 
 Toda saída vira registro no banco, em texto puro, sem cifra e sem prazo. Um

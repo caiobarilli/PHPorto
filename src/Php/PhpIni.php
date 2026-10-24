@@ -151,8 +151,22 @@ final class PhpIni
             throw new RuntimeException('O php.ini mudou no disco depois que esta tela abriu. Releia e tente de novo. Nada foi gravado.');
         }
 
-        $novo = IniFile::apply($texto, $novos);
+        return self::commit($ini, $texto, IniFile::apply($texto, $novos));
+    }
 
+    public static function enableExtension(string $ini, string $hashEsperado, string $nome): bool
+    {
+        $texto = self::read($ini);
+
+        if (!hash_equals(hash('sha256', $texto), $hashEsperado)) {
+            throw new RuntimeException('O php.ini mudou no disco depois que esta tela abriu. Releia e tente de novo. Nada foi gravado.');
+        }
+
+        return self::commit($ini, $texto, IniFile::enableExtension($texto, $nome)) !== $texto;
+    }
+
+    private static function commit(string $ini, string $texto, string $novo): string
+    {
         if ($novo === $texto) {
             return $novo;
         }

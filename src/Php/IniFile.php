@@ -121,6 +121,59 @@ final class IniFile
         return self::join($linhas);
     }
 
+    public static function enableExtension(string $texto, string $nome): string
+    {
+        $linhas      = self::lines($texto);
+        $fim         = self::eol($texto);
+        $alvo        = '(?:"|\')?(?:php_)?' . preg_quote($nome, '/') . '(?:\.dll|\.so)?(?:"|\')?';
+        $ativa       = '/\A(?:' . self::BOM . ')?[ \t]*extension[ \t]*=[ \t]*' . $alvo . '[ \t]*(?:;.*)?\z/is';
+        $comentada   = '/\A((?:' . self::BOM . ')?[ \t]*);+[ \t]*(extension[ \t]*=[ \t]*' . $alvo . ')[ \t]*\z/is';
+        $condicional = false;
+        $exemplo     = null;
+
+        foreach ($linhas as $i => [$conteudo]) {
+            $cabecalho = self::header($conteudo);
+
+            if ($cabecalho !== null) {
+                $condicional = $cabecalho;
+
+                continue;
+            }
+
+            if ($condicional) {
+                continue;
+            }
+
+            if (preg_match($ativa, $conteudo) === 1) {
+                return $texto;
+            }
+
+            if (preg_match($comentada, $conteudo, $m) === 1) {
+                $exemplo = [$i, $m[1] . $m[2]];
+            }
+        }
+
+        if ($exemplo !== null) {
+            $linhas[$exemplo[0]] = [$exemplo[1], $linhas[$exemplo[0]][1]];
+
+            return self::join($linhas);
+        }
+
+        $total = count($linhas);
+
+        if ($total > 0 && $linhas[$total - 1][1] === '') {
+            $linhas[$total - 1] = [$linhas[$total - 1][0], $fim];
+        }
+
+        if (self::endsConditional($linhas)) {
+            $linhas[] = ['[PHP]', $fim];
+        }
+
+        $linhas[] = ['extension=' . $nome, $fim];
+
+        return self::join($linhas);
+    }
+
     /**
      * @param list<array{0: string, 1: string}> $linhas
      * @return array{indice: int, prefixo: string, valor: string}|null

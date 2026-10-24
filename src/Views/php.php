@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 use App\Http\Respond;
 use App\Php\C\CCode;
+use App\Php\C\CPanel;
 use App\Php\C\Tcc;
 use App\Php\PhpIni;
 use App\Php\PhpReleases;
@@ -217,6 +218,17 @@ $ultimo  = $c?->last;
           <?php endif; ?>
           <dt>ffi.enable</dt><dd><?= Respond::e($c->ffiEnable) ?></dd>
         </dl>
+        <?php if ($c->canEnableFfi() && $ini !== null && $ini->error === null): ?>
+          <form method="post" action="/php" id="form-ffi" data-sem-reload>
+            <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+            <input type="hidden" name="acao" value="<?= Respond::e(CPanel::FFI_ACTION) ?>">
+            <input type="hidden" name="<?= Respond::e(PhpIni::HASH_FIELD) ?>" value="<?= Respond::e($ini->hash) ?>">
+            <div class="row">
+              <button type="submit" class="btn btn-sm" id="btn-ativar-ffi"<?= $ini->writable ? '' : ' disabled' ?>>Ativar extensão FFI</button>
+            </div>
+            <p class="dica">Descomenta ou acrescenta <code>extension=ffi</code> no <code><?= Respond::e(basename($ini->path)) ?></code>, com cópia em <code><?= Respond::e(basename($ini->path) . PhpIni::BACKUP_SUFFIX) ?></code>. Sem UAC. Vale depois de subir o <code>php -S</code> de novo.</p>
+          </form>
+        <?php endif; ?>
         <?php if (!$c->tcc->installed() && $c->windows): ?>
           <form method="post" action="/php" id="form-tcc" data-sem-reload>
             <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
