@@ -9,6 +9,7 @@ use App\Http\Front;
 use App\Http\Login;
 use App\Http\Pages;
 use App\Http\Respond;
+use App\Php\C\CProcess;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
 use App\Win\HypervGate;
@@ -126,6 +127,8 @@ $pages = new Pages(
     oneShot: new OneShot($filesDir, $winDir, $elevation, $uac),
     uac: $uac,
     terminal: new PsTerminalProcess($filesDir),
+    c: new CProcess($filesDir),
+    storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
 );
 
 match ($path) {

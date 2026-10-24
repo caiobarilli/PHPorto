@@ -16,6 +16,7 @@ enum IniKey: string
     case MaxExecutionTime = 'max_execution_time';
     case Timezone = 'date.timezone';
     case DisplayErrors = 'display_errors';
+    case FfiEnable = 'ffi.enable';
 
     public const MIB = 1024 * 1024;
 
@@ -37,6 +38,19 @@ enum IniKey: string
             self::MaxExecutionTime  => '30',
             self::Timezone          => 'UTC',
             self::DisplayErrors     => 'On',
+            self::FfiEnable         => 'preload',
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function choices(): array
+    {
+        return match ($this) {
+            self::UploadProgress, self::DisplayErrors => ['On', 'Off'],
+            self::FfiEnable => ['false', 'preload', 'true'],
+            default         => [],
         };
     }
 
@@ -55,6 +69,7 @@ enum IniKey: string
             self::MaxExecutionTime  => 'Segundos, de 0 a 3600. 0 é sem limite.',
             self::Timezone          => 'Um fuso da lista do PHP, como America/Sao_Paulo.',
             self::DisplayErrors     => 'On ou Off.',
+            self::FfiEnable         => 'false, preload ou true. A seção C precisa de preload ou true no php da linha de comando.',
         };
     }
 
@@ -70,6 +85,7 @@ enum IniKey: string
             self::MemoryLimit       => $valor === '-1' ? '-1' : $this->size($valor, 32 * self::MIB, 16 * self::GIB),
             self::MaxExecutionTime  => $this->seconds($valor),
             self::Timezone          => $this->timezone($valor),
+            self::FfiEnable         => $this->choice($valor),
         };
     }
 
@@ -85,6 +101,16 @@ enum IniKey: string
 
         if ($this === self::Timezone) {
             return $valor;
+        }
+
+        if ($this === self::FfiEnable) {
+            $minusculo = strtolower($valor);
+
+            if ($minusculo === 'preload') {
+                return 'preload';
+            }
+
+            return PhpProbe::flag($minusculo) === true ? 'true' : 'false';
         }
 
         return strtoupper($valor);
@@ -113,6 +139,15 @@ enum IniKey: string
     {
         if ($valor !== 'On' && $valor !== 'Off') {
             throw new InvalidArgumentException($this->value . ': só On ou Off.');
+        }
+
+        return $valor;
+    }
+
+    private function choice(string $valor): string
+    {
+        if (!in_array($valor, $this->choices(), true)) {
+            throw new InvalidArgumentException($this->value . ': ' . $this->hint());
         }
 
         return $valor;

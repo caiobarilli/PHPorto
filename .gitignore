@@ -61,3 +61,8 @@
 # de saída (sem ele, teste falhando não derruba o `composer gate`); o XML é
 # subproduto.
 /testResults.xml
+
+# O Tiny C Compiler que a seção C da /php baixa e extrai. Binário de terceiro,
+# conferido pelo SHA256 fixado em src/Php/C/Tcc.php; some sem perda de código.
+/storage/tcc/
+/storage/tcc.tmp-*

@@ -7,6 +7,8 @@ declare(strict_types=1);
  */
 
 use App\Http\Respond;
+use App\Php\C\CCode;
+use App\Php\C\Tcc;
 use App\Php\PhpIni;
 use App\Php\PhpReleases;
 
@@ -14,6 +16,9 @@ $ativo  = $view->active;
 $medido = $view->pathBuild;
 $ini    = $view->ini;
 $update = $view->update;
+$c      = $view->c;
+$recusaC = $c?->blocked();
+$ultimo  = $c?->last;
 
 ?>
 <div class="wrap">
@@ -133,10 +138,11 @@ $update = $view->update;
                 <tr data-chave="<?= Respond::e($linha->key->value) ?>">
                   <td><label for="ini-<?= Respond::e($linha->key->name) ?>"><code><?= Respond::e($linha->key->value) ?></code></label></td>
                   <td>
-                    <?php if ($linha->key->isSwitch()): ?>
+                    <?php if ($linha->key->choices() !== []): ?>
                       <select name="<?= Respond::e($campo) ?>" id="ini-<?= Respond::e($linha->key->name) ?>">
-                        <option value="On"<?= $linha->value === 'On' ? ' selected' : '' ?>>On</option>
-                        <option value="Off"<?= $linha->value === 'Off' ? ' selected' : '' ?>>Off</option>
+                        <?php foreach ($linha->key->choices() as $opcao): ?>
+                          <option value="<?= Respond::e($opcao) ?>"<?= $linha->value === $opcao ? ' selected' : '' ?>><?= Respond::e($opcao) ?></option>
+                        <?php endforeach; ?>
                       </select>
                     <?php else: ?>
                       <input type="text" name="<?= Respond::e($campo) ?>" id="ini-<?= Respond::e($linha->key->name) ?>" value="<?= Respond::e($linha->value) ?>" maxlength="64" spellcheck="false" autocomplete="off">
@@ -186,6 +192,74 @@ $update = $view->update;
         </form>
       <?php endif; ?>
     </section>
+
+    <?php if ($c !== null): ?>
+      <section id="php-c">
+        <h2>C</h2>
+        <p class="dica" style="margin-top:0">
+          Compila C na memória com o Tiny C Compiler, pelo FFI do PHP, num processo <code>php</code> filho do
+          <code>php -S</code>. O programa roda <strong>com os seus poderes</strong>: o usuário logado, sem elevação,
+          com acesso a tudo que você acessa. Se ele travar ou quebrar, cai só o processo filho.
+        </p>
+        <?php if ($recusaC !== null): ?>
+          <div class="alert alert-note" id="c-bloqueio"><?= Respond::e($recusaC) ?></div>
+        <?php endif; ?>
+        <dl class="kv" id="tcc-estado">
+          <dt>Tiny C Compiler</dt>
+          <?php if ($c->tcc->installed()): ?>
+            <dd><span class="tag">instalado</span> <?= Respond::e((string) $c->tcc->version) ?></dd>
+            <dt>libtcc.dll</dt><dd><?= Respond::e((string) $c->tcc->libtcc) ?></dd>
+          <?php else: ?>
+            <dd><span class="tag">não instalado</span></dd>
+            <dt>Pacote oficial</dt><dd><?= Respond::e(Tcc::URL) ?></dd>
+            <dt>SHA256 fixado</dt><dd><code><?= Respond::e(Tcc::SHA256) ?></code></dd>
+            <dt>Pasta</dt><dd><?= Respond::e(Tcc::libDir($c->tcc->dir)) ?></dd>
+          <?php endif; ?>
+          <dt>ffi.enable</dt><dd><?= Respond::e($c->ffiEnable) ?></dd>
+        </dl>
+        <?php if (!$c->tcc->installed() && $c->windows): ?>
+          <form method="post" action="/php" id="form-tcc" data-sem-reload>
+            <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+            <input type="hidden" name="acao" value="<?= Respond::e(Tcc::ACTION) ?>">
+            <div class="row">
+              <button type="submit" class="btn btn-sm" id="btn-instalar-tcc">Instalar Tiny C Compiler</button>
+            </div>
+            <p class="dica">Baixa o zip oficial, confere o SHA256 fixado e extrai numa pasta do PHPorto. Sem UAC e sem mexer no PATH.</p>
+          </form>
+        <?php endif; ?>
+
+        <div class="term" aria-label="Console C">
+          <div class="term-bar">
+            <span><strong>c</strong> &middot; tcc na memória, usuário, sem elevação &middot; <?= CCode::TIMEOUT_SECONDS ?>s</span>
+          </div>
+          <pre class="term-scroll" id="c-saida"><?php if ($ultimo !== null): ?><?= Respond::e($ultimo->output) ?><?php endif; ?></pre>
+          <form method="post" action="/php" id="c-form" class="term-prompt" data-sem-reload>
+            <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+            <input type="hidden" name="acao" value="<?= Respond::e(CCode::ACTION) ?>">
+            <textarea id="c-codigo" name="<?= Respond::e(CCode::FIELD) ?>" rows="12" spellcheck="false" autocomplete="off" aria-label="código C"
+                      maxlength="<?= CCode::MAX_CODE_BYTES ?>"><?= Respond::e($c->code()) ?></textarea>
+            <button type="submit" class="term-go" id="c-rodar"<?= $c->canRun() ? '' : ' disabled' ?>>Rodar</button>
+          </form>
+          <div class="term-meta">
+            <span>Ctrl+Enter roda. Sem entrada padrão: nada interativo.</span>
+            <?php if ($ultimo !== null): ?>
+              <span>
+                <?= $ultimo->timedOut ? 'timeout &middot; ' : '' ?>
+                exit
+                <strong class="<?= $ultimo->exitCode === 0 ? 'ok' : 'bad' ?>" id="c-exit"><?= $ultimo->exitCode === null ? '-' : (int) $ultimo->exitCode ?></strong>
+                &middot; <?= Respond::e(number_format($ultimo->durationMs / 1000, 2, ',', '.')) ?>s
+              </span>
+            <?php endif; ?>
+          </div>
+        </div>
+        <p class="dica term-dica">
+          Código de até <?= number_format(CCode::MAX_CODE_BYTES, 0, ',', '.') ?> bytes, cancelado com a árvore de processos
+          depois de <strong><?= CCode::TIMEOUT_SECONDS ?> s</strong>. A saída é cortada em
+          <?= number_format(CCode::MAX_OUTPUT_BYTES, 0, ',', '.') ?> bytes. O exit é o retorno do <code>main</code>;
+          erro de compilação sai com 125.
+        </p>
+      </section>
+    <?php endif; ?>
   <?php endif; ?>
 </div>
 
@@ -194,6 +268,13 @@ $update = $view->update;
   document.addEventListener('click', function (ev) {
     if (ev.target.closest('#btn-salvar-ini')) { document.getElementById('modal-ini').showModal(); }
     if (ev.target.closest('#btn-atualizar-php')) { document.getElementById('modal-atualizar').showModal(); }
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.target.id === 'c-codigo' && ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+      ev.preventDefault();
+      var botao = document.getElementById('c-rodar');
+      if (botao && !botao.disabled) { ev.target.form.requestSubmit(botao); }
+    }
   });
 })();
 </script>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http;
 
+use App\Php\C\CPanel;
 use App\Php\IniForm;
 use App\Php\PhpBuild;
 use App\Php\PhpProbe;
@@ -22,6 +23,7 @@ final readonly class PhpView
         public string $csrfToken = '',
         public string $csrfField = '',
         public ?PhpUpdate $update = null,
+        public ?CPanel $c = null,
     ) {
     }
 
@@ -39,6 +41,11 @@ final readonly class PhpView
 
     public function with(?IniForm $ini, ?string $notice, string $csrfToken, string $csrfField, ?PhpUpdate $update = null): self
     {
-        return new self($this->active, $this->pathBinary, $this->pathDiverges, $this->pathBuild, $ini, $notice, $csrfToken, $csrfField, $update);
+        return new self($this->active, $this->pathBinary, $this->pathDiverges, $this->pathBuild, $ini, $notice, $csrfToken, $csrfField, $update, $this->c);
+    }
+
+    public function withC(CPanel $c): self
+    {
+        return new self($this->active, $this->pathBinary, $this->pathDiverges, $this->pathBuild, $this->ini, $this->notice, $this->csrfToken, $this->csrfField, $this->update, $c);
     }
 }

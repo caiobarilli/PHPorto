@@ -519,6 +519,37 @@ tela `/config` alterna vai para `storage/flags.json`, que só contém booleanos 
 tem allowlist de chaves. A única escrita no `.env` é a do `php token.php`,
 rodado à mão.
 
+## A seção C da `/php` roda código com os seus poderes
+
+O código C enviado pela `/php` roda **com os poderes do usuário que subiu o
+`php -S`**: lê, grava e apaga o que você lê, grava e apaga, abre conexões de
+rede e chama qualquer API do Windows. Não há sandbox. Trate o editor como um
+terminal: só rode o que você escreveria no seu próprio console.
+
+O que existe é contenção, não isolamento:
+
+- A rota passa pela checagem de Host, pelo login e pelo token CSRF, que é
+  consumido antes de qualquer ramo da seção C.
+- O código compila na memória pelo `libtcc.dll`, via FFI, num processo `php`
+  **filho** aberto por `proc_open` com lista de argumentos (sem shell), sem
+  elevação e sem UAC. Um ponteiro inválido derruba só o filho.
+- Limites: 64 KiB de código, 10 s com encerramento da árvore de processos
+  (`taskkill /T`), 256 KiB de saída e o mesmo teto de disco do console
+  PowerShell. Não há entrada padrão.
+- O resultado fica só na sessão; não vai para o banco.
+
+O Tiny C Compiler 0.9.27 vem do zip oficial em
+`https://download-mirror.savannah.gnu.org/releases/tinycc/tcc-0.9.27-win64-bin.zip`,
+buscado sem seguir redirecionamento. O Savannah não publica hash do pacote, então
+o SHA256 fica fixado em `src/Php/C/Tcc.php`
+(`34a721949a2583fdff725312da092fa0f5f1f284b702e6f811c6954714faabb2`) e um zip
+diferente é recusado antes de extrair. A extração aceita só entradas sob `tcc/`,
+sem `..`, e vai para `storage/tcc/`, sem mexer no PATH.
+
+`ffi.enable` entrou na allowlist do `php.ini` (`false`, `preload`, `true`). Com
+`true`, qualquer script PHP servido pelo `php -S` também pode usar FFI; o
+PHPorto só usa no processo filho.
+
 ## O que fica gravado
 
 Toda saída vira registro no banco, em texto puro, sem cifra e sem prazo. Um
@@ -526,5 +557,5 @@ Toda saída vira registro no banco, em texto puro, sem cifra e sem prazo. Um
 passar por engano, apague os registros e considere-o vazado.
 
 Os arquivos de estado local — `storage/flags.json`, `storage/win-elevation.json`,
-`storage/auth-falhas.json`, o banco SQLite, `files/` e `runtime/` — ficam fora
+`storage/auth-falhas.json`, `storage/tcc/`, o banco SQLite, `files/` e `runtime/` — ficam fora
 do repositório pelo `.gitignore`.

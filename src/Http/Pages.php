@@ -11,6 +11,12 @@ use App\Domain\ExecutionKind;
 use App\Domain\OutputCap;
 use App\Domain\WinState;
 use App\Domain\WinStateScope;
+use App\Php\C\CCode;
+use App\Php\C\CCompiler;
+use App\Php\C\CPanel;
+use App\Php\C\CRun;
+use App\Php\C\Tcc;
+use App\Php\IniKey;
 use App\Php\PhpBuild;
 use App\Php\PhpIni;
 use App\Php\PhpProbe;
@@ -64,6 +70,8 @@ final class Pages
         private readonly OneShot $oneShot,
         private readonly UacPolicy $uac,
         private readonly PsTerminal $terminal,
+        private readonly CCompiler $c,
+        private readonly string $storageDir,
     ) {
     }
 
@@ -904,7 +912,7 @@ final class Pages
                 ),
                 static fn (string $binario): ?string => PhpProbe::measure($binario)?->version,
             ),
-        );
+        )->withC($this->cPanel());
 
         Respond::html('PHPorto — PHP', Respond::render('php.php', $view));
     }
@@ -913,6 +921,18 @@ final class Pages
     {
         if (!Csrf::consume()) {
             $this->flash('Sessão expirada ou formulário antigo. Releia a página e tente de novo. Nada foi gravado.');
+            Respond::redirect('/php');
+        }
+
+        $acao = $_POST['acao'] ?? null;
+
+        if ($acao === Tcc::ACTION) {
+            $this->flash(self::tccInstall($this->cPanel(), static fn (string $url): ?string => Tcc::fetch($url)));
+            Respond::redirect('/php');
+        }
+
+        if ($acao === CCode::ACTION) {
+            $this->runC($_POST[CCode::FIELD] ?? null);
             Respond::redirect('/php');
         }
 
@@ -927,6 +947,53 @@ final class Pages
             $_POST[PhpIni::FIELD] ?? null,
         ));
         Respond::redirect('/php');
+    }
+
+    private function cPanel(): CPanel
+    {
+        Csrf::start();
+
+        return new CPanel(
+            tcc: Tcc::status(Tcc::dir($this->storageDir)),
+            windows: PhpProbe::windows(),
+            ffiLoaded: extension_loaded('ffi'),
+            ffiEnable: IniKey::FfiEnable->normalize((string) ini_get(IniKey::FfiEnable->value)),
+            last: CRun::fromArray($_SESSION[CCode::SESSION_KEY] ?? null),
+        );
+    }
+
+    /**
+     * @param Closure(string): ?string $baixar
+     */
+    public static function tccInstall(CPanel $painel, Closure $baixar): string
+    {
+        if (!$painel->windows) {
+            return 'O pacote oficial do Tiny C Compiler é para Windows x64. Nada foi instalado.';
+        }
+
+        return Tcc::install($painel->tcc->dir, $baixar);
+    }
+
+    private function runC(mixed $raw): void
+    {
+        $painel = $this->cPanel();
+        $recusa = $painel->blocked();
+
+        if ($recusa !== null) {
+            $this->flash($recusa);
+
+            return;
+        }
+
+        try {
+            $run = CCode::execute($this->c, $painel->tcc, $raw);
+        } catch (InvalidArgumentException $e) {
+            $this->flash($e->getMessage());
+
+            return;
+        }
+
+        $_SESSION[CCode::SESSION_KEY] = $run->toArray();
     }
 
     private function handlePhpUpdate(mixed $versao): never
