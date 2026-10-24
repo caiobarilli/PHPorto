@@ -13,7 +13,7 @@ use App\Win\WinAction;
  * @param list<string>|null $distros
  * @param list<string>|null $rodando
  */
-function configWslHtml(?array $distros, ?array $rodando = [], bool $ps = true, bool $ativo = true, bool $uac = true): string
+function configWslHtml(?array $distros, ?array $rodando = [], bool $ps = true, bool $ativo = true, bool $uac = true, string $distro = 'Debian'): string
 {
     return Respond::render('config.php', new ConfigView(
         provider: 'sqlite',
@@ -38,6 +38,7 @@ function configWslHtml(?array $distros, ?array $rodando = [], bool $ps = true, b
         wslDistros: $distros,
         wslRunning: $rodando,
         wslEnabled: $ativo,
+        wslDistro: $distro,
     ));
 }
 
@@ -243,4 +244,63 @@ it('o aviso de ativar pede para reiniciar o Windows só no sucesso', function ()
         ->and(Pages::wslEnableNotice(new PsResult('x', 5, false, 10)))->toContain('Falha ao ativar o WSL (código 5)')
         ->and(Pages::wslEnableNotice(new PsResult('x', 5, false, 10)))->not->toContain('Reinicie')
         ->and(Pages::wslEnableNotice(new PsResult('', null, true, 10)))->toContain('demorou demais');
+});
+
+it('com o WSL ativado e a distro do .env faltando aparece o Instalar, com CSRF, sem reload e com UAC', function (array $distros) {
+    $html = configWslHtml($distros);
+
+    expect($html)->toContain('id="form-wsl-instalar" data-sem-reload')
+        ->and($html)->toContain('name="acao" value="wsl-install-distro"')
+        ->and($html)->toContain('name="_csrf" value="t"')
+        ->and($html)->toContain('id="btn-wsl-instalar" data-uac')
+        ->and($html)->toContain('Instalar Debian')
+        ->and($html)->toContain('wsl --install -d Debian --no-launch')
+        ->and($html)->toContain('fora do PHPorto')
+        ->and($html)->not->toContain('name="Distro"')
+        ->and($html)->not->toContain('btn-wsl-ativar');
+})->with([
+    'lista vazia'  => [[]],
+    'outra distro' => [['Ubuntu']],
+]);
+
+it('o Instalar some com o WSL desativado, com a distro instalada ou sem leitura da lista', function (?array $distros, bool $ativo) {
+    expect(configWslHtml($distros, ativo: $ativo))->not->toContain('btn-wsl-instalar')
+        ->and(configWslHtml($distros, ativo: $ativo))->not->toContain('wsl-install-distro');
+})->with([
+    'desativado'          => [null, false],
+    'já instalada'        => [['Debian'], true],
+    'instalada sem caixa' => [['debian'], true],
+    'sem leitura'         => [null, true],
+]);
+
+it('com o UAC fora do lugar o Instalar fica desabilitado', function () {
+    expect(configWslHtml([], uac: false))->toMatch('/id="btn-wsl-instalar" data-uac\s+disabled/');
+});
+
+it('o POST de instalar passa pelo CSRF, confere o estado e manda só o nome do .env pelo uso único', function () {
+    $fonte = fonteDasPaginas();
+    $post  = trechoDe($fonte, 'private function handleConfigPost(): never');
+
+    expect(strpos($post, 'Csrf::consume()'))->toBeLessThan((int) strpos($post, 'WinAction::WslInstallDistro->value'));
+
+    $instalar = trechoDe($fonte, 'private function handleWslInstallDistroPost(): never');
+
+    expect($instalar)->toContain('$distro = $this->distroChecker->name();')
+        ->and($instalar)->toContain('$this->distroChecker->enabled()')
+        ->and($instalar)->toContain('Distro::contains($instaladas, $distro)')
+        ->and($instalar)->toContain("WinAction::WslInstallDistro->validate(['Distro' => \$distro])")
+        ->and($instalar)->toContain('$this->oneShot->dispatch(WinAction::WslInstallDistro, $params')
+        ->and($instalar)->not->toContain('JobChannel')
+        ->and($instalar)->not->toContain('$_POST');
+});
+
+it('a /win recusa o wsl-install-distro: instalar é pela configuração', function () {
+    expect(Pages::winPostRefusal(WinAction::WslInstallDistro))->toContain('pela configuração');
+});
+
+it('o aviso de instalar manda criar o usuário fora do PHPorto só no sucesso', function () {
+    expect(Pages::wslInstallDistroNotice(new PsResult('ok', 0, false, 10), 'Debian'))->toContain('abra o Debian uma vez fora do PHPorto')
+        ->and(Pages::wslInstallDistroNotice(new PsResult('x', 5, false, 10), 'Debian'))->toContain('Falha ao instalar Debian (código 5)')
+        ->and(Pages::wslInstallDistroNotice(new PsResult('x', 5, false, 10), 'Debian'))->not->toContain('fora do PHPorto')
+        ->and(Pages::wslInstallDistroNotice(new PsResult('', null, true, 10), 'Debian'))->toContain('demorou demais');
 });

@@ -126,6 +126,10 @@ $ALLOWLIST = @{
 
     'wsl-enable'  = @{}
 
+    'wsl-install-distro' = @{
+        'Distro' = @{ tipo = 'text'; max = 64; padrao = '\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z' }
+    }
+
     'php-update'  = @{
         'Version' = @{ tipo = 'text'; max = 10; padrao = '\A([0-9]{1,2})\.([0-9]{1,2})\.([0-9]{1,3})\z' }
         'Sha256'  = @{ tipo = 'text'; max = 64; min = 64; padrao = '\A[0-9a-f]{64}\z' }
@@ -144,6 +148,7 @@ $SENSIVEIS = @{
     'hyperv-vm' = '*'
     'php-update' = '*'
     'wsl-enable' = '*'
+    'wsl-install-distro' = '*'
 }
 
 $SEGREDOS = @{

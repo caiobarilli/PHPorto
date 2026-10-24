@@ -209,7 +209,7 @@ it('as dezessete ações do menu aparecem uma vez só na página, e as da /hyper
 
     $menu = array_filter(
         App\Win\WinAction::cases(),
-        static fn (App\Win\WinAction $a): bool => !in_array($a, [App\Win\WinAction::Hyperv, App\Win\WinAction::HypervVm, App\Win\WinAction::Wsl, App\Win\WinAction::WslEnable, App\Win\WinAction::PhpUpdate], true),
+        static fn (App\Win\WinAction $a): bool => !in_array($a, [App\Win\WinAction::Hyperv, App\Win\WinAction::HypervVm, App\Win\WinAction::Wsl, App\Win\WinAction::WslEnable, App\Win\WinAction::WslInstallDistro, App\Win\WinAction::PhpUpdate], true),
     );
     $enum = array_map(static fn (App\Win\WinAction $a): string => $a->value, $menu);
     sort($enum);
@@ -218,7 +218,8 @@ it('as dezessete ações do menu aparecem uma vez só na página, e as da /hyper
         ->and($todas)->not->toContain('hyperv')
         ->and($todas)->not->toContain('hyperv-vm')
         ->and($todas)->not->toContain('wsl')
-        ->and($todas)->not->toContain('wsl-enable');
+        ->and($todas)->not->toContain('wsl-enable')
+        ->and($todas)->not->toContain('wsl-install-distro');
 });
 
 it('o menu tem as seis abas como links, e só a aberta é a atual', function () {

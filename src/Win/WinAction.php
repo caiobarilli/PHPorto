@@ -36,6 +36,8 @@ enum WinAction: string
 
     case WslEnable = 'wsl-enable';
 
+    case WslInstallDistro = 'wsl-install-distro';
+
     case PhpUpdate = 'php-update';
 
     public const MAX_PARAM_BYTES = 4096;
@@ -145,6 +147,7 @@ enum WinAction: string
         'hyperv-vm'  => '*',
         'php-update' => '*',
         'wsl-enable' => '*',
+        'wsl-install-distro' => '*',
     ];
 
     public const NETWORK_DURATION_MIN = 1;
@@ -183,6 +186,7 @@ enum WinAction: string
             self::HypervVm  => $this->hypervVm($input),
             self::Wsl       => ['SubAction' => $this->pick($input, 'SubAction', self::WSL_SUBACTIONS, obrigatorio: true)],
             self::PhpUpdate => $this->phpUpdate($input),
+            self::WslInstallDistro => ['Distro' => self::wslDistro($input['Distro'] ?? '')],
         };
     }
 

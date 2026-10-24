@@ -346,6 +346,24 @@ não precisa do PowerShell elevado ligado. A `/win` recusa essa ação. Depois d
 sucesso, a tela pede para **reiniciar o Windows**; até reiniciar, o botão pode
 continuar aparecendo. Com o WSL já ativado, o botão não aparece.
 
+## Instalar a distro do .env
+
+Depois de ativar o WSL e reiniciar o Windows, quando `wsl --status` sai com 0 e
+a distro do `PHPORTO_DISTRO` (hoje `Debian`) não aparece em `wsl -l -q`, o card
+**WSL** da `/config` mostra o botão **Instalar <distro>**. Ele roda a ação
+`wsl-install-distro`, que chama `wsl --install -d <distro> --no-launch`. Não tem
+campo de nome: o PHP manda só o valor do `.env`, e o worker confere o formato
+(`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`) antes de chamar o `wsl.exe` com os
+argumentos em lista. É sensível (UAC a cada clique, pelo uso único) e a `/win`
+recusa essa ação. Com o WSL desativado aparece só o **Ativar WSL**; os dois nunca
+vêm juntos.
+
+O `--no-launch` instala sem abrir a distro, então ninguém fica esperando o
+console pedir o usuário UNIX. Para criar esse usuário, abra a distro uma vez
+**fora do PHPorto** (menu Iniciar ou `wsl -d <distro>` num terminal). O erro
+`0x80070422` logo depois de ativar o WSL quer dizer que falta reiniciar o
+Windows; o PHPorto não tenta contornar isso.
+
 ## A tela do PHP
 
 `/php` mostra o PHP que serve o PHPorto: versão, TS ou NTS, binário,
