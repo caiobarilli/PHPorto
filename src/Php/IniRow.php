@@ -37,6 +37,6 @@ final readonly class IniRow
         $ba = IniKey::bytes($a);
         $bb = IniKey::bytes($b);
 
-        return !$chave->isSwitch() && $chave !== IniKey::Timezone && $ba !== null && $ba === $bb;
+        return $chave->choices() === [] && $chave !== IniKey::Timezone && $ba !== null && $ba === $bb;
     }
 }

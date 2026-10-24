@@ -363,6 +363,9 @@ use App\Http\Respond;
   .term-meta .ok { color: var(--t-ok); } .term-meta .bad { color: var(--t-bad); }
   .term-meta strong { font-weight: 600; }
   .term-dica { margin-bottom: 22px; }
+  #c-saida { min-height: 120px; }
+  #c-codigo { max-height: none; min-height: 220px; resize: vertical; tab-size: 4; }
+  .term-go:disabled { opacity: .5; cursor: not-allowed; }
   .anexo-arquivo {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
     clip: rect(0 0 0 0); white-space: nowrap; border: 0; opacity: 0;

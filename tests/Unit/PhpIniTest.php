@@ -64,7 +64,7 @@ function iniForm(string $ini): IniForm
     return $form ?? throw new RuntimeException('sem form');
 }
 
-it('a lista de chaves é fechada e tem só estas sete', function () {
+it('a lista de chaves é fechada e tem só estas oito', function () {
     expect(array_map(static fn (IniKey $k): string => $k->value, IniKey::cases()))->toBe([
         'session.upload_progress.enabled',
         'upload_max_filesize',
@@ -73,6 +73,7 @@ it('a lista de chaves é fechada e tem só estas sete', function () {
         'max_execution_time',
         'date.timezone',
         'display_errors',
+        'ffi.enable',
     ]);
 });
 
@@ -418,5 +419,6 @@ it('o fonte da tela não traz abas, CDN nem instalação, e o único UAC é o da
         ->and($fonte)->not->toContain('class="abas"')
         ->and($fonte)->not->toContain('https://')
         ->and($fonte)->not->toContain('.zip')
-        ->and($fonte)->not->toContain('<textarea');
+        ->and(substr_count($fonte, '<textarea'))->toBe(1)
+        ->and($fonte)->toContain('<textarea id="c-codigo"');
 });
