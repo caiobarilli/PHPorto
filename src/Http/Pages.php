@@ -931,6 +931,11 @@ final class Pages
             Respond::redirect('/php');
         }
 
+        if ($acao === CPanel::FFI_ACTION) {
+            $this->flash(self::ffiExtensionEnable($this->cPanel(), php_ini_loaded_file(), $_POST[PhpIni::HASH_FIELD] ?? null));
+            Respond::redirect('/php');
+        }
+
         if ($acao === CCode::ACTION) {
             $this->runC($_POST[CCode::FIELD] ?? null);
             Respond::redirect('/php');
@@ -972,6 +977,36 @@ final class Pages
         }
 
         return Tcc::install($painel->tcc->dir, $baixar);
+    }
+
+    public static function ffiExtensionEnable(CPanel $painel, string|false $ini, mixed $hash): string
+    {
+        if (!$painel->canEnableFfi()) {
+            return $painel->ffiLoaded
+                ? 'A extensão FFI já está carregada. O php.ini não foi tocado.'
+                : 'Instale o Tiny C Compiler antes de ativar a extensão FFI. Nada foi gravado.';
+        }
+
+        if ($ini === false) {
+            return 'Nenhum php.ini carregado. Esta tela só grava num php.ini que o PHP já leu. Nada foi gravado.';
+        }
+
+        if (!is_string($hash) || preg_match('/\A[0-9a-f]{64}\z/', $hash) !== 1) {
+            return 'Formulário sem a marca do php.ini lido. Releia a página. Nada foi gravado.';
+        }
+
+        try {
+            $mudou = PhpIni::enableExtension($ini, $hash, 'ffi');
+        } catch (RuntimeException $e) {
+            return $e->getMessage();
+        }
+
+        if (!$mudou) {
+            return 'extension=ffi já está ativa no php.ini. O php.ini não foi tocado. Feche e suba o php -S de novo para carregar.';
+        }
+
+        return 'php.ini gravado: extension=ffi. A versão anterior ficou em ' . basename($ini) . PhpIni::BACKUP_SUFFIX
+            . '. Feche e suba o php -S de novo para carregar a extensão.';
     }
 
     private function runC(mixed $raw): void
