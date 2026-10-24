@@ -310,6 +310,14 @@ Describe 'worker - a allowlist do lado elevado' {
         { Test-Job $ruim -Modo UmaVez } | Should -Throw -ExpectedMessage "'PublicKey' fora do formato"
     }
 
+    It 'ssh-keys: nome da chave fora do formato nao passa' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'ssh-keys'; params = [PSCustomObject]@{ SubAction = 'generate'; KeyName = '..\x' } }
+        { Test-Job $job } | Should -Throw -ExpectedMessage "'KeyName' fora do formato"
+
+        $bom = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'ssh-keys'; params = [PSCustomObject]@{ SubAction = 'generate'; KeyName = 'trabalho' } }
+        (Test-Job $bom).params['KeyName'] | Should -Be 'trabalho'
+    }
+
     It 'ssh-keys: usuario do WSL fora do formato nao passa' {
         $job = [PSCustomObject]@{ acao = 'ssh-keys'; params = [PSCustomObject]@{ SubAction = 'wsl-user'; UseGenerated = $true; User = 'Dev;id'; Distro = 'Debian' } }
         { Test-Job $job -Modo UmaVez } | Should -Throw -ExpectedMessage "'User' fora do formato"

@@ -32,6 +32,7 @@ use App\Win\PsResult;
 use App\Win\PsTerminal;
 use App\Win\PsTerminalCommand;
 use App\Win\UacPolicy;
+use App\Win\SshKeyFolder;
 use App\Win\WinAction;
 use App\Win\WinConfig;
 use App\Wsl\Distro;
@@ -564,6 +565,13 @@ final class Pages
             && !Distro::contains($this->distroChecker->registered() ?? [], (string) ($params['Distro'] ?? ''))
         ) {
             $this->flash('A distro escolhida não aparece em "wsl -l -q". Escolha uma da lista.');
+            Respond::redirect($aba->url());
+        }
+
+        $recusaChave = self::sshKeyRefusal($acao, $params, getenv('USERPROFILE'));
+
+        if ($recusaChave !== null) {
+            $this->flash($recusaChave);
             Respond::redirect($aba->url());
         }
 
@@ -1279,6 +1287,20 @@ final class Pages
         $nome = is_string($dados['name'] ?? null) && $dados['name'] !== '' ? $dados['name'] . ': ' : '';
 
         return $nome . $dados['mensagem'];
+    }
+
+    /**
+     * @param array<string, string|int|bool> $params
+     */
+    public static function sshKeyRefusal(WinAction $acao, array $params, string|false $perfil): ?string
+    {
+        if ($acao !== WinAction::SshKeys || ($params['SubAction'] ?? '') !== 'generate') {
+            return null;
+        }
+
+        $pasta = SshKeyFolder::folder($perfil);
+
+        return $pasta === null ? null : SshKeyFolder::refusal($pasta, (string) ($params['KeyName'] ?? ''));
     }
 
     public static function winPostRefusal(WinAction $acao): ?string
