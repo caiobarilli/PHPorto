@@ -7,12 +7,13 @@ use App\Http\Pages;
 use App\Http\Respond;
 use App\Win\ElevationState;
 use App\Win\PsResult;
+use App\Win\WinAction;
 
 /**
  * @param list<string>|null $distros
  * @param list<string>|null $rodando
  */
-function configWslHtml(?array $distros, ?array $rodando = [], bool $ps = true): string
+function configWslHtml(?array $distros, ?array $rodando = [], bool $ps = true, bool $ativo = true, bool $uac = true): string
 {
     return Respond::render('config.php', new ConfigView(
         provider: 'sqlite',
@@ -31,11 +32,12 @@ function configWslHtml(?array $distros, ?array $rodando = [], bool $ps = true): 
         winProofTimeout: 30,
         hypervEnabled: false,
         hypervEnabledAt: null,
-        uacOk: true,
-        uacSummary: 'UAC ok.',
+        uacOk: $uac,
+        uacSummary: $uac ? 'UAC ok.' : 'UAC desligado.',
         tz: 'America/Sao_Paulo',
         wslDistros: $distros,
         wslRunning: $rodando,
+        wslEnabled: $ativo,
     ));
 }
 
@@ -180,4 +182,65 @@ it('o POST do WSL na /config queima o token, valida, exige o PowerShell elevado,
         ->and($corpo)->toContain('new JobChannel(')
         ->and($corpo)->toContain('kind: ExecutionKind::Windows')
         ->and($corpo)->not->toContain('oneShot');
+});
+
+it('com o WSL desativado aparece só o Ativar WSL, com CSRF, sem reload e com UAC', function () {
+    $html = configWslHtml(null, null, ativo: false);
+
+    expect($html)->toContain('<section id="wsl">')
+        ->and($html)->toContain('id="form-wsl-ativar" data-sem-reload')
+        ->and($html)->toContain('name="_csrf" value="t"')
+        ->and($html)->toContain('name="acao" value="wsl-enable"')
+        ->and($html)->toContain('id="btn-wsl-ativar" data-uac')
+        ->and($html)->not->toMatch('/id="btn-wsl-ativar" data-uac\s+disabled/')
+        ->and($html)->toContain('wsl --install --no-distribution')
+        ->and($html)->toContain('reiniciar o Windows')
+        ->and($html)->not->toContain('id="form-wsl"')
+        ->and($html)->not->toContain('id="btn-wsl-acordar"');
+});
+
+it('o Ativar WSL não depende do PowerShell elevado, que ele não usa', function () {
+    expect(configWslHtml(null, null, ps: false, ativo: false))->not->toMatch('/id="btn-wsl-ativar" data-uac\s+disabled/');
+});
+
+it('com o UAC fora do lugar o Ativar WSL fica desabilitado e a tela diz por quê', function () {
+    $html = configWslHtml(null, null, ativo: false, uac: false);
+
+    expect($html)->toMatch('/id="btn-wsl-ativar" data-uac\s+disabled/')
+        ->and($html)->toContain('UAC desligado.');
+});
+
+it('com o WSL ativado o botão Ativar não aparece', function (?array $distros) {
+    expect(configWslHtml($distros))->not->toContain('btn-wsl-ativar')
+        ->and(configWslHtml($distros))->not->toContain('wsl-enable');
+})->with([
+    'com distro'  => [['Debian']],
+    'sem distro'  => [[]],
+    'sem leitura' => [null],
+]);
+
+it('o POST de ativar passa pelo CSRF, confere de novo o estado e vai pelo uso único com UAC', function () {
+    $fonte = fonteDasPaginas();
+    $post  = trechoDe($fonte, 'private function handleConfigPost(): never');
+
+    expect(strpos($post, 'Csrf::consume()'))->toBeLessThan((int) strpos($post, 'WinAction::WslEnable->value'));
+
+    $ativar = trechoDe($fonte, 'private function handleWslEnablePost(): never');
+
+    expect($ativar)->toContain('$this->distroChecker->enabled()')
+        ->and($ativar)->toContain('$this->oneShot->blockingReason()')
+        ->and($ativar)->toContain('$this->oneShot->dispatch(WinAction::WslEnable, []')
+        ->and($ativar)->not->toContain('JobChannel')
+        ->and($ativar)->not->toContain('$_POST');
+});
+
+it('a /win recusa o wsl-enable: ativar é pela configuração', function () {
+    expect(Pages::winPostRefusal(WinAction::WslEnable))->toContain('pela configuração');
+});
+
+it('o aviso de ativar pede para reiniciar o Windows só no sucesso', function () {
+    expect(Pages::wslEnableNotice(new PsResult('ok', 0, false, 10)))->toContain('Reinicie o Windows')
+        ->and(Pages::wslEnableNotice(new PsResult('x', 5, false, 10)))->toContain('Falha ao ativar o WSL (código 5)')
+        ->and(Pages::wslEnableNotice(new PsResult('x', 5, false, 10)))->not->toContain('Reinicie')
+        ->and(Pages::wslEnableNotice(new PsResult('', null, true, 10)))->toContain('demorou demais');
 });

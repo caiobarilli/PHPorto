@@ -124,6 +124,8 @@ $ALLOWLIST = @{
         'SubAction' = @{ tipo = 'set'; valores = @('shutdown', 'wake') }
     }
 
+    'wsl-enable'  = @{}
+
     'php-update'  = @{
         'Version' = @{ tipo = 'text'; max = 10; padrao = '\A([0-9]{1,2})\.([0-9]{1,2})\.([0-9]{1,3})\z' }
         'Sha256'  = @{ tipo = 'text'; max = 64; min = 64; padrao = '\A[0-9a-f]{64}\z' }
@@ -141,6 +143,7 @@ $SENSIVEIS = @{
     'gpu'       = @('install')
     'hyperv-vm' = '*'
     'php-update' = '*'
+    'wsl-enable' = '*'
 }
 
 $SEGREDOS = @{

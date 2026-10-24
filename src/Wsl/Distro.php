@@ -12,6 +12,8 @@ final class Distro
 
     private const ARGS_RUNNING = '-l --running -q';
 
+    private const ARGS_STATUS = '--status';
+
     public function __construct(
         private readonly string $distro,
     ) {
@@ -79,10 +81,31 @@ final class Distro
         return $this->listing(self::ARGS_RUNNING);
     }
 
+    public function enabled(): bool
+    {
+        $run = $this->exec(self::ARGS_STATUS);
+
+        return $run !== null && $run['exit'] === 0;
+    }
+
     /**
      * @return list<string>|null
      */
     private function listing(string $args): ?array
+    {
+        $run = $this->exec($args);
+
+        if ($run === null || ($run['exit'] !== 0 && trim($run['stdout']) === '')) {
+            return null;
+        }
+
+        return self::parse($run['stdout']);
+    }
+
+    /**
+     * @return array{exit: int, stdout: string}|null
+     */
+    private function exec(string $args): ?array
     {
         $descriptors = [
             0 => ['file', DIRECTORY_SEPARATOR !== '/' ? 'NUL' : '/dev/null', 'r'],
@@ -133,13 +156,7 @@ final class Distro
                 fclose($pipe);
             }
         }
-        $exit = proc_close($proc);
-
-        if ($exit !== 0 && trim($stdout) === '') {
-            return null;
-        }
-
-        return self::parse($stdout);
+        return ['exit' => proc_close($proc), 'stdout' => $stdout];
     }
 
     /**

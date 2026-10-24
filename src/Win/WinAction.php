@@ -34,6 +34,8 @@ enum WinAction: string
 
     case Wsl = 'wsl';
 
+    case WslEnable = 'wsl-enable';
+
     case PhpUpdate = 'php-update';
 
     public const MAX_PARAM_BYTES = 4096;
@@ -142,6 +144,7 @@ enum WinAction: string
         'gpu'        => ['install'],
         'hyperv-vm'  => '*',
         'php-update' => '*',
+        'wsl-enable' => '*',
     ];
 
     public const NETWORK_DURATION_MIN = 1;
@@ -158,7 +161,8 @@ enum WinAction: string
         return match ($this) {
             self::Memory,
             self::Processes,
-            self::Hyperv => [],
+            self::Hyperv,
+            self::WslEnable => [],
 
             self::Audit       => $this->opcional($input, 'SubAction', self::AUDIT_SUBACTIONS),
             self::Performance => $this->opcional($input, 'State', self::PERFORMANCE_STATES),

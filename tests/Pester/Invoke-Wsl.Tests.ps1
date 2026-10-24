@@ -28,6 +28,10 @@ Describe 'Invoke-Wsl - Sanity' {
     It 'the map dispatches wsl to Invoke-Wsl' {
         $global:PhportoWinActions['wsl'] | Should -Be 'Invoke-Wsl'
     }
+
+    It 'the map dispatches wsl-enable to Invoke-WslEnable' {
+        $global:PhportoWinActions['wsl-enable'] | Should -Be 'Invoke-WslEnable'
+    }
 }
 
 Describe 'Invoke-Wsl - SubAction validation' {
@@ -126,5 +130,62 @@ Describe 'Invoke-Wsl - wake' {
         $output | Should -Match '\[ ERROR \].*Starting the default distro failed'
         $global:LASTEXITCODE | Should -Be 1
         Should -Invoke Invoke-PhportoWslExe -Times 1 -Exactly
+    }
+}
+
+Describe 'Invoke-WslEnable' {
+
+    BeforeEach {
+        Mock Test-PhportoWslExe { $true }
+    }
+
+    It 'runs only wsl --install --no-distribution as an argument array and asks for a restart' {
+        Mock Invoke-PhportoWslExe { @{ ExitCode = 0; Output = 'The requested operation is successful.' } }
+
+        $output = (Invoke-WslEnable) 6>&1 | Out-String
+
+        Should -Invoke Invoke-PhportoWslExe -Times 1 -Exactly
+        Should -Invoke Invoke-PhportoWslExe -Times 1 -Exactly -ParameterFilter {
+            $Argumentos.Count -eq 2 -and $Argumentos[0] -eq '--install' -and $Argumentos[1] -eq '--no-distribution'
+        }
+        $output | Should -Match '\[ OK \].*without installing a distro'
+        $output | Should -Match 'Restart Windows'
+        $global:LASTEXITCODE | Should -Be 0
+    }
+
+    It 'never names or installs a distro' {
+        Mock Invoke-PhportoWslExe { @{ ExitCode = 0; Output = '' } }
+
+        (Invoke-WslEnable) 6>&1 | Out-Null
+
+        Should -Invoke Invoke-PhportoWslExe -Times 0 -ParameterFilter { $Argumentos -contains '-d' -or $Argumentos -contains '--distribution' }
+    }
+
+    It 'builds the call from an array literal, not from a joined string' {
+        $text = Get-Content -Path $Script:Acao -Raw
+        $text | Should -Match "Invoke-PhportoWslExe -Argumentos @\('--install', '--no-distribution'\)"
+        $text | Should -Not -Match 'Invoke-Expression'
+    }
+
+    It 'reports a failing install as an error with its exit code' {
+        Mock Invoke-PhportoWslExe { @{ ExitCode = 5; Output = 'access denied' } }
+
+        $output = (Invoke-WslEnable) 6>&1 | Out-String
+
+        $output | Should -Match 'access denied'
+        $output | Should -Match '\[ ERROR \].*exit 5'
+        $output | Should -Not -Match 'Restart Windows'
+        $global:LASTEXITCODE | Should -Be 1
+    }
+
+    It 'reports a missing wsl.exe without calling it' {
+        Mock Test-PhportoWslExe { $false }
+        Mock Invoke-PhportoWslExe { @{ ExitCode = 0; Output = '' } }
+
+        $output = (Invoke-WslEnable) 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \].*wsl\.exe not found'
+        $global:LASTEXITCODE | Should -Be 1
+        Should -Invoke Invoke-PhportoWslExe -Times 0
     }
 }

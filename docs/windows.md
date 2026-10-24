@@ -335,6 +335,17 @@ menu Iniciar dela, e não corta a energia. Reiniciar também, quando o Hyper-V
 sabe; quando não sabe, faz um reset. O estado é conferido de novo na hora, e o
 que não cabe mais é recusado com o motivo.
 
+## Ativar o WSL
+
+Em `/config`, o card **WSL** confere `wsl --status`. Se ele não sai com código
+0 (o WSL não está ativado neste Windows), o card troca Acordar e Desligar por um
+botão **Ativar WSL**. Ele roda a ação `wsl-enable`, que chama
+`wsl --install --no-distribution`: liga os recursos do Windows que o WSL precisa,
+sem instalar nenhuma distro. É sensível (UAC a cada clique, pelo uso único) e
+não precisa do PowerShell elevado ligado. A `/win` recusa essa ação. Depois do
+sucesso, a tela pede para **reiniciar o Windows**; até reiniciar, o botão pode
+continuar aparecendo. Com o WSL já ativado, o botão não aparece.
+
 ## A tela do PHP
 
 `/php` mostra o PHP que serve o PHPorto: versão, TS ou NTS, binário,
