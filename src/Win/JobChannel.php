@@ -26,9 +26,29 @@ final class JobChannel
     /** @var list<string> */
     private array $cleanupFailures = [];
 
+    private const UNLINK_TENTATIVAS = 5;
+
+    private const UNLINK_PAUSA_US = 100000;
+
+    /** @var \Closure(string): bool */
+    private readonly \Closure $unlinker;
+
+    /** @var \Closure(int): void */
+    private readonly \Closure $sleeper;
+
+    /**
+     * @param (\Closure(string): bool)|null $unlinker
+     * @param (\Closure(int): void)|null $sleeper
+     */
     public function __construct(
         private readonly string $filesDir,
+        ?\Closure $unlinker = null,
+        ?\Closure $sleeper = null,
     ) {
+        $this->unlinker = $unlinker ?? static fn (string $caminho): bool => unlink($caminho);
+        $this->sleeper  = $sleeper ?? static function (int $us): void {
+            usleep($us);
+        };
     }
 
     /**
@@ -144,7 +164,7 @@ final class JobChannel
             $this->noteImported($done['id']);
 
             $saida = self::withNewline($saida) . sprintf(
-                "[phporto] Não foi possível apagar %s da pasta protegida; o par ficou no disco.\n",
+                "[phporto] Não foi possível apagar %s da pasta protegida; o worker apaga na próxima execução.\n",
                 implode(', ', $falhas)
             );
         }
@@ -227,7 +247,7 @@ final class JobChannel
         foreach (['win-done-' . $id . '.json', 'win-out-' . $id . '.txt'] as $nome) {
             $caminho = $this->resultPath($nome);
 
-            if (is_file($caminho) && !self::tryUnlink($caminho)) {
+            if (is_file($caminho) && !$this->tryUnlink($caminho)) {
                 $sobrou = true;
             }
         }
@@ -439,7 +459,7 @@ final class JobChannel
         foreach (['win-done-' . $id . '.json', 'win-out-' . $id . '.txt'] as $nome) {
             $caminho = $this->resultPath($nome);
 
-            if (is_file($caminho) && !self::tryUnlink($caminho)) {
+            if (is_file($caminho) && !$this->tryUnlink($caminho)) {
                 $falhas[] = $nome;
             }
         }
@@ -457,15 +477,31 @@ final class JobChannel
         return $this->cleanupFailures;
     }
 
-    private static function tryUnlink(string $caminho): bool
+    private function tryUnlink(string $caminho): bool
     {
-        set_error_handler(static fn (): bool => true);
+        for ($tentativa = 1; $tentativa <= self::UNLINK_TENTATIVAS; $tentativa++) {
+            if ($tentativa > 1) {
+                ($this->sleeper)(self::UNLINK_PAUSA_US);
+            }
 
-        try {
-            return unlink($caminho);
-        } finally {
-            restore_error_handler();
+            set_error_handler(static fn (): bool => true);
+
+            try {
+                if (($this->unlinker)($caminho)) {
+                    return true;
+                }
+            } finally {
+                restore_error_handler();
+            }
+
+            clearstatcache(true, $caminho);
+
+            if (!file_exists($caminho)) {
+                return true;
+            }
         }
+
+        return false;
     }
 
     private function forgetSend(): void
