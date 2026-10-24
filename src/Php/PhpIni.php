@@ -154,15 +154,21 @@ final class PhpIni
         return self::commit($ini, $texto, IniFile::apply($texto, $novos));
     }
 
-    public static function enableExtension(string $ini, string $hashEsperado, string $nome): bool
+    public static function enableExtension(string $ini, string $hashEsperado, PhpExtension|string $nome): bool
     {
+        $nome = $nome instanceof PhpExtension ? $nome : PhpExtension::tryFrom($nome);
+
+        if ($nome === null) {
+            throw new RuntimeException('Extensão fora da lista do PHPorto. Nada foi gravado.');
+        }
+
         $texto = self::read($ini);
 
         if (!hash_equals(hash('sha256', $texto), $hashEsperado)) {
             throw new RuntimeException('O php.ini mudou no disco depois que esta tela abriu. Releia e tente de novo. Nada foi gravado.');
         }
 
-        return self::commit($ini, $texto, IniFile::enableExtension($texto, $nome)) !== $texto;
+        return self::commit($ini, $texto, IniFile::enableExtension($texto, $nome->value)) !== $texto;
     }
 
     private static function commit(string $ini, string $texto, string $novo): string

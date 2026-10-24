@@ -14,6 +14,7 @@ final class Tcc
 
     public const HOST = 'download-mirror.savannah.gnu.org';
 
+    public const ZIP_MISSING = 'A extensão zip não está carregada neste PHP, e o instalador precisa dela para abrir o pacote. Ative zip na seção Extensões, suba o php -S de novo e tente outra vez. Nada foi baixado.';
     public const URL = 'https://' . self::HOST . '/releases/tinycc/tcc-' . self::VERSION . '-win64-bin.zip';
 
     public const SHA256 = '34a721949a2583fdff725312da092fa0f5f1f284b702e6f811c6954714faabb2';
@@ -111,8 +112,12 @@ final class Tcc
     /**
      * @param Closure(string): ?string $baixar
      */
-    public static function install(string $dir, Closure $baixar, string $sha256 = self::SHA256): string
+    public static function install(string $dir, Closure $baixar, string $sha256 = self::SHA256, ?bool $zip = null): string
     {
+        if (!($zip ?? class_exists(ZipArchive::class))) {
+            return self::ZIP_MISSING;
+        }
+
         if (self::status($dir, $sha256)->installed()) {
             return 'O Tiny C Compiler ' . self::VERSION . ' já está instalado em ' . self::libDir($dir) . '. Nada mudou.';
         }

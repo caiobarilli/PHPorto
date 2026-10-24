@@ -18,6 +18,7 @@ use App\Php\C\CRun;
 use App\Php\C\Tcc;
 use App\Php\IniKey;
 use App\Php\PhpBuild;
+use App\Php\PhpExtension;
 use App\Php\PhpIni;
 use App\Php\PhpProbe;
 use App\Php\PhpReleases;
@@ -982,7 +983,7 @@ final class Pages
                 ),
                 static fn (string $binario): ?string => PhpProbe::measure($binario)?->version,
             ),
-        )->withC($this->cPanel());
+        )->withC($this->cPanel())->withExtensions(PhpExtension::loadedMap());
 
         Respond::html('PHPorto — PHP', Respond::render('php.php', $view));
     }
@@ -1001,8 +1002,8 @@ final class Pages
             Respond::redirect('/php');
         }
 
-        if ($acao === CPanel::FFI_ACTION) {
-            $this->flash(self::ffiExtensionEnable($this->cPanel(), php_ini_loaded_file(), $_POST[PhpIni::HASH_FIELD] ?? null));
+        if ($acao === PhpExtension::ACTION) {
+            $this->flash(self::extensionEnable(PhpExtension::loadedMap(), php_ini_loaded_file(), $_POST[PhpIni::HASH_FIELD] ?? null, $_POST[PhpExtension::FIELD] ?? null));
             Respond::redirect('/php');
         }
 
@@ -1034,6 +1035,7 @@ final class Pages
             ffiLoaded: extension_loaded('ffi'),
             ffiEnable: IniKey::FfiEnable->normalize((string) ini_get(IniKey::FfiEnable->value)),
             last: CRun::fromArray($_SESSION[CCode::SESSION_KEY] ?? null),
+            zipLoaded: extension_loaded('zip'),
         );
     }
 
@@ -1046,15 +1048,22 @@ final class Pages
             return 'O pacote oficial do Tiny C Compiler é para Windows x64. Nada foi instalado.';
         }
 
-        return Tcc::install($painel->tcc->dir, $baixar);
+        return Tcc::install($painel->tcc->dir, $baixar, Tcc::SHA256, $painel->zipLoaded);
     }
 
-    public static function ffiExtensionEnable(CPanel $painel, string|false $ini, mixed $hash): string
+    /**
+     * @param array<string, bool> $carregadas
+     */
+    public static function extensionEnable(array $carregadas, string|false $ini, mixed $hash, mixed $nome): string
     {
-        if (!$painel->canEnableFfi()) {
-            return $painel->ffiLoaded
-                ? 'A extensão FFI já está carregada. O php.ini não foi tocado.'
-                : 'Instale o Tiny C Compiler antes de ativar a extensão FFI. Nada foi gravado.';
+        $ext = is_string($nome) ? PhpExtension::tryFrom($nome) : null;
+
+        if ($ext === null) {
+            return 'Extensão fora da lista do PHPorto. Nada foi gravado.';
+        }
+
+        if ($carregadas[$ext->value] ?? false) {
+            return 'A extensão ' . $ext->value . ' já está carregada. O php.ini não foi tocado.';
         }
 
         if ($ini === false) {
@@ -1066,16 +1075,16 @@ final class Pages
         }
 
         try {
-            $mudou = PhpIni::enableExtension($ini, $hash, 'ffi');
+            $mudou = PhpIni::enableExtension($ini, $hash, $ext->value);
         } catch (RuntimeException $e) {
             return $e->getMessage();
         }
 
         if (!$mudou) {
-            return 'extension=ffi já está ativa no php.ini. O php.ini não foi tocado. Feche e suba o php -S de novo para carregar.';
+            return 'extension=' . $ext->value . ' já está ativa no php.ini. O php.ini não foi tocado. Feche e suba o php -S de novo para carregar.';
         }
 
-        return 'php.ini gravado: extension=ffi. A versão anterior ficou em ' . basename($ini) . PhpIni::BACKUP_SUFFIX
+        return 'php.ini gravado: extension=' . $ext->value . '. A versão anterior ficou em ' . basename($ini) . PhpIni::BACKUP_SUFFIX
             . '. Feche e suba o php -S de novo para carregar a extensão.';
     }
 
