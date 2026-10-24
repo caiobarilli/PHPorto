@@ -13,6 +13,9 @@ use Closure;
 
 final readonly class PhpView
 {
+    /**
+     * @param array<string, bool> $extensions
+     */
     public function __construct(
         public ?PhpBuild $active,
         public ?string $pathBinary,
@@ -24,6 +27,7 @@ final readonly class PhpView
         public string $csrfField = '',
         public ?PhpUpdate $update = null,
         public ?CPanel $c = null,
+        public array $extensions = [],
     ) {
     }
 
@@ -41,11 +45,19 @@ final readonly class PhpView
 
     public function with(?IniForm $ini, ?string $notice, string $csrfToken, string $csrfField, ?PhpUpdate $update = null): self
     {
-        return new self($this->active, $this->pathBinary, $this->pathDiverges, $this->pathBuild, $ini, $notice, $csrfToken, $csrfField, $update, $this->c);
+        return new self($this->active, $this->pathBinary, $this->pathDiverges, $this->pathBuild, $ini, $notice, $csrfToken, $csrfField, $update, $this->c, $this->extensions);
     }
 
     public function withC(CPanel $c): self
     {
-        return new self($this->active, $this->pathBinary, $this->pathDiverges, $this->pathBuild, $this->ini, $this->notice, $this->csrfToken, $this->csrfField, $this->update, $c);
+        return new self($this->active, $this->pathBinary, $this->pathDiverges, $this->pathBuild, $this->ini, $this->notice, $this->csrfToken, $this->csrfField, $this->update, $c, $this->extensions);
+    }
+
+    /**
+     * @param array<string, bool> $extensions
+     */
+    public function withExtensions(array $extensions): self
+    {
+        return new self($this->active, $this->pathBinary, $this->pathDiverges, $this->pathBuild, $this->ini, $this->notice, $this->csrfToken, $this->csrfField, $this->update, $this->c, $extensions);
     }
 }

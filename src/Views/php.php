@@ -8,8 +8,8 @@ declare(strict_types=1);
 
 use App\Http\Respond;
 use App\Php\C\CCode;
-use App\Php\C\CPanel;
 use App\Php\C\Tcc;
+use App\Php\PhpExtension;
 use App\Php\PhpIni;
 use App\Php\PhpReleases;
 
@@ -194,6 +194,39 @@ $ultimo  = $c?->last;
       <?php endif; ?>
     </section>
 
+    <?php if ($view->extensions !== []): ?>
+      <section id="php-extensoes">
+        <h2>Extensões</h2>
+        <p class="dica" style="margin-top:0">Só as extensões que o PHPorto usa. Ativar descomenta ou acrescenta <code>extension=</code> no <code>php.ini</code>, com cópia em <code>.bak</code>, sem UAC. Vale depois de fechar o <code>php -S</code> e subir de novo.</p>
+        <table id="ext-tabela">
+          <tbody>
+            <?php foreach (PhpExtension::cases() as $ext): ?>
+              <?php $carregada = $view->extensions[$ext->value] ?? false; ?>
+              <tr id="ext-<?= Respond::e($ext->value) ?>">
+                <td><code><?= Respond::e($ext->value) ?></code></td>
+                <td><span class="tag"><?= $carregada ? 'carregada' : 'não carregada' ?></span></td>
+                <td><?= Respond::e($ext->usage()) ?></td>
+                <td>
+                  <?php if (!$carregada && $ini !== null && $ini->error === null): ?>
+                    <form method="post" action="/php" data-sem-reload>
+                      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+                      <input type="hidden" name="acao" value="<?= Respond::e(PhpExtension::ACTION) ?>">
+                      <input type="hidden" name="<?= Respond::e(PhpExtension::FIELD) ?>" value="<?= Respond::e($ext->value) ?>">
+                      <input type="hidden" name="<?= Respond::e(PhpIni::HASH_FIELD) ?>" value="<?= Respond::e($ini->hash) ?>">
+                      <button type="submit" class="btn btn-sm" id="btn-ativar-<?= Respond::e($ext->value) ?>"<?= $ini->writable ? '' : ' disabled' ?>>Ativar</button>
+                    </form>
+                  <?php endif; ?>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+        <?php if ($ini === null || $ini->error !== null): ?>
+          <p class="dica">Sem um <code>php.ini</code> legível, o botão Ativar não aparece.</p>
+        <?php endif; ?>
+      </section>
+    <?php endif; ?>
+
     <?php if ($c !== null): ?>
       <section id="php-c">
         <h2>C</h2>
@@ -204,6 +237,9 @@ $ultimo  = $c?->last;
         </p>
         <?php if ($recusaC !== null): ?>
           <div class="alert alert-note" id="c-bloqueio"><?= Respond::e($recusaC) ?></div>
+        <?php endif; ?>
+        <?php if (!$c->ffiLoaded): ?>
+          <p class="dica" id="c-ffi-extensoes">A extensão <code>ffi</code> se ativa na seção <a href="#php-extensoes">Extensões</a>.</p>
         <?php endif; ?>
         <dl class="kv" id="tcc-estado">
           <dt>Tiny C Compiler</dt>
@@ -218,24 +254,16 @@ $ultimo  = $c?->last;
           <?php endif; ?>
           <dt>ffi.enable</dt><dd><?= Respond::e($c->ffiEnable) ?></dd>
         </dl>
-        <?php if ($c->canEnableFfi() && $ini !== null && $ini->error === null): ?>
-          <form method="post" action="/php" id="form-ffi" data-sem-reload>
-            <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
-            <input type="hidden" name="acao" value="<?= Respond::e(CPanel::FFI_ACTION) ?>">
-            <input type="hidden" name="<?= Respond::e(PhpIni::HASH_FIELD) ?>" value="<?= Respond::e($ini->hash) ?>">
-            <div class="row">
-              <button type="submit" class="btn btn-sm" id="btn-ativar-ffi"<?= $ini->writable ? '' : ' disabled' ?>>Ativar extensão FFI</button>
-            </div>
-            <p class="dica">Descomenta ou acrescenta <code>extension=ffi</code> no <code><?= Respond::e(basename($ini->path)) ?></code>, com cópia em <code><?= Respond::e(basename($ini->path) . PhpIni::BACKUP_SUFFIX) ?></code>. Sem UAC. Vale depois de subir o <code>php -S</code> de novo.</p>
-          </form>
-        <?php endif; ?>
         <?php if (!$c->tcc->installed() && $c->windows): ?>
           <form method="post" action="/php" id="form-tcc" data-sem-reload>
             <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
             <input type="hidden" name="acao" value="<?= Respond::e(Tcc::ACTION) ?>">
             <div class="row">
-              <button type="submit" class="btn btn-sm" id="btn-instalar-tcc">Instalar Tiny C Compiler</button>
+              <button type="submit" class="btn btn-sm" id="btn-instalar-tcc"<?= $c->tccBlocked() === null ? '' : ' disabled' ?>>Instalar Tiny C Compiler</button>
             </div>
+            <?php if ($c->tccBlocked() !== null): ?>
+              <p class="dica bad" id="tcc-sem-zip"><?= Respond::e((string) $c->tccBlocked()) ?></p>
+            <?php endif; ?>
             <p class="dica">Baixa o zip oficial, confere o SHA256 fixado e extrai numa pasta do PHPorto. Sem UAC e sem mexer no PATH.</p>
           </form>
         <?php endif; ?>

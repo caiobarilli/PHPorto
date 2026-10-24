@@ -551,11 +551,32 @@ sem `..`, e vai para `storage/tcc/`, sem mexer no PATH.
 `true`, qualquer script PHP servido pelo `php -S` também pode usar FFI; o
 PHPorto só usa no processo filho.
 
-Com o TCC instalado e a extensão FFI ainda não carregada, a seção C mostra o
-botão "Ativar extensão FFI". Ele descomenta a linha `;extension=ffi` (ou
-acrescenta `extension=ffi` no fim) no `php.ini` carregado, pelo mesmo caminho
-de gravação da tabela: login, CSRF, checagem de Host, marca SHA256 do arquivo
-lido, cópia em `.bak` e sem UAC. Se a linha já estiver ativa, nada é gravado.
+A extensão FFI se ativa na seção Extensões da `/php` (abaixo). Sem a extensão
+`zip`, o instalador do TCC recusa antes de baixar qualquer coisa e o botão
+"Instalar Tiny C Compiler" fica desabilitado, apontando para essa seção.
+
+### Extensões do PHP
+
+A seção Extensões da `/php` mostra uma **lista fechada** com as extensões que o
+PHPorto usa, definida em `src/Php/PhpExtension.php`:
+
+| Extensão | Uso |
+| --- | --- |
+| `zip` | instalar o Tiny C Compiler (`ZipArchive`) |
+| `ffi` | seção C (`libtcc.dll`) |
+| `openssl` | downloads por https (TCC e lista de versões do PHP) |
+| `mbstring` | texto UTF-8 em terminais, uploads e saídas |
+| `pdo_sqlite` | banco SQLite, o padrão |
+| `pdo_mysql` | banco MySQL, só com `DB_DRIVER=mysql` |
+
+Cada linha mostra se a extensão está carregada. Se não estiver, o botão
+"Ativar" descomenta `;extension=<nome>` (ou acrescenta `extension=<nome>` no
+fim, fora de `[HOST=]`/`[PATH=]`) no `php.ini` carregado, pelo mesmo caminho de
+gravação da tabela: login, CSRF consumido antes do ramo, checagem de Host, marca
+SHA256 do arquivo lido, cópia em `.bak`, gravação atômica e sem UAC. Se a linha
+já estiver ativa, nada é gravado. Um nome fora da lista é recusado no servidor,
+em `Pages::extensionEnable` e de novo em `PhpIni::enableExtension`. Vale depois
+de fechar o `php -S` e subir de novo.
 
 ## O que fica gravado
 

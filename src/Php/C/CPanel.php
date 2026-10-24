@@ -6,14 +6,13 @@ namespace App\Php\C;
 
 final readonly class CPanel
 {
-    public const FFI_ACTION = 'ffi-ativar';
-
     public function __construct(
         public TccStatus $tcc,
         public bool $windows,
         public bool $ffiLoaded,
         public string $ffiEnable,
         public ?CRun $last = null,
+        public bool $zipLoaded = true,
     ) {
     }
 
@@ -24,7 +23,7 @@ final readonly class CPanel
         }
 
         if (!$this->ffiLoaded) {
-            return 'A extensão FFI não está carregada neste PHP. Use o botão Ativar extensão FFI (ou ative extension=ffi no php.ini) e suba o php -S de novo.';
+            return 'A extensão FFI não está carregada neste PHP. Ative ffi na seção Extensões acima e suba o php -S de novo.';
         }
 
         if ($this->ffiEnable === 'false') {
@@ -34,9 +33,9 @@ final readonly class CPanel
         return null;
     }
 
-    public function canEnableFfi(): bool
+    public function tccBlocked(): ?string
     {
-        return $this->tcc->installed() && !$this->ffiLoaded;
+        return $this->zipLoaded ? null : Tcc::ZIP_MISSING;
     }
 
     public function canRun(): bool
