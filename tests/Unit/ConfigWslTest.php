@@ -96,19 +96,34 @@ it('sem o PowerShell elevado os dois botões ficam desabilitados e a tela diz po
         ->and($html)->toContain('Precisa do PowerShell elevado ligado');
 });
 
-it('com o PowerShell elevado os botões ficam habilitados', function () {
+it('sem nada rodando, acordar fica habilitado e desligar desabilitado', function () {
     $html = configWslHtml(['Debian'], []);
 
     expect($html)->not->toMatch('/id="btn-wsl-acordar"\s+disabled/')
-        ->and($html)->not->toMatch('/id="btn-wsl-desligar"\s+disabled/')
+        ->and($html)->toMatch('/id="btn-wsl-desligar"\s+disabled/')
         ->and($html)->toContain('Nenhuma distro rodando.');
 });
 
-it('WSL sem distro instalada não deixa acordar, mas deixa desligar', function () {
-    $html = configWslHtml([], []);
+it('com distro rodando, acordar fica desabilitado e desligar habilitado', function () {
+    $html = configWslHtml(['Debian', 'Ubuntu'], ['Debian']);
 
     expect($html)->toMatch('/id="btn-wsl-acordar"\s+disabled/')
         ->and($html)->not->toMatch('/id="btn-wsl-desligar"\s+disabled/')
+        ->and($html)->toContain('Rodando: <strong>Debian</strong>');
+});
+
+it('sem saber o que roda, os dois botões ficam habilitados', function () {
+    $html = configWslHtml(['Debian'], null);
+
+    expect($html)->not->toMatch('/id="btn-wsl-acordar"\s+disabled/')
+        ->and($html)->not->toMatch('/id="btn-wsl-desligar"\s+disabled/');
+});
+
+it('WSL sem distro instalada e nada rodando não deixa acordar nem desligar', function () {
+    $html = configWslHtml([], []);
+
+    expect($html)->toMatch('/id="btn-wsl-acordar"\s+disabled/')
+        ->and($html)->toMatch('/id="btn-wsl-desligar"\s+disabled/')
         ->and($html)->toContain('Nenhuma distro instalada.');
 });
 

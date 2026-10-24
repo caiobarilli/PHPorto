@@ -160,6 +160,7 @@ use App\Http\Respond;
   </section>
 
   <?php if ($view->wslDistros !== null): ?>
+    <?php $wslRodando = $view->wslRunning !== null && $view->wslRunning !== []; ?>
     <section id="wsl">
       <h2>WSL</h2>
 
@@ -169,9 +170,9 @@ use App\Http\Respond;
 
         <div class="linha-acao">
           <button type="submit" class="btn btn-sm" name="SubAction" value="wake" id="btn-wsl-acordar"
-                  <?= $view->win->on && $view->wslDistros !== [] ? '' : 'disabled' ?>>Acordar</button>
+                  <?= $view->win->on && $view->wslDistros !== [] && !$wslRodando ? '' : 'disabled' ?>>Acordar</button>
           <button type="button" class="btn btn-danger btn-sm" id="btn-wsl-desligar"
-                  <?= $view->win->on ? '' : 'disabled' ?>>Desligar…</button>
+                  <?= $view->win->on && $view->wslRunning !== [] ? '' : 'disabled' ?>>Desligar…</button>
         </div>
 
         <p class="nota-estado" id="wsl-estado">
