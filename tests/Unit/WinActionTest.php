@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 use App\Win\WinAction;
 
-it('tem as vinte e duas ações: as dezessete do menu em ordem, as duas da /hyperv, as duas do WSL da /config e a da tela do PHP fora dele', function () {
+it('tem as vinte e três ações: as dezessete do menu em ordem, as duas da /hyperv, as três do WSL da /config e a da tela do PHP fora dele', function () {
     expect(array_map(static fn (WinAction $a): string => $a->value, WinAction::cases()))
         ->toBe([
             'audit', 'tweaks', 'debloat', 'dns', 'performance', 'install',
             'memory', 'network', 'exporter', 'processes', 'optimize', 'gpu',
             'gdid', 'rdp', 'sunshine', 'openssh', 'ssh-keys',
             'hyperv', 'hyperv-vm',
-            'wsl', 'wsl-enable',
+            'wsl', 'wsl-enable', 'wsl-install-distro',
             'php-update',
         ]);
 });
@@ -920,4 +920,23 @@ it('a allowlist do worker tem wsl-enable sem parâmetro e sensível', function (
 
     expect($worker)->toMatch("/^    'wsl-enable'\\s*=\\s*@\\{\\}\\r?$/m")
         ->and($worker)->toMatch("/^    'wsl-enable' = '\\*'\\r?$/m");
+});
+
+it('wsl-install-distro só aceita um nome de distro no formato e é sensível', function () {
+    expect(WinAction::WslInstallDistro->validate(['Distro' => 'Debian', 'SubAction' => 'x']))->toBe(['Distro' => 'Debian'])
+        ->and(WinAction::WslInstallDistro->isSensitive(['Distro' => 'Debian']))->toBeTrue()
+        ->and(WinAction::SENSITIVE['wsl-install-distro'])->toBe('*')
+        ->and(WinAction::WslInstallDistro->stateChange(['Distro' => 'Debian']))->toBeNull();
+
+    foreach (['', 'Debian; calc', '-d', '--web-download', 'a b', str_repeat('a', 65)] as $ruim) {
+        expect(fn () => WinAction::WslInstallDistro->validate(['Distro' => $ruim]))->toThrow(InvalidArgumentException::class);
+    }
+});
+
+it('a allowlist do worker tem wsl-install-distro com o mesmo formato de nome e sensível', function () {
+    $worker = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Win/worker.ps1');
+
+    expect($worker)->toContain("'wsl-install-distro' = @{")
+        ->and($worker)->toContain("'Distro' = @{ tipo = 'text'; max = 64; padrao = '" . WinAction::WSL_DISTRO_PATTERN . "' }")
+        ->and($worker)->toMatch("/^    'wsl-install-distro' = '\\*'\\r?$/m");
 });

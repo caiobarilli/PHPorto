@@ -273,10 +273,10 @@ Describe 'worker - a allowlist do lado elevado' {
         $ok.params['Undo']  | Should -BeTrue
     }
 
-    It 'conhece as vinte e duas acoes' {
+    It 'conhece as vinte e tres acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
-            'memory', 'network', 'openssh', 'optimize', 'performance', 'php-update', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl', 'wsl-enable'
+            'memory', 'network', 'openssh', 'optimize', 'performance', 'php-update', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl', 'wsl-enable', 'wsl-install-distro'
         )
     }
 
@@ -288,6 +288,22 @@ Describe 'worker - a allowlist do lado elevado' {
         $ok.params.Count | Should -Be 0
 
         $extra = [PSCustomObject]@{ acao = 'wsl-enable'; params = [PSCustomObject]@{ Distro = 'Debian' } }
+        { Test-Job $extra -Modo UmaVez } | Should -Throw
+    }
+
+    It 'wsl-install-distro: so passa com UAC proprio e so aceita um nome de distro valido' {
+        $job = [PSCustomObject]@{ nonce = $global:Nonce; acao = 'wsl-install-distro'; params = [PSCustomObject]@{ Distro = 'Debian' } }
+
+        { Test-Job $job } | Should -Throw -ExpectedMessage '*so roda com UAC proprio*'
+        $ok = Test-Job $job -Modo UmaVez
+        $ok.params['Distro'] | Should -Be 'Debian'
+
+        foreach ($ruim in @('Debian; calc', '-d', '../x', 'a b', ('a' * 65))) {
+            $mau = [PSCustomObject]@{ acao = 'wsl-install-distro'; params = [PSCustomObject]@{ Distro = $ruim } }
+            { Test-Job $mau -Modo UmaVez } | Should -Throw
+        }
+
+        $extra = [PSCustomObject]@{ acao = 'wsl-install-distro'; params = [PSCustomObject]@{ Distro = 'Debian'; SubAction = 'x' } }
         { Test-Job $extra -Modo UmaVez } | Should -Throw
     }
 

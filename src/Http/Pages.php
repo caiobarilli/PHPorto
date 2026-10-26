@@ -151,6 +151,7 @@ final class Pages
             wslDistros: $wslDistros,
             wslRunning: $wslDistros === null ? null : $this->distroChecker->running(),
             wslEnabled: $wslEnabled,
+            wslDistro: $this->distroChecker->name(),
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view));
@@ -203,6 +204,10 @@ final class Pages
 
         if ($action === WinAction::WslEnable->value) {
             $this->handleWslEnablePost();
+        }
+
+        if ($action === WinAction::WslInstallDistro->value) {
+            $this->handleWslInstallDistroPost();
         }
 
         if ($action === 'fabrica') {
@@ -309,6 +314,86 @@ final class Pages
 
         $this->flash($aviso);
         Respond::redirect('/config');
+    }
+
+    private function handleWslInstallDistroPost(): never
+    {
+        $distro = $this->distroChecker->name();
+
+        if (!$this->distroChecker->enabled()) {
+            $this->flash('O WSL ainda não está ativado (ou falta reiniciar o Windows). Nada foi executado.');
+            Respond::redirect('/config');
+        }
+
+        $instaladas = $this->distroChecker->registered();
+
+        if ($instaladas === null) {
+            $this->flash('Não foi possível ler as distros instaladas. Nada foi executado.');
+            Respond::redirect('/config');
+        }
+
+        if (Distro::contains($instaladas, $distro)) {
+            $this->flash(sprintf('A distro %s já está instalada. Nada foi executado.', $distro));
+            Respond::redirect('/config');
+        }
+
+        try {
+            $params = WinAction::WslInstallDistro->validate(['Distro' => $distro]);
+        } catch (InvalidArgumentException) {
+            $this->flash('PHPORTO_DISTRO no .env não é um nome de distro aceito. Nada foi executado.');
+            Respond::redirect('/config');
+        }
+
+        $blocked = $this->oneShot->blockingReason();
+
+        if ($blocked !== null) {
+            $this->flash($blocked);
+            Respond::redirect('/config');
+        }
+
+        try {
+            $run = $this->oneShot->dispatch(WinAction::WslInstallDistro, $params, $this->config['winutil']['timeout']);
+        } catch (RuntimeException $e) {
+            $this->flash($e->getMessage());
+            Respond::redirect('/config');
+        }
+
+        $aviso = self::wslInstallDistroNotice($run, $distro);
+
+        try {
+            ($this->makeService)()->record(new Execution(
+                command: self::describe(WinAction::WslInstallDistro, $params),
+                output: $run->output,
+                exitCode: $run->exitCode,
+                durationMs: $run->durationMs,
+                kind: ExecutionKind::Windows,
+                timedOut: $run->timedOut,
+            ));
+        } catch (Throwable $e) {
+            $aviso .= ' A ação executou, mas o registro falhou: ' . $e->getMessage();
+        }
+
+        $this->flash($aviso);
+        Respond::redirect('/config');
+    }
+
+    public static function wslInstallDistroNotice(PsResult $run, string $distro): string
+    {
+        if ($run->timedOut) {
+            return sprintf('Instalar %s demorou demais e foi cancelado. A saída está no histórico da /win.', $distro);
+        }
+
+        if ($run->exitCode !== 0) {
+            return sprintf('Falha ao instalar %s (código ', $distro)
+                . ($run->exitCode === null ? 'nenhum' : $run->exitCode)
+                . '). A saída está no histórico da /win.';
+        }
+
+        return sprintf(
+            '%1$s instalada, sem abrir. Para criar o usuário UNIX, abra o %1$s uma vez fora do PHPorto '
+            . '(menu Iniciar ou wsl -d %1$s num terminal). A saída está no histórico da /win.',
+            $distro,
+        );
     }
 
     public static function wslEnableNotice(PsResult $run): string
@@ -1380,6 +1465,7 @@ final class Pages
             WinAction::HypervVm  => 'Ligar, desligar e reiniciar VM é pela tela do Hyper-V, não pela /win.',
             WinAction::Wsl       => 'Desligar e acordar o WSL é pela configuração, não pela /win.',
             WinAction::WslEnable => 'Ativar o WSL é pela configuração, não pela /win.',
+            WinAction::WslInstallDistro => 'Instalar a distro do WSL é pela configuração, não pela /win.',
             WinAction::PhpUpdate => 'Atualizar o PHP é pela tela do PHP, não pela /win.',
             default              => null,
         };

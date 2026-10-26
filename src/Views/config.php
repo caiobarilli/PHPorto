@@ -7,6 +7,7 @@ declare(strict_types=1);
  */
 
 use App\Http\Respond;
+use App\Wsl\Distro;
 
 ?>
 <div class="wrap">
@@ -189,6 +190,31 @@ use App\Http\Respond;
     <?php $wslRodando = $view->wslRunning !== null && $view->wslRunning !== []; ?>
     <section id="wsl">
       <h2>WSL</h2>
+
+      <?php if ($view->wslDistro !== '' && !Distro::contains($view->wslDistros, $view->wslDistro)): ?>
+        <form method="post" id="form-wsl-instalar" data-sem-reload>
+          <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+          <input type="hidden" name="acao" value="wsl-install-distro">
+
+          <div class="linha-acao">
+            <button type="submit" class="btn btn-sm" id="btn-wsl-instalar" data-uac
+                    <?= $view->uacOk ? '' : 'disabled' ?>>Instalar <?= Respond::e($view->wslDistro) ?> · abre o UAC</button>
+          </div>
+
+          <p class="nota-estado" id="wsl-instalar-estado">
+            A distro <strong><?= Respond::e($view->wslDistro) ?></strong> do <code>PHPORTO_DISTRO</code> não aparece em
+            <code>wsl -l -q</code>.
+            <br>
+            <strong>Instalar</strong> roda <code>wsl --install -d <?= Respond::e($view->wslDistro) ?> --no-launch</code>:
+            baixa e registra a distro sem abrir o console dela. Abre o UAC a cada clique. Depois, para criar o
+            usuário UNIX, abra a distro uma vez <strong>fora do PHPorto</strong>.
+            <?php if (!$view->uacOk): ?>
+              <br>
+              <strong><?= Respond::e($view->uacSummary) ?></strong>
+            <?php endif; ?>
+          </p>
+        </form>
+      <?php endif; ?>
 
       <form method="post" id="form-wsl" data-sem-reload>
         <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">

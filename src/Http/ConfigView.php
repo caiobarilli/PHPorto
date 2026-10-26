@@ -28,6 +28,7 @@ final readonly class ConfigView
      * @param list<string>|null $wslDistros
      * @param list<string>|null $wslRunning
      * @param bool $wslEnabled
+     * @param string $wslDistro
      */
     public function __construct(
         public string $provider,
@@ -52,6 +53,7 @@ final readonly class ConfigView
         public ?array $wslDistros = null,
         public ?array $wslRunning = null,
         public bool $wslEnabled = true,
+        public string $wslDistro = '',
     ) {
     }
 }
