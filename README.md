@@ -1,5 +1,7 @@
 # PHPorto
 
+[![CI](https://github.com/caiobarilli/PHPorto/actions/workflows/ci.yml/badge.svg)](https://github.com/caiobarilli/PHPorto/actions/workflows/ci.yml)
+
 O PHPorto faz a ponte entre o Windows e o WSL numa máquina local. Recebe um
 comando pelo navegador ou por HTTP, executa dentro da distro do WSL ou como ação
 do Windows, devolve a saída e grava cada execução num banco — SQLite por padrão,
