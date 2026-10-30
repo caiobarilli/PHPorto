@@ -53,7 +53,7 @@
         "gate": "O portão: test, stan, cs-check-lf e pester. O CI (.github/workflows/ci.yml) roda o mesmo portão: test, stan, cs-check-lf e sem-comentario no Linux e pester no Windows."
     },
     "require-dev": {
-        "pestphp/pest": "^3",
+        "pestphp/pest": "^5",
         "phpstan/phpstan": "^2.2",
         "friendsofphp/php-cs-fixer": "^3.95",
         "heyosseus/sloppy": "^1.6"
