@@ -50,7 +50,7 @@
     "scripts-descriptions": {
         "cs-check-lf": "cs-check sobre cópia em LF — na árvore CRLF o cs-check acusa todo arquivo.",
         "pester": "Testes PowerShell das ações do Windows (Windows + PS 5.1).",
-        "gate": "O portão: test, stan, cs-check-lf e pester. Não há CI; o portão é este comando."
+        "gate": "O portão: test, stan, cs-check-lf e pester. O CI (.github/workflows/ci.yml) roda o mesmo portão: test, stan, cs-check-lf e sem-comentario no Linux e pester no Windows."
     },
     "require-dev": {
         "pestphp/pest": "^3",
