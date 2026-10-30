@@ -50,6 +50,10 @@ Describe 'uso unico - o stub' {
     }
 
     It 'hash certo: roda o worker, que recusa sem Administrador e nao toca no pedido' {
+        if ($env:OS -eq 'Windows_NT' -and ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            Set-ItResult -Skipped -Because 'o host ja roda como Administrador'
+            return
+        }
         $r = Invoke-Stub (New-Stub $Script:CopiaW (Get-Sha $Script:CopiaW) $Script:Pedido (Get-Sha $Script:Pedido))
         $r.Exit | Should -Be 1
         Test-Path -LiteralPath $Script:Pedido | Should -BeTrue

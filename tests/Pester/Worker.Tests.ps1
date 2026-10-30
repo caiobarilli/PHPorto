@@ -398,7 +398,7 @@ Describe 'worker - a allowlist do lado elevado' {
         @{ Campo = 'User';       Valor = 'ad:min' }
         @{ Campo = 'User';       Valor = "ad`tmin" }
         @{ Campo = 'Password';   Valor = "Xyzzy`n12345" }
-        @{ Campo = 'DeviceName'; Valor = "tv`u{1B}sala" }
+        @{ Campo = 'DeviceName'; Valor = ('tv' + [char]0x1B + 'sala') }
     ) {
         $p = [ordered]@{ SubAction = 'pair'; User = 'admin'; Password = 'Xyzzy12345'; Pin = '4821' }
         $p[$Campo] = $Valor
@@ -891,6 +891,10 @@ Describe 'worker - aspa curva nao vira codigo' {
 Describe 'worker - o script gerado roda e devolve codigo' {
 
     It 'recusa por falta de elevacao vira exit 1, com o motivo na saida' {
+        if ($env:OS -eq 'Windows_NT' -and ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            Set-ItResult -Skipped -Because 'o host ja roda como Administrador'
+            return
+        }
         $g = Get-ScriptGerado -Acao 'processes'
 
         $saidaArq = Join-Path $Script:Trabalho ('out-' + $g.Id + '.txt')
@@ -1266,7 +1270,7 @@ Describe 'worker - Get-UsuarioPhp' {
 
     It 'devolve o SID do dono do processo do php -S' {
         Mock Get-CimInstance { [PSCustomObject]@{ ProcessId = 4242 } }
-        Mock Invoke-CimMethod { [PSCustomObject]@{ Sid = 'S-1-5-21-1-2-3-1001' } }
+        Mock Invoke-CimMethod -RemoveParameterType InputObject { [PSCustomObject]@{ Sid = 'S-1-5-21-1-2-3-1001' } }
         Get-UsuarioPhp 4242 | Should -Be 'S-1-5-21-1-2-3-1001'
     }
 

@@ -156,7 +156,7 @@ Describe 'Invoke-SshKeys - with files in TestDrive' {
             @{ ExitCode = 0; Error = '' }
         }
 
-        $output = (Invoke-SshKeys -SubAction 'generate' -KeyName 'trabalho') 6>&1 | Out-String
+        $output = (Invoke-SshKeys -SubAction 'generate' -KeyName 'trabalho') 6>&1 | Out-String -Width 4096
 
         $output | Should -Match 'Key name: trabalho'
         $output | Should -Match ([regex]::Escape('Key path: ' + $p.Private))
