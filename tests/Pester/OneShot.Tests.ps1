@@ -51,6 +51,7 @@ Describe 'uso unico - o stub' {
 
     It 'hash certo: roda o worker, que recusa sem Administrador e nao toca no pedido' {
         if ($env:OS -eq 'Windows_NT' -and ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            Write-Host 'SKIP: o host ja roda como Administrador; este teste so vale em host sem elevacao.'
             Set-ItResult -Skipped -Because 'o host ja roda como Administrador'
             return
         }

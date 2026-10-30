@@ -892,6 +892,7 @@ Describe 'worker - o script gerado roda e devolve codigo' {
 
     It 'recusa por falta de elevacao vira exit 1, com o motivo na saida' {
         if ($env:OS -eq 'Windows_NT' -and ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            Write-Host 'SKIP: o host ja roda como Administrador; este teste so vale em host sem elevacao.'
             Set-ItResult -Skipped -Because 'o host ja roda como Administrador'
             return
         }
