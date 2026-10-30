@@ -50,6 +50,7 @@ jobs:
 
       - shell: powershell
         run: |
+          $ErrorActionPreference = 'Continue'
           Install-Module Pester -RequiredVersion 5.7.1 -Force -SkipPublisherCheck -Scope CurrentUser
           Import-Module Pester -RequiredVersion 5.7.1
           Invoke-Pester ./tests/Pester -CI

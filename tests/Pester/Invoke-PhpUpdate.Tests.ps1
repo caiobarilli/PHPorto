@@ -370,7 +370,7 @@ Describe 'Invoke-PhpUpdate - the swap' {
         $output | Should -Match 'not older than 8\.5\.13'
 
         Mock Get-PhportoPhpExeInfo { [PSCustomObject]@{ Version = '8.5.11'; Nts = $false; X64 = $true; Output = '' } }
-        $output = (Invoke-PhpUpdate -Version '8.5.13' -Sha256 $Script:Hash -PhpDir $Script:Pasta) 6>&1 | Out-String
+        $output = (Invoke-PhpUpdate -Version '8.5.13' -Sha256 $Script:Hash -PhpDir $Script:Pasta) 6>&1 | Out-String -Width 4096
         $output | Should -Match 'not an NTS x64 build'
 
         $global:LASTEXITCODE | Should -Be 1
@@ -380,7 +380,7 @@ Describe 'Invoke-PhpUpdate - the swap' {
     It 'says so when the folder is already at the target' {
         Set-Content -LiteralPath (Join-Path $Script:Pasta 'php.exe') -Value '8.5.13' -NoNewline
 
-        $output = (Invoke-PhpUpdate -Version '8.5.13' -Sha256 $Script:Hash -PhpDir $Script:Pasta) 6>&1 | Out-String
+        $output = (Invoke-PhpUpdate -Version '8.5.13' -Sha256 $Script:Hash -PhpDir $Script:Pasta) 6>&1 | Out-String -Width 4096
 
         $global:LASTEXITCODE | Should -Be 0
         $output | Should -Match 'already 8\.5\.13\. Nothing was changed'
