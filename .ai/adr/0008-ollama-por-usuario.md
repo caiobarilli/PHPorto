@@ -6,12 +6,14 @@ O PHParrot precisa de modelos locais para gerar textos por tema e nível CEFR em
 
 ## Decisão
 
-Ação nova `ollama` na allowlist do PHP e do worker, com as subações `status`, `list`, `install`, `uninstall`, `start`, `stop`, `pull` e `remove`. Tudo roda no contexto do usuário, sem elevação e sem o worker elevado. Nenhum campo livre: modelos e subações vêm de listas fechadas.
+Ação nova `ollama` com as subações `status`, `list`, `install`, `uninstall`, `start`, `stop`, `pull` e `remove`. Nenhum campo livre: modelos e subações vêm de listas fechadas.
 
-- `install` baixa o `OllamaSetup.exe` de uma tag fixa das releases oficiais (`ollama/ollama`) e confere o SHA-256 antes de executar. Divergência recusa. Versão e hash ficam em `config/`, dentro do manifesto do ADR 0001. Trocar a versão exige commit novo. Nada de `latest`.
+- Canal novo não elevado: o PHP gera scripts fixos a partir de constantes e roda com `PsRunner`, no molde de `HypervGate::checkBody`. Não passa pelo worker elevado nem pelo `OneShot`. O PHP recusa rodar se o próprio processo estiver com nível de integridade High (elevado).
+- Versão, SHA-256 do instalador e allowlist de modelos ficam em constantes no PHP, e não no config do worker nem no manifesto. Nada desse canal roda elevado, então adulteração pelo mesmo usuário não dá ganho de privilégio.
+- `install`: o PHP baixa o `OllamaSetup.exe` de uma tag fixa das releases oficiais (`ollama/ollama`), confere o SHA-256 no PHP e de novo com `Get-FileHash`, e executa como usuário. Divergência recusa. Trocar a versão exige commit novo. Nada de `latest`.
 - `uninstall` roda o desinstalador registrado no perfil do usuário. Apagar os modelos pede confirmação à parte.
-- `start` e `stop` mexem só no processo do usuário. `status` mostra versão, processo, `127.0.0.1:11434` e GPU/VRAM por `nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv`. `Win32_VideoController.AdapterRAM` é `uint32` e não passa de 4 GB, então fica só como fallback marcado como aproximado.
-- `pull`, `remove` e `list` usam a API local, com o nome do modelo saindo da allowlist.
+- `start` e `stop` mexem só em processos do usuário. `status`, `list`, `pull` e `remove` usam HTTP em `127.0.0.1:11434`. `status` mostra versão, processo e GPU/VRAM por `nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv`. `Win32_VideoController.AdapterRAM` é `uint32` e não passa de 4 GB, então fica só como fallback marcado como aproximado.
+- `pull` e `remove` usam o nome do modelo saído da allowlist. `pull` roda destacado e o progresso vem por polling.
 - Allowlist da fase 1, com tags fixas e quantização Q4_K_M:
   - `qwen3:4b` (2.5 GB): o principal, com mais de 100 línguas, tradução incluída, segundo https://ollama.com/library/qwen3.
   - `llama3.2:3b` (2.0 GB): o alternativo, com en, de, fr, it, pt, hi, es e th oficiais, sem ru, segundo https://ollama.com/library/llama3.2.
@@ -27,6 +29,8 @@ Ação nova `ollama` na allowlist do PHP e do worker, com as subações `status`
 
 ## Consequência
 
+Risco residual: o canal não elevado não tem manifesto nem pasta protegida. Qualquer processo do usuário pode trocar o PHP, as constantes ou o instalador baixado antes da execução, mas só ganha o que já tinha: o mesmo usuário. Se o PHP rodar elevado por engano, a recusa por nível de integridade é a única barreira.
+
 Instalar, atualizar e remover não pedem UAC. Só a regra de firewall pede, e só se o teste falhar. Uma atualização do Ollama passa por commit, porque o hash fica no manifesto. Com bind fora do loopback, a API fica aberta a tudo o que alcança a sub-rede, sem senha. O IP da interface muda e pode quebrar a configuração. LAN, AMD/ROCm, Intel, Ollama como serviço do Windows, modelos fora da allowlist e mudanças no PHParrot ficam fora.
 
 Não verificado:
@@ -36,13 +40,12 @@ Não verificado:
 - Como desligar a atualização automática do app de bandeja.
 - Como desligar o raciocínio do `qwen3` em respostas JSON.
 - Se `host.docker.internal` no Docker Desktop alcança um serviço preso em `127.0.0.1` do Windows.
-- Como rodar a ação sem elevação a partir do PHPorto.
 - Folga de contexto/KV cache em 4 GB.
 
 ## Commit
 
-Pendente.
+`db87f17`
 
 ## PR
 
-Pendente.
+`#57` (`db50a3d`)
