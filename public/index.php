@@ -138,5 +138,6 @@ match ($path) {
     '/win'    => $pages->win($method),
     '/hyperv' => $pages->hyperv($method),
     '/php'    => $pages->php($method),
+    '/ollama' => $pages->ollama($method),
     default   => Respond::notFound(),
 };
