@@ -5,8 +5,9 @@
 **Você é o dono do porto.**
 
 O PHPorto é para quem usa Windows e se recusa a ser usuário de segunda classe.
-Pelo navegador, você fiscaliza a sua máquina: barra a telemetria e os apps que
-chegam empurrados nas instalações, vigia o tráfego da rede e opera o essencial
+Pelo navegador, você fiscaliza a sua máquina: reduz a telemetria ao mínimo que
+a edição do Windows permite, barra os apps que chegam empurrados nas
+instalações, vigia o tráfego da rede e opera o essencial
 sem decorar comando de PowerShell.
 
 Liga o RDP em alta qualidade, joga pelo Moonlight, usa o WSL direto no navegador
@@ -47,6 +48,14 @@ embutido do PHP.
 - Composer
 - WSL2 com uma distro instalada, visível em `wsl -l -q`
 - Windows PowerShell 5.1, para a tela `/win`
+
+Opcionais, por recurso:
+
+- Hyper-V: Windows 11 Pro ou Enterprise
+- Captura de rede: TShark (Wireshark)
+- Sunshine/Moonlight: winget
+- Ollama: placa NVIDIA com `nvidia-smi` recomendada; sem ela, a medição da
+  memória de vídeo é aproximada
 
 ## Instalação
 
@@ -92,6 +101,7 @@ embutido do PHP.
 | `/config` | Banco ativo, interruptor da API, PowerShell elevado e restauração de fábrica. |
 | `/wsl` | Executa comandos e copia arquivos na distro, com o histórico do WSL. |
 | `/win` | As ações do Windows, executadas por um PowerShell elevado, com o histórico do Windows. |
+| `/hyperv` | Liga, desliga e reinicia as VMs. |
 | `/ollama` | Instala, inicia e para o Ollama e baixa ou remove modelos, sem PowerShell elevado. |
 
 ## Ollama
@@ -125,14 +135,16 @@ não depende da placa.
 
 ## Recursos
 
-- **Telemetria e apps empurrados:** os ajustes da aba Sistema da `/win` desligam
-  a telemetria, e *Remover apps* tira os pacotes APPX marcados.
+- **Telemetria e apps empurrados:** os ajustes da aba Sistema da `/win` reduzem
+  a telemetria ao mínimo que a edição do Windows permite, e *Remover apps* tira os pacotes APPX marcados.
 - **Tráfego da rede:** a *Captura de rede* grava pacotes com o TShark por um
-  tempo definido e gera um relatório em `runtime/Reports`.
+  tempo definido e gera um relatório em `runtime/Reports`. Sem o TShark, instala o Wireshark pelo
+  winget, que confere o hash do instalador declarado no manifesto.
 - **RDP em alta qualidade:** liga o vídeo H.264/AVC 444 no RDP
   (`AVC444ModePreferred=1`).
-- **Moonlight:** instala o Sunshine pelo winget, define as credenciais e pareia
-  o Moonlight com o PIN.
+- **Moonlight:** instala o Sunshine pelo winget, que confere o hash do
+  instalador declarado no manifesto, define as credenciais e pareia o Moonlight
+  com o PIN.
 - **WSL no navegador:** a `/wsl` executa comandos e copia arquivos na distro.
 - **Hyper-V:** a `/hyperv` liga, desliga e reinicia as VMs.
 - **Memória:** a ação *Memória* roda o WinMemoryCleaner 3.0.8 (versão e SHA-256
