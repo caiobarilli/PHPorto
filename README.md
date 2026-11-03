@@ -2,8 +2,16 @@
 
 [![CI](https://github.com/caiobarilli/PHPorto/actions/workflows/ci.yml/badge.svg)](https://github.com/caiobarilli/PHPorto/actions/workflows/ci.yml)
 
-<!-- SLOGAN: a frase abaixo será trocada pelo slogan escolhido -->
-O PHPorto faz a ponte entre o Windows e o WSL numa máquina local. Recebe um
+Com o PHPorto, você quebra as correntes do Windows. Em poucos cliques, pelo
+navegador, você tira a telemetria e os apps que vêm empurrados nas instalações,
+limpa a RAM, monitora a rede e instala o essencial sem decorar comando de
+PowerShell. Liga o RDP em alta qualidade, joga pelo Moonlight, usa o WSL direto
+no navegador e controla suas VMs no Hyper-V, transformando seu PC num servidor
+completo, com várias máquinas trabalhando a seu favor. O Windows do seu jeito
+pode superar, e muito, produtos amarrados a desconhecidos. Aqui você não aluga
+nada: quebre as correntes e mostre o verdadeiro potencial da sua máquina!
+
+Por baixo, o PHPorto recebe um
 comando pelo navegador ou por HTTP, executa dentro da distro do WSL ou como ação
 do Windows, devolve a saída e grava cada execução num banco — SQLite por padrão,
 MySQL ou MongoDB por configuração. PHP 8.5 sem framework, servido pelo servidor
