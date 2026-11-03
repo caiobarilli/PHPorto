@@ -2,22 +2,25 @@
 
 [![CI](https://github.com/caiobarilli/PHPorto/actions/workflows/ci.yml/badge.svg)](https://github.com/caiobarilli/PHPorto/actions/workflows/ci.yml)
 
-Você é o dono do porto. Com o PHPorto, você quebra as correntes do Windows e
-decide o que atraca e o que zarpa. Pelo navegador, você faz a fiscalização da
-sua máquina: barra a telemetria e os apps que chegam empurrados nas instalações,
-libera espaço no cais limpando a RAM, vigia o tráfego da rede e descarrega o
-essencial sem decorar comando de PowerShell. Liga o RDP em alta qualidade, joga
-pelo Moonlight, usa o WSL direto no navegador e comanda a sua frota de VMs no
-Hyper-V, transformando seu PC num servidor completo, com várias máquinas
-trabalhando a seu favor. O Windows do seu jeito pode superar, e muito, produtos
-amarrados a desconhecidos. Aqui você não aluga nada: o porto é seu. Quebre as
-correntes e mostre o verdadeiro potencial da sua máquina!
+**Você é o dono do porto.**
 
-Por baixo, o PHPorto recebe um
-comando pelo navegador ou por HTTP, executa dentro da distro do WSL ou como ação
-do Windows, devolve a saída e grava cada execução num banco — SQLite por padrão,
-MySQL ou MongoDB por configuração. PHP 8.5 sem framework, servido pelo servidor
-embutido do PHP.
+O PHPorto é para quem usa Windows e se recusa a ser usuário de segunda classe.
+Pelo navegador, você fiscaliza a sua máquina: barra a telemetria e os apps que
+chegam empurrados nas instalações, vigia o tráfego da rede e opera o essencial
+sem decorar comando de PowerShell.
+
+Liga o RDP em alta qualidade, joga pelo Moonlight, usa o WSL direto no navegador
+e comanda a sua frota de VMs no Hyper-V. Seu PC vira um servidor de verdade, com
+várias máquinas trabalhando a seu favor.
+
+Aqui você não aluga nada: nenhum fabricante decide quando a sua máquina fica
+velha. E nada atraca sem fiscalização: os downloads do Ollama, do
+WinMemoryCleaner e do Tiny C Compiler têm versão fixada e hash conferido, e a
+atualização do PHP confere o SHA-256 publicado na lista oficial.
+
+WSL, Hyper-V, PowerShell e o navegador trabalhando juntos, provando que o
+Windows, nas mãos certas, é estação de trabalho e servidor de verdade. Quebre as
+correntes e mostre o verdadeiro potencial da sua máquina.
 
 > **Aviso de segurança**
 >
@@ -29,6 +32,12 @@ embutido do PHP.
 > - Sem token configurado no `.env`, a aplicação não serve nada.
 >
 > Detalhes em [docs/seguranca.md](docs/seguranca.md).
+
+Por baixo, o PHPorto recebe um
+comando pelo navegador ou por HTTP, executa dentro da distro do WSL ou como ação
+do Windows, devolve a saída e grava cada execução num banco — SQLite por padrão,
+MySQL ou MongoDB por configuração. PHP 8.5 sem framework, servido pelo servidor
+embutido do PHP.
 
 ## Requisitos
 
@@ -113,6 +122,23 @@ Se a placa tiver menos que o mínimo, ou se a memória não puder ser medida, o
 download é recusado com uma mensagem e nada é baixado. Não há modo reduzido nem
 download em CPU. A conferência vale só para baixar modelos; instalar o Ollama
 não depende da placa.
+
+## Recursos
+
+- **Telemetria e apps empurrados:** os ajustes da aba Sistema da `/win` desligam
+  a telemetria, e *Remover apps* tira os pacotes APPX marcados.
+- **Tráfego da rede:** a *Captura de rede* grava pacotes com o TShark por um
+  tempo definido e gera um relatório em `runtime/Reports`.
+- **RDP em alta qualidade:** liga o vídeo H.264/AVC 444 no RDP
+  (`AVC444ModePreferred=1`).
+- **Moonlight:** instala o Sunshine pelo winget, define as credenciais e pareia
+  o Moonlight com o PIN.
+- **WSL no navegador:** a `/wsl` executa comandos e copia arquivos na distro.
+- **Hyper-V:** a `/hyperv` liga, desliga e reinicia as VMs.
+- **Memória:** a ação *Memória* roda o WinMemoryCleaner 3.0.8 (versão e SHA-256
+  fixos) como Administrador, esvaziando a standby list, a modified page list, a
+  combined page list e os working sets dos processos e do sistema. A tela mostra
+  a RAM livre antes e depois.
 
 ## Portão
 
