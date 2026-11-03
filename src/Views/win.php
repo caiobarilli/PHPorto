@@ -370,6 +370,12 @@ foreach ($view->tweaks as $tw) {
               </span>
             </label>
           <?php endforeach; ?>
+          <a class="caixa" href="/ollama" id="link-ollama">
+            <span>
+              Ollama
+              <small>Na tela <code>/ollama</code>: instalador <?= Respond::e(\App\Win\Ollama::VERSION) ?> com SHA-256 fixo, sem UAC.</small>
+            </span>
+          </a>
         </div>
         <p class="dica">
           O campo é texto livre e manda: o catálogo do winget é aberto demais para uma lista curada.
