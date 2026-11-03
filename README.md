@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/caiobarilli/PHPorto/actions/workflows/ci.yml/badge.svg)](https://github.com/caiobarilli/PHPorto/actions/workflows/ci.yml)
 
+<!-- SLOGAN: a frase abaixo será trocada pelo slogan escolhido -->
 O PHPorto faz a ponte entre o Windows e o WSL numa máquina local. Recebe um
 comando pelo navegador ou por HTTP, executa dentro da distro do WSL ou como ação
 do Windows, devolve a saída e grava cada execução num banco — SQLite por padrão,
@@ -72,6 +73,36 @@ embutido do PHP.
 | `/config` | Banco ativo, interruptor da API, PowerShell elevado e restauração de fábrica. |
 | `/wsl` | Executa comandos e copia arquivos na distro, com o histórico do WSL. |
 | `/win` | As ações do Windows, executadas por um PowerShell elevado, com o histórico do Windows. |
+| `/ollama` | Instala, inicia e para o Ollama e baixa ou remove modelos, sem PowerShell elevado. |
+
+## Ollama
+
+A tela `/ollama` cuida do [Ollama](https://ollama.com) no Windows, pelo usuário
+comum, sem UAC. Também é listada na aba Aplicativos da `/win`.
+
+- **Versão fixa:** o instalador é o `v0.40.13`, e só é executado se o SHA-256
+  bater com `9e3c76e54e7184c68e88a2378b909bf59bbe454f83c076cb4f4a717e946ae719`.
+- **Só loopback:** o Ollama sobe com `OLLAMA_HOST=127.0.0.1:11434`, e o PHPorto
+  só fala com ele nesse endereço.
+- **Modelos permitidos:** `qwen3:4b` e `llama3.2:3b`. Qualquer outro nome é
+  recusado.
+
+### Memória de vídeo
+
+Antes de baixar um modelo, o PHPorto mede a placa de vídeo pelo `nvidia-smi`;
+sem ele, usa o maior `AdapterRAM` do `Win32_VideoController`, marcado como
+aproximado na tela. A memória mínima de cada modelo é o tamanho dele mais
+1536 MiB:
+
+| modelo | tamanho | memória de vídeo mínima |
+| --- | --- | --- |
+| `qwen3:4b` | 2560 MiB | 4096 MiB |
+| `llama3.2:3b` | 2048 MiB | 3584 MiB |
+
+Se a placa tiver menos que o mínimo, ou se a memória não puder ser medida, o
+download é recusado com uma mensagem e nada é baixado. Não há modo reduzido nem
+download em CPU. A conferência vale só para baixar modelos; instalar o Ollama
+não depende da placa.
 
 ## Portão
 
@@ -79,8 +110,9 @@ embutido do PHP.
 composer gate
 ```
 
-Roda a suíte Pest, o PHPStan, o PHP-CS-Fixer e os testes Pester. O projeto não
-tem CI; o portão é este comando. Detalhes em
+Roda a suíte Pest, o PHPStan, o PHP-CS-Fixer e os testes Pester. O CI do
+GitHub Actions roda as mesmas verificações em Linux e Windows a cada push e
+pull request para a `main` (selo no topo). Detalhes em
 [docs/desenvolvimento.md](docs/desenvolvimento.md).
 
 ## Licença e créditos

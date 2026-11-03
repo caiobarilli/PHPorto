@@ -178,6 +178,10 @@ sozinho, sem perguntas, e o resultado de cada um é lido:
 | reinício necessário para terminar | `WARNING`, com o nome do pacote |
 | outro | `ERROR`, com o código |
 
+O Ollama aparece junto dessas caixas, mas não passa pelo winget nem pelo
+PowerShell elevado: a entrada leva à tela `/ollama`, que instala a versão fixa
+com SHA-256 conferido, sem UAC.
+
 ### Métricas do Windows (`exporter`)
 
 Instala e controla o `windows_exporter`, para o Prometheus, na porta 9182.
