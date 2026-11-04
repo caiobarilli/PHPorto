@@ -32,9 +32,8 @@ $form = static function (string $sub, string $rotulo, bool $ok, ?string $modelo 
         . '<button type="submit" class="' . $classe . '"' . ($ok ? '' : ' disabled') . '>' . Respond::e($rotulo) . '</button></form>';
 };
 
-$pullAndando = $view->pull !== null && $view->pull['estado'] !== 'success' && !str_starts_with($view->pull['estado'], 'erro');
-$baixando    = ($view->download['estado'] ?? '') === 'baixando' || $pullAndando;
-$livre = $view->blocked === null;
+$baixando = $view->downloading() || $view->pulling();
+$bt = $view->buttons();
 
 ?>
 <div class="wrap">
@@ -72,10 +71,10 @@ $livre = $view->blocked === null;
   <section id="ollama-instalacao">
     <h2>Instalação</h2>
     <p>
-      <?= $form('install', $view->installerReady ? 'Instalar' : 'Baixar instalador', $livre) ?>
-      <?= $form('uninstall', 'Desinstalar', $livre && $st?->installed === true, null, 'btn btn-sm btn-danger') ?>
-      <?= $form('start', 'Iniciar', $livre && $st?->installed === true) ?>
-      <?= $form('stop', 'Parar', $livre && $st !== null && $st->processes > 0) ?>
+      <?= $form('install', $view->installerReady ? 'Instalar' : 'Baixar instalador', $bt['install']) ?>
+      <?= $form('uninstall', 'Desinstalar', $bt['uninstall'], null, 'btn btn-sm btn-danger') ?>
+      <?= $form('start', 'Iniciar', $bt['start']) ?>
+      <?= $form('stop', 'Parar', $bt['stop']) ?>
     </p>
     <?php if ($txtDownload !== null): ?>
       <p class="dica" id="ollama-download">Instalador: <?= Respond::e($txtDownload) ?></p>
@@ -89,14 +88,15 @@ $livre = $view->blocked === null;
       <tbody>
       <?php foreach (OllamaModel::cases() as $m): ?>
         <?php $tem = isset($view->models[$m->value]); ?>
+        <?php $mbt = $view->modelButtons($m->value); ?>
         <tr>
           <td><?= Respond::e($m->value) ?></td>
           <td><?= $m->sizeMb() ?> MiB</td>
           <td><?= $m->minVramMb() ?> MiB</td>
           <td><?= $view->models === null ? '—' : ($tem ? $mb($view->models[$m->value]) : 'não') ?></td>
           <td>
-            <?= $form('pull', 'Baixar', $livre && $view->version !== null && !$tem, $m->value) ?>
-            <?= $form('remove', 'Remover', $livre && $tem, $m->value, 'btn btn-sm btn-danger') ?>
+            <?= $form('pull', 'Baixar', $mbt['pull'], $m->value) ?>
+            <?= $form('remove', 'Remover', $mbt['remove'], $m->value, 'btn btn-sm btn-danger') ?>
           </td>
         </tr>
       <?php endforeach; ?>

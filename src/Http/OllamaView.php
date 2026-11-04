@@ -29,6 +29,48 @@ final readonly class OllamaView
     ) {
     }
 
+    public function pulling(): bool
+    {
+        return $this->pull !== null && $this->pull['estado'] !== 'success' && !str_starts_with($this->pull['estado'], 'erro');
+    }
+
+    public function downloading(): bool
+    {
+        return ($this->download['estado'] ?? '') === 'baixando';
+    }
+
+    /**
+     * @return array{install: bool, uninstall: bool, start: bool, stop: bool}
+     */
+    public function buttons(): array
+    {
+        $livre = $this->blocked === null;
+        $instalado = $this->status?->installed === true;
+        $api = $this->version !== null;
+        $rodando = $api || ($this->status !== null && $this->status->processes > 0);
+
+        return [
+            'install'   => $livre && $this->status !== null && !$instalado && !$this->downloading(),
+            'uninstall' => $livre && $instalado,
+            'start'     => $livre && $instalado && !$api,
+            'stop'      => $livre && $rodando,
+        ];
+    }
+
+    /**
+     * @return array{pull: bool, remove: bool}
+     */
+    public function modelButtons(string $model): array
+    {
+        $livre = $this->blocked === null;
+        $tem = isset($this->models[$model]);
+
+        return [
+            'pull'   => $livre && $this->version !== null && $this->models !== null && !$tem && !$this->pulling(),
+            'remove' => $livre && $tem,
+        ];
+    }
+
     /**
      * @param array{estado: string, bytes: int, total: int} $p
      * @param Closure(int): string $mb
