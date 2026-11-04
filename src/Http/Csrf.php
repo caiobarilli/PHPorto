@@ -20,13 +20,44 @@ final class Csrf
             return;
         }
 
-        session_set_cookie_params([
+        foreach (self::sessionIni() as $chave => $valor) {
+            ini_set($chave, $valor);
+        }
+
+        session_set_cookie_params(self::cookieParams($_SERVER));
+        session_name('phporto_session');
+        @session_start();
+    }
+
+    /** @return array<string, string> */
+    public static function sessionIni(): array
+    {
+        return [
+            'session.use_strict_mode'  => '1',
+            'session.use_only_cookies' => '1',
+            'session.use_trans_sid'    => '0',
+        ];
+    }
+
+    /**
+     * @param array<array-key, mixed> $server
+     * @return array{httponly: bool, samesite: 'Strict', path: string, secure: bool}
+     */
+    public static function cookieParams(array $server): array
+    {
+        return [
             'httponly' => true,
             'samesite' => 'Strict',
             'path'     => '/',
-        ]);
-        session_name('phporto_session');
-        @session_start();
+            'secure'   => Https::active($server),
+        ];
+    }
+
+    public static function regenerate(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_regenerate_id(true);
+        }
     }
 
     public static function token(): string

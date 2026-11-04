@@ -62,6 +62,8 @@ final class Login
     {
         $cookie = $auth->issueCookie();
 
+        Csrf::regenerate();
+
         setcookie(Auth::COOKIE, $cookie['value'], self::cookieOptions($cookie['expires']));
         Respond::redirect(self::safeReturn($_SERVER['REQUEST_URI'] ?? null));
     }
@@ -96,12 +98,10 @@ final class Login
     /** @return array{expires: int, path: string, secure: bool, httponly: bool, samesite: 'Strict'} */
     private static function cookieOptions(int $expires): array
     {
-        $https = $_SERVER['HTTPS'] ?? '';
-
         return [
             'expires'  => $expires,
             'path'     => '/',
-            'secure'   => is_string($https) && $https !== '' && strtolower($https) !== 'off',
+            'secure'   => Https::active($_SERVER),
             'httponly' => true,
             'samesite' => 'Strict',
         ];
