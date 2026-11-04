@@ -34,10 +34,38 @@ it('sem HTTPS o cookie do CSRF segue HttpOnly e Strict, sem Secure', function ()
     ]);
 });
 
-it('regenerar sem sessão ativa não faz nada', function () {
-    expect(session_status())->not->toBe(PHP_SESSION_ACTIVE);
-    Csrf::regenerate();
-    expect(session_status())->not->toBe(PHP_SESSION_ACTIVE);
+function sessaoIsolada(string $codigo): string
+{
+    $dir    = sys_get_temp_dir() . '/phporto-sessao-' . bin2hex(random_bytes(4));
+    $script = $dir . '.php';
+    mkdir($dir);
+    file_put_contents($script, "<?php\nrequire '" . dirname(__DIR__, 2) . "/vendor/autoload.php';\nini_set('session.save_path', '" . $dir . "');\n" . $codigo);
+    $saida = (string) shell_exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($script) . ' 2>&1');
+    array_map('unlink', glob($dir . '/*') ?: []);
+    rmdir($dir);
+    unlink($script);
+
+    return trim($saida);
+}
+
+it('COM STRICT MODE, UM ID DE SESSÃO INVENTADO PELO CLIENTE NÃO É ACEITO', function () {
+    $saida = sessaoIsolada("\$_COOKIE['phporto_session'] = 'inventadopeloatacante1234567890ab';\nApp\\Http\\Csrf::start();\necho session_status() === PHP_SESSION_ACTIVE ? session_id() : 'inativa';\n");
+
+    expect($saida)->not->toBe('inativa')
+        ->and($saida)->not->toBe('')
+        ->and($saida)->not->toBe('inventadopeloatacante1234567890ab');
+});
+
+it('O COOKIE DA SESSÃO DO CSRF SAI COM SECURE EM HTTPS, como o de login', function () {
+    $saida = sessaoIsolada("\$_SERVER['HTTPS'] = 'on';\nApp\\Http\\Csrf::start();\necho session_get_cookie_params()['secure'] ? 'secure' : 'sem';\n");
+
+    expect($saida)->toBe('secure');
+});
+
+it('regenerar inicia a sessão antes e troca o ID', function () {
+    $saida = sessaoIsolada("App\\Http\\Csrf::start();\n\$antes = session_id();\n\$_SESSION['x'] = 'y';\nsession_write_close();\nApp\\Http\\Csrf::regenerate();\necho \$antes !== session_id() && (\$_SESSION['x'] ?? '') === 'y' ? 'ok' : 'falhou';\n");
+
+    expect($saida)->toBe('ok');
 });
 
 it('o login troca o ID da sessão antes de emitir o cookie', function () {

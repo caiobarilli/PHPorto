@@ -55,6 +55,8 @@ final class Csrf
 
     public static function regenerate(): void
     {
+        self::start();
+
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_regenerate_id(true);
         }
