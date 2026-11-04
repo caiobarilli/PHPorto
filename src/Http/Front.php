@@ -12,6 +12,8 @@ final class Front
 
     public const MISDIRECTED = 421;
 
+    public const FORBIDDEN = 403;
+
     /**
      * @param array<array-key, mixed> $server
      */
@@ -51,6 +53,34 @@ final class Front
         return is_string($host) && in_array($host, self::allowedHosts($server), true);
     }
 
+    /**
+     * @param array<array-key, mixed> $server
+     */
+    public static function remoteAllowed(array $server): bool
+    {
+        $ip = $server['REMOTE_ADDR'] ?? null;
+
+        if (!is_string($ip)) {
+            return false;
+        }
+
+        $bin = @inet_pton($ip);
+
+        if ($bin === false) {
+            return false;
+        }
+
+        if (strlen($bin) === 16 && str_starts_with($bin, str_repeat("\0", 10) . "\xff\xff")) {
+            $bin = substr($bin, 12);
+        }
+
+        if (strlen($bin) === 4) {
+            return $bin[0] === "\x7f";
+        }
+
+        return $bin === str_repeat("\0", 15) . "\x01";
+    }
+
     public static function apiOffBeforeAuth(string $path, bool $apiEnabled): bool
     {
         return !$apiEnabled && str_starts_with($path, '/api/');
@@ -61,6 +91,10 @@ final class Front
      */
     public static function refusal(array $server, string $path, bool $apiEnabled): ?int
     {
+        if (!self::remoteAllowed($server)) {
+            return self::FORBIDDEN;
+        }
+
         if (!self::hostAllowed($server)) {
             return self::MISDIRECTED;
         }
@@ -73,7 +107,11 @@ final class Front
         http_response_code($status);
         header('Content-Type: text/plain; charset=utf-8');
         header('Cache-Control: no-store');
-        echo $status === self::MISDIRECTED ? "421 Host recusado\n" : $status . "\n";
+        echo match ($status) {
+            self::MISDIRECTED => "421 Host recusado\n",
+            self::FORBIDDEN   => "403 Acesso recusado\n",
+            default           => $status . "\n",
+        };
         exit;
     }
 }
