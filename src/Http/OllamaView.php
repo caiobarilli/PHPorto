@@ -77,7 +77,7 @@ final readonly class OllamaView
      */
     public static function progressText(array $p, Closure $mb): string
     {
-        $txt = $p['estado'];
+        $txt = self::estado($p['estado']);
 
         if ($p['total'] > 0) {
             return $txt . ' — ' . $mb($p['bytes']) . ' de ' . $mb($p['total']) . ' (' . intdiv($p['bytes'] * 100, $p['total']) . '%)';
@@ -88,5 +88,25 @@ final readonly class OllamaView
         }
 
         return $txt;
+    }
+
+    private static function estado(string $estado): string
+    {
+        $fixos = [
+            'success' => 'pronto',
+            'pulling manifest' => 'baixando o manifesto',
+            'verifying sha256 digest' => 'conferindo o SHA-256',
+            'writing manifest' => 'gravando',
+        ];
+
+        if (isset($fixos[$estado])) {
+            return $fixos[$estado];
+        }
+
+        if (preg_match('/^pulling (?:sha256[:-])?([0-9a-f]{12,})$/', $estado, $m) === 1) {
+            return 'baixando ' . substr($m[1], 0, 12);
+        }
+
+        return $estado;
     }
 }
