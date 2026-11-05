@@ -11,10 +11,15 @@ use Closure;
 
 final readonly class OllamaView
 {
+    public const PARTE_COMPLETA = 'completa';
+
+    public const PARTE_ESTADO = 'estado';
+
     /**
      * @param array<string, int>|null $models
      * @param array{estado: string, bytes: int, total: int}|null $download
      * @param array{estado: string, bytes: int, total: int}|null $pull
+     * @param list<array{name: string, size: int, size_vram: int, expires_at: ?string}>|null $loaded
      */
     public function __construct(
         public ?string $blocked,
@@ -27,6 +32,8 @@ final readonly class OllamaView
         public ?string $notice = null,
         public string $csrfToken = '',
         public string $csrfField = '',
+        public ?array $loaded = null,
+        public string $parte = self::PARTE_COMPLETA,
     ) {
     }
 
@@ -72,8 +79,27 @@ final readonly class OllamaView
         ];
     }
 
+    public function isLoaded(string $model): bool
+    {
+        if ($this->loaded === null) {
+            return false;
+        }
+
+        foreach ($this->loaded as $m) {
+            if ($m['name'] === $model) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function fitsInGpu(string $model): ?bool
     {
+        if ($this->isLoaded($model)) {
+            return true;
+        }
+
         $modelo = OllamaModel::tryFrom($model);
         $st = $this->status;
 
@@ -82,6 +108,22 @@ final readonly class OllamaView
         }
 
         return $modelo->minVramMb() <= $st->vramMb - $st->vramUsedMb;
+    }
+
+    public function versionMatch(): ?bool
+    {
+        return Ollama::versionMatches($this->version);
+    }
+
+    public function vramFreeMb(): ?int
+    {
+        $st = $this->status;
+
+        if ($st === null || $st->vramMb === null || $st->vramUsedMb === null) {
+            return null;
+        }
+
+        return $st->vramMb - $st->vramUsedMb;
     }
 
     /**
