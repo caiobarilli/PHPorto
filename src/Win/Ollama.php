@@ -238,7 +238,7 @@ final class Ollama
 
     public static function apiUrl(string $path): string
     {
-        if (!in_array($path, ['/api/version', '/api/tags', '/api/pull', '/api/delete'], true)) {
+        if (!in_array($path, ['/api/version', '/api/tags', '/api/pull', '/api/delete', '/api/ps'], true)) {
             throw new \InvalidArgumentException('Caminho de API fora da lista.');
         }
 
@@ -299,6 +299,43 @@ final class Ollama
         }
 
         return $saida;
+    }
+
+    /**
+     * @return list<array{name: string, size: int, size_vram: int, expires_at: ?string}>
+     */
+    public static function parsePs(string $json): array
+    {
+        $dados = json_decode($json, true);
+        $saida = [];
+
+        if (!is_array($dados) || !is_array($dados['models'] ?? null)) {
+            return $saida;
+        }
+
+        foreach ($dados['models'] as $m) {
+            if (!is_array($m) || !is_string($m['name'] ?? null)) {
+                continue;
+            }
+
+            $saida[] = [
+                'name'       => $m['name'],
+                'size'       => is_int($m['size'] ?? null) ? $m['size'] : 0,
+                'size_vram'  => is_int($m['size_vram'] ?? null) ? $m['size_vram'] : 0,
+                'expires_at' => is_string($m['expires_at'] ?? null) ? $m['expires_at'] : null,
+            ];
+        }
+
+        return $saida;
+    }
+
+    public static function versionMatches(?string $running): ?bool
+    {
+        if ($running === null || $running === '') {
+            return null;
+        }
+
+        return ltrim($running, 'vV') === ltrim(self::VERSION, 'vV');
     }
 
     /**

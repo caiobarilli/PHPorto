@@ -26,6 +26,26 @@ final class OllamaPage extends Page
             $this->handleOllamaPost();
         }
 
+        $parte = self::ollamaParte($_GET['parte'] ?? null);
+        $view  = $this->ollamaView($parte);
+
+        if ($parte === OllamaView::PARTE_ESTADO) {
+            Respond::partial(Respond::render('ollama.php', $view));
+        }
+
+        Respond::html('PHPorto — Ollama', Respond::render('ollama.php', $view));
+    }
+
+    public static function ollamaParte(mixed $valor): string
+    {
+        return match ($valor) {
+            OllamaView::PARTE_ESTADO => OllamaView::PARTE_ESTADO,
+            default                  => OllamaView::PARTE_COMPLETA,
+        };
+    }
+
+    private function ollamaView(string $parte): OllamaView
+    {
         $canal   = new OllamaChannel($this->filesDir);
         $blocked = $canal->blocked();
         $status  = $blocked === null ? $canal->status() : null;
@@ -35,8 +55,9 @@ final class OllamaPage extends Page
         }
 
         $versao = $blocked === null ? $canal->version() : null;
+        $loaded = $versao !== null ? $canal->loaded() : null;
 
-        Respond::html('PHPorto — Ollama', Respond::render('ollama.php', new OllamaView(
+        return new OllamaView(
             blocked: $blocked,
             status: $status,
             version: $versao,
@@ -44,10 +65,12 @@ final class OllamaPage extends Page
             installerReady: is_file($canal->installerPath()),
             download: $canal->progress(Ollama::F_DOWNLOAD),
             pull: $canal->progress(Ollama::F_PULL),
-            notice: $this->takeFlash(),
+            notice: $parte === OllamaView::PARTE_ESTADO ? null : $this->takeFlash(),
             csrfToken: Csrf::token(),
             csrfField: Csrf::fieldName(),
-        )));
+            loaded: $loaded,
+            parte: $parte,
+        );
     }
 
     public static function ollamaLevelRefusal(?OllamaStatus $status): ?string

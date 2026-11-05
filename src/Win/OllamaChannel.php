@@ -141,6 +141,16 @@ final class OllamaChannel
         return $r !== null && $r['code'] === 200 ? Ollama::parseTags($r['body']) : null;
     }
 
+    /**
+     * @return list<array{name: string, size: int, size_vram: int, expires_at: ?string}>|null
+     */
+    public function loaded(): ?array
+    {
+        $r = $this->api('GET', '/api/ps');
+
+        return $r !== null && $r['code'] === 200 ? Ollama::parsePs($r['body']) : null;
+    }
+
     public function remove(OllamaModel $model): bool
     {
         $r = $this->api('DELETE', '/api/delete', (string) json_encode(['model' => $model->value]));
