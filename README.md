@@ -91,7 +91,7 @@ Opcionais, por recurso:
    php -S 127.0.0.1:4001 -t public public/router.php
    ```
 
-   E abra <http://127.0.0.1:4001>.
+   E abra <http://127.0.0.1:4001>. O painel recusa conexões que não venham da própria máquina.
 
 ## Telas
 
