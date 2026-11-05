@@ -200,7 +200,7 @@ it('o texto da medida é escapado', function () {
 it('a rota /php existe no index e no router, e recebe o método', function () {
     $raiz = dirname(__DIR__, 2);
 
-    expect((string) file_get_contents($raiz . '/public/index.php'))->toContain("'/php'    => \$pages->php(\$method),")
+    expect((string) file_get_contents($raiz . '/public/index.php'))->toContain("'/php'    => (new PhpPage(...\$deps))->handle(\$method),")
         ->and((string) file_get_contents($raiz . '/public/router.php'))->toContain("'/hyperv', '/php'");
 });
 
