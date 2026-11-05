@@ -132,7 +132,7 @@ it('o botão marcado é repintado na carga e depois de cada troca sem reload', f
 });
 
 it('a restauração de fábrica não toca no tema', function () {
-    $pages = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    $pages = implode('', array_map('file_get_contents', (array) glob(dirname(__DIR__, 2) . '/src/Http/Pages/*.php')));
 
     expect($pages)->not->toContain('phporto.tema')
         ->and($pages)->not->toContain('data-tema');

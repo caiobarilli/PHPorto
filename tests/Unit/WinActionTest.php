@@ -839,7 +839,7 @@ it('os segredos do worker ($SEGREDOS) são os mesmos da WinAction', function () 
 
 function rotulo(WinAction $acao, array $params): string
 {
-    return (string) (new ReflectionMethod(App\Http\Pages::class, 'describe'))->invoke(null, $acao, $params);
+    return (string) (new ReflectionMethod(App\Http\Pages\Page::class, 'describe'))->invoke(null, $acao, $params);
 }
 
 it('o histórico mostra o usuário e esconde senha e PIN', function () {

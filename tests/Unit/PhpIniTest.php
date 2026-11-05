@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Http\Pages;
+use App\Http\Pages\PhpPage;
 use App\Http\PhpView;
 use App\Http\Respond;
 use App\Php\IniFile;
@@ -122,7 +122,7 @@ it('recusa chave fora da lista, sem gravar nada', function () {
 
     try {
         $form = iniForm($ini);
-        $msg  = Pages::phpIniSave($ini, [], $form->hash, iniPost($form, ['auto_prepend_file' => '/tmp/x.php']));
+        $msg  = PhpPage::phpIniSave($ini, [], $form->hash, iniPost($form, ['auto_prepend_file' => '/tmp/x.php']));
 
         expect($msg)->toContain('Chave fora da lista: auto_prepend_file')
             ->and($msg)->toContain('Nada foi gravado')
@@ -198,7 +198,7 @@ it('grava com .bak do original e deixa o resto do arquivo igual, CRLF e BOM incl
 
     try {
         $form = iniForm($ini);
-        $msg  = Pages::phpIniSave($ini, [], $form->hash, iniPost($form, [
+        $msg  = PhpPage::phpIniSave($ini, [], $form->hash, iniPost($form, [
             'memory_limit'   => '256m',
             'display_errors' => 'Off',
             'date.timezone'  => 'America/Sao_Paulo',
@@ -259,19 +259,19 @@ it('php.ini que mudou no disco depois de aberto não é gravado', function () {
         $form = iniForm($ini);
         file_put_contents($ini, "[PHP]\nmemory_limit = 128M\nengine = On\n");
 
-        $msg = Pages::phpIniSave($ini, [], $form->hash, iniPost($form, ['memory_limit' => '256M']));
+        $msg = PhpPage::phpIniSave($ini, [], $form->hash, iniPost($form, ['memory_limit' => '256M']));
 
         expect($msg)->toContain('O php.ini mudou no disco')
             ->and(file_get_contents($ini))->toBe("[PHP]\nmemory_limit = 128M\nengine = On\n")
             ->and(is_file($ini . '.bak'))->toBeFalse()
-            ->and(Pages::phpIniSave($ini, [], 'nao-e-hash', iniPost($form)))->toContain('Nada foi gravado');
+            ->and(PhpPage::phpIniSave($ini, [], 'nao-e-hash', iniPost($form)))->toContain('Nada foi gravado');
     } finally {
         iniLimpar($dir);
     }
 });
 
 it('sem php.ini carregado recusa', function () {
-    expect(Pages::phpIniSave(false, [], str_repeat('a', 64), ['memory_limit' => '256M']))
+    expect(PhpPage::phpIniSave(false, [], str_repeat('a', 64), ['memory_limit' => '256M']))
         ->toContain('Nenhum php.ini carregado')
         ->and(PhpIni::load(null, [], static fn (string $c): false => false))->toBeNull();
 });
@@ -300,7 +300,7 @@ it('nada mudou: não grava nem cria .bak', function () {
     try {
         $form = iniForm($ini);
 
-        expect(Pages::phpIniSave($ini, [], $form->hash, iniPost($form)))->toContain('Nenhum valor mudou')
+        expect(PhpPage::phpIniSave($ini, [], $form->hash, iniPost($form)))->toContain('Nenhum valor mudou')
             ->and(is_file($ini . '.bak'))->toBeFalse()
             ->and(file_get_contents($ini))->toBe($texto);
     } finally {
@@ -321,7 +321,7 @@ it('pasta sem permissão de escrita: recusa e não pede UAC', function () {
         $form = iniForm($ini);
         chmod($dir, 0500);
 
-        $msg = Pages::phpIniSave($ini, [], $form->hash, iniPost($form, ['memory_limit' => '256M']));
+        $msg = PhpPage::phpIniSave($ini, [], $form->hash, iniPost($form, ['memory_limit' => '256M']));
 
         expect(PhpIni::writable($ini))->toBeFalse()
             ->and($msg)->toContain('não grava com UAC')

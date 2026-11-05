@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 use App\Http\ConfigView;
-use App\Http\Pages;
+use App\Http\Pages\ConfigPage;
+use App\Http\Pages\WinPage;
 use App\Http\Respond;
 use App\Win\ElevationState;
 use App\Win\PsResult;
@@ -44,7 +45,7 @@ function configWslHtml(?array $distros, ?array $rodando = [], bool $ps = true, b
 
 function fonteDasPaginas(): string
 {
-    return (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    return (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages/ConfigPage.php');
 }
 
 function trechoDe(string $fonte, string $assinatura): string
@@ -139,11 +140,11 @@ it('o nome da distro é escapado', function () {
 });
 
 it('o POST do WSL só leva a SubAction validada', function (string $sub) {
-    expect(Pages::wslPostParams(['acao' => 'wsl', 'SubAction' => $sub, 'Distro' => 'Debian']))->toBe(['SubAction' => $sub]);
+    expect(ConfigPage::wslPostParams(['acao' => 'wsl', 'SubAction' => $sub, 'Distro' => 'Debian']))->toBe(['SubAction' => $sub]);
 })->with(['shutdown', 'wake']);
 
 it('o POST do WSL recusa subação ausente, em lista ou fora da lista', function (array $post) {
-    Pages::wslPostParams($post);
+    ConfigPage::wslPostParams($post);
 })->throws(InvalidArgumentException::class)->with([
     'ausente'   => [['acao' => 'wsl']],
     'em lista'  => [['acao' => 'wsl', 'SubAction' => ['shutdown']]],
@@ -151,7 +152,7 @@ it('o POST do WSL recusa subação ausente, em lista ou fora da lista', function
 ]);
 
 it('o aviso diz o que aconteceu', function (string $sub, PsResult $run, string $trecho) {
-    expect(Pages::wslNotice($sub, $run))->toContain($trecho);
+    expect(ConfigPage::wslNotice($sub, $run))->toContain($trecho);
 })->with([
     'desligou'         => ['shutdown', new PsResult('ok', 0, false, 10), 'WSL desligado'],
     'acordou'          => ['wake', new PsResult('ok', 0, false, 10), 'WSL acordado'],
@@ -236,14 +237,14 @@ it('o POST de ativar passa pelo CSRF, confere de novo o estado e vai pelo uso ú
 });
 
 it('a /win recusa o wsl-enable: ativar é pela configuração', function () {
-    expect(Pages::winPostRefusal(WinAction::WslEnable))->toContain('pela configuração');
+    expect(WinPage::winPostRefusal(WinAction::WslEnable))->toContain('pela configuração');
 });
 
 it('o aviso de ativar pede para reiniciar o Windows só no sucesso', function () {
-    expect(Pages::wslEnableNotice(new PsResult('ok', 0, false, 10)))->toContain('Reinicie o Windows')
-        ->and(Pages::wslEnableNotice(new PsResult('x', 5, false, 10)))->toContain('Falha ao ativar o WSL (código 5)')
-        ->and(Pages::wslEnableNotice(new PsResult('x', 5, false, 10)))->not->toContain('Reinicie')
-        ->and(Pages::wslEnableNotice(new PsResult('', null, true, 10)))->toContain('demorou demais');
+    expect(ConfigPage::wslEnableNotice(new PsResult('ok', 0, false, 10)))->toContain('Reinicie o Windows')
+        ->and(ConfigPage::wslEnableNotice(new PsResult('x', 5, false, 10)))->toContain('Falha ao ativar o WSL (código 5)')
+        ->and(ConfigPage::wslEnableNotice(new PsResult('x', 5, false, 10)))->not->toContain('Reinicie')
+        ->and(ConfigPage::wslEnableNotice(new PsResult('', null, true, 10)))->toContain('demorou demais');
 });
 
 it('com o WSL ativado e a distro do .env faltando aparece o Instalar, com CSRF, sem reload e com UAC', function (array $distros) {
@@ -295,12 +296,12 @@ it('o POST de instalar passa pelo CSRF, confere o estado e manda só o nome do .
 });
 
 it('a /win recusa o wsl-install-distro: instalar é pela configuração', function () {
-    expect(Pages::winPostRefusal(WinAction::WslInstallDistro))->toContain('pela configuração');
+    expect(WinPage::winPostRefusal(WinAction::WslInstallDistro))->toContain('pela configuração');
 });
 
 it('o aviso de instalar manda criar o usuário fora do PHPorto só no sucesso', function () {
-    expect(Pages::wslInstallDistroNotice(new PsResult('ok', 0, false, 10), 'Debian'))->toContain('abra o Debian uma vez fora do PHPorto')
-        ->and(Pages::wslInstallDistroNotice(new PsResult('x', 5, false, 10), 'Debian'))->toContain('Falha ao instalar Debian (código 5)')
-        ->and(Pages::wslInstallDistroNotice(new PsResult('x', 5, false, 10), 'Debian'))->not->toContain('fora do PHPorto')
-        ->and(Pages::wslInstallDistroNotice(new PsResult('', null, true, 10), 'Debian'))->toContain('demorou demais');
+    expect(ConfigPage::wslInstallDistroNotice(new PsResult('ok', 0, false, 10), 'Debian'))->toContain('abra o Debian uma vez fora do PHPorto')
+        ->and(ConfigPage::wslInstallDistroNotice(new PsResult('x', 5, false, 10), 'Debian'))->toContain('Falha ao instalar Debian (código 5)')
+        ->and(ConfigPage::wslInstallDistroNotice(new PsResult('x', 5, false, 10), 'Debian'))->not->toContain('fora do PHPorto')
+        ->and(ConfigPage::wslInstallDistroNotice(new PsResult('', null, true, 10), 'Debian'))->toContain('demorou demais');
 });

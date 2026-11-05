@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Http\Pages;
+use App\Http\Pages\ConfigPage;
 use App\Win\HypervGate;
 
 beforeEach(function () {
@@ -144,7 +144,7 @@ it('A RESTAURAÇÃO DE FÁBRICA DESLIGA O PAINEL e diz isso na mensagem', functi
     gravarEstado($this, (string) json_encode(['enabled' => true, 'enabled_at' => '2026-09-28T12:00:00+00:00']));
     expect(gate($this)->enabled())->toBeTrue();
 
-    $partes = Pages::factoryResetParts(true, gate($this));
+    $partes = ConfigPage::factoryResetParts(true, gate($this));
 
     expect(gate($this)->enabled())->toBeFalse()
         ->and(is_file(gate($this)->statePath()))->toBeFalse()
@@ -154,7 +154,7 @@ it('A RESTAURAÇÃO DE FÁBRICA DESLIGA O PAINEL e diz isso na mensagem', functi
 it('a restauração de fábrica com o painel já desligado segue normal', function () {
     expect(is_file(gate($this)->statePath()))->toBeFalse();
 
-    $partes = Pages::factoryResetParts(true, gate($this));
+    $partes = ConfigPage::factoryResetParts(true, gate($this));
 
     expect(gate($this)->enabled())->toBeFalse()
         ->and($partes)->toBe(['configurações voltaram ao .env', 'painel do Hyper-V desligado']);
@@ -163,7 +163,7 @@ it('a restauração de fábrica com o painel já desligado segue normal', functi
 it('a restauração de fábrica ainda avisa a falha do flags.json, e desliga o painel mesmo assim', function () {
     gravarEstado($this, (string) json_encode(['enabled' => true]));
 
-    $partes = Pages::factoryResetParts(false, gate($this));
+    $partes = ConfigPage::factoryResetParts(false, gate($this));
 
     expect(gate($this)->enabled())->toBeFalse()
         ->and($partes[0])->toStartWith('FALHA ao apagar ')

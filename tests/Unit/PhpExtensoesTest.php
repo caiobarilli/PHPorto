@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Http\Pages;
+use App\Http\Pages\PhpPage;
 use App\Http\PhpView;
 use App\Http\Respond;
 use App\Php\C\CPanel;
@@ -121,14 +121,14 @@ it('ativa cada extensão da lista com .bak e fica idempotente', function (PhpExt
 
     try {
         $ini = extArquivo($dir, "[PHP]\n;extension=" . $ext->value . "\n");
-        $msg = Pages::extensionEnable(extMapa(false), $ini, hash_file('sha256', $ini), $ext->value);
+        $msg = PhpPage::extensionEnable(extMapa(false), $ini, hash_file('sha256', $ini), $ext->value);
 
         expect($msg)->toContain('php.ini gravado: extension=' . $ext->value)->toContain('php.ini.bak')->toContain('php -S')
             ->and(file_get_contents($ini))->toBe("[PHP]\nextension=" . $ext->value . "\n")
             ->and(file_get_contents($ini . PhpIni::BACKUP_SUFFIX))->toBe("[PHP]\n;extension=" . $ext->value . "\n");
 
         unlink($ini . PhpIni::BACKUP_SUFFIX);
-        $denovo = Pages::extensionEnable(extMapa(false), $ini, hash_file('sha256', $ini), $ext->value);
+        $denovo = PhpPage::extensionEnable(extMapa(false), $ini, hash_file('sha256', $ini), $ext->value);
 
         expect($denovo)->toContain('não foi tocado')
             ->and(is_file($ini . PhpIni::BACKUP_SUFFIX))->toBeFalse();
@@ -143,7 +143,7 @@ it('acrescenta no fim quando não há linha', function () {
     try {
         $ini = extArquivo($dir, "[PHP]\nmemory_limit = 128M\n");
 
-        expect(Pages::extensionEnable(extMapa(false), $ini, hash_file('sha256', $ini), 'zip'))->toContain('gravado')
+        expect(PhpPage::extensionEnable(extMapa(false), $ini, hash_file('sha256', $ini), 'zip'))->toContain('gravado')
             ->and(file_get_contents($ini))->toBe("[PHP]\nmemory_limit = 128M\nextension=zip\n");
     } finally {
         extLimpar($dir);
@@ -161,7 +161,7 @@ it('recusa nome fora da lista, já carregada, sem marca ou marca velha', functio
             default => 'x',
         };
 
-        expect(Pages::extensionEnable(extMapa($carregada), $ini, $hash, $nome))->toContain($trecho)
+        expect(PhpPage::extensionEnable(extMapa($carregada), $ini, $hash, $nome))->toContain($trecho)
             ->and(file_get_contents($ini))->toBe(";extension=zip\n;extension=xdebug\n")
             ->and(is_file($ini . PhpIni::BACKUP_SUFFIX))->toBeFalse();
     } finally {
@@ -177,7 +177,7 @@ it('recusa nome fora da lista, já carregada, sem marca ou marca velha', functio
 ]);
 
 it('sem php.ini carregado não grava', function () {
-    expect(Pages::extensionEnable(extMapa(false), false, str_repeat('a', 64), 'zip'))->toContain('Nenhum php.ini');
+    expect(PhpPage::extensionEnable(extMapa(false), false, str_repeat('a', 64), 'zip'))->toContain('Nenhum php.ini');
 });
 
 it('PhpIni::enableExtension recusa nome fora da lista', function () {
@@ -209,7 +209,7 @@ it('Tcc::install sem zip avisa antes de baixar', function () {
 
     expect($msg)->toBe(Tcc::ZIP_MISSING)->toContain('Extensões')
         ->and($baixou)->toBeFalse()
-        ->and(Pages::tccInstall(extPainel(new TccStatus(sys_get_temp_dir() . '/phporto-tcc-nao'), zip: false), static fn (string $u): ?string => null))->toBe(Tcc::ZIP_MISSING);
+        ->and(PhpPage::tccInstall(extPainel(new TccStatus(sys_get_temp_dir() . '/phporto-tcc-nao'), zip: false), static fn (string $u): ?string => null))->toBe(Tcc::ZIP_MISSING);
 });
 
 it('o botão de instalar TCC fica desabilitado sem zip', function () {
@@ -221,7 +221,7 @@ it('o botão de instalar TCC fica desabilitado sem zip', function () {
 });
 
 it('o ramo de ativar extensão vem depois do CSRF', function () {
-    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages/PhpPage.php');
     $corpo = substr($fonte, (int) strpos($fonte, 'private function handlePhpPost'));
 
     expect((int) strpos($corpo, 'Csrf::consume'))->toBeLessThan((int) strpos($corpo, 'PhpExtension::ACTION'));

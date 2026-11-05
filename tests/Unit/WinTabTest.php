@@ -25,7 +25,7 @@ it('a ordem do menu é Sistema, Rede, Aplicativos, Serviços, Acesso Remoto, Cha
 });
 
 it('todo 303 do POST da /win volta para a aba de onde veio', function () {
-    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages/WinPage.php');
 
     expect($fonte)->not->toContain("Respond::redirect('/win')")
         ->and(substr_count($fonte, 'Respond::redirect($aba->url())'))->toBe(12);

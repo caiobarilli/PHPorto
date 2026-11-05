@@ -7,7 +7,13 @@ use App\Http\Auth;
 use App\Http\AuthOutcome;
 use App\Http\Front;
 use App\Http\Login;
-use App\Http\Pages;
+use App\Http\Pages\ConfigPage;
+use App\Http\Pages\HomePage;
+use App\Http\Pages\HypervPage;
+use App\Http\Pages\OllamaPage;
+use App\Http\Pages\PhpPage;
+use App\Http\Pages\WinPage;
+use App\Http\Pages\WslPage;
 use App\Http\Respond;
 use App\Php\C\CProcess;
 use App\Services\ExecutionLogService;
@@ -114,30 +120,30 @@ $elevation = new Elevation(
 
 $uac = new UacPolicy();
 
-$pages = new Pages(
-    config: $config,
-    distroChecker: $distro,
-    makeService: $makeService,
-    filesDir: $filesDir,
-    elevation: $elevation,
-    hyperv: new HypervGate(
+$deps = [
+    'config'        => $config,
+    'distroChecker' => $distro,
+    'makeService'   => $makeService,
+    'filesDir'      => $filesDir,
+    'elevation'     => $elevation,
+    'hyperv'        => new HypervGate(
         storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
         filesDir: $filesDir,
     ),
-    oneShot: new OneShot($filesDir, $winDir, $elevation, $uac),
-    uac: $uac,
-    terminal: new PsTerminalProcess($filesDir),
-    c: new CProcess($filesDir),
-    storageDir: dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
-);
+    'oneShot'       => new OneShot($filesDir, $winDir, $elevation, $uac),
+    'uac'           => $uac,
+    'terminal'      => new PsTerminalProcess($filesDir),
+    'c'             => new CProcess($filesDir),
+    'storageDir'    => dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
+];
 
 match ($path) {
-    '/'       => $pages->home(),
-    '/config' => $pages->config($method),
-    '/wsl'    => $pages->wsl($method),
-    '/win'    => $pages->win($method),
-    '/hyperv' => $pages->hyperv($method),
-    '/php'    => $pages->php($method),
-    '/ollama' => $pages->ollama($method),
+    '/'       => (new HomePage(...$deps))->handle(),
+    '/config' => (new ConfigPage(...$deps))->handle($method),
+    '/wsl'    => (new WslPage(...$deps))->handle($method),
+    '/win'    => (new WinPage(...$deps))->handle($method),
+    '/hyperv' => (new HypervPage(...$deps))->handle($method),
+    '/php'    => (new PhpPage(...$deps))->handle($method),
+    '/ollama' => (new OllamaPage(...$deps))->handle($method),
     default   => Respond::notFound(),
 };
