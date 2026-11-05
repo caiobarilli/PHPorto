@@ -38,10 +38,10 @@ $livreMb = $view->vramFreeMb();
 $versaoOk = $view->versionMatch();
 
 $servico = match (true) {
-    $st === null && $view->version === null => '—',
-    $st !== null && !$st->installed && $view->version === null => 'não instalado',
     $view->version !== null => 'em execução',
-    $st !== null && $st->processes > 0 => 'processos ativos, API sem resposta',
+    $st === null => '—',
+    !$st->installed => 'não instalado',
+    $st->processes > 0 => 'processos ativos, API sem resposta',
     default => 'parado',
 };
 
