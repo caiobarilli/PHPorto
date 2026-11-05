@@ -420,7 +420,7 @@ it('sem reload: a leitura só sai por clique ou ao abrir a casca, nunca por sond
 });
 
 it('a query parte escolhe casca, tabela ou completa', function (mixed $valor, string $esperado) {
-    expect(App\Http\Pages::hypervParte($valor))->toBe($esperado);
+    expect(App\Http\Pages\HypervPage::hypervParte($valor))->toBe($esperado);
 })->with([
     'ausente'    => [null, HypervView::PARTE_CASCA],
     'vazia'      => ['', HypervView::PARTE_CASCA],
@@ -431,7 +431,7 @@ it('a query parte escolhe casca, tabela ou completa', function (mixed $valor, st
 ]);
 
 it('a parte tabela sai pelo Respond::partial, com no-store, e passa pelo portão como o resto', function () {
-    $pages   = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    $pages   = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages/HypervPage.php');
     $respond = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Respond.php');
     $parcial = substr($respond, (int) strpos($respond, 'public static function partial'), 400);
 
@@ -439,5 +439,5 @@ it('a parte tabela sai pelo Respond::partial, com no-store, e passa pelo portão
         ->and($parcial)->toContain("header('Cache-Control: no-store');")
         ->and($parcial)->toContain("header('X-Content-Type-Options: nosniff');")
         ->and($parcial)->not->toContain('layout.php')
-        ->and((string) file_get_contents(dirname(__DIR__, 2) . '/public/index.php'))->toContain("'/hyperv' => \$pages->hyperv(\$method),");
+        ->and((string) file_get_contents(dirname(__DIR__, 2) . '/public/index.php'))->toContain("'/hyperv' => (new HypervPage(...\$deps))->handle(\$method),");
 });

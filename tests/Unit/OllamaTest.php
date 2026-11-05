@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Http\Pages;
+use App\Http\Pages\OllamaPage;
 use App\Win\Ollama;
 use App\Win\OllamaChannel;
 use App\Win\OllamaModel;
@@ -72,16 +72,16 @@ it('todos os scripts gerados são ASCII e checam o nível antes de agir', functi
 it('lê o nível de integridade e recusa o alto', function () {
     expect(Ollama::nivel("NIVEL=alto\r\n"))->toBe('alto');
     expect(Ollama::nivel("lixo\n"))->toBe('desconhecido');
-    expect(Pages::ollamaLevelRefusal(OllamaStatus::parse("NIVEL=alto\n")))->toContain('administrador');
-    expect(Pages::ollamaLevelRefusal(OllamaStatus::parse("NIVEL=desconhecido\n")))->not->toBeNull();
-    expect(Pages::ollamaLevelRefusal(OllamaStatus::parse("NIVEL=medio\n")))->toBeNull();
-    expect(Pages::ollamaLevelRefusal(null))->not->toBeNull();
+    expect(OllamaPage::ollamaLevelRefusal(OllamaStatus::parse("NIVEL=alto\n")))->toContain('administrador');
+    expect(OllamaPage::ollamaLevelRefusal(OllamaStatus::parse("NIVEL=desconhecido\n")))->not->toBeNull();
+    expect(OllamaPage::ollamaLevelRefusal(OllamaStatus::parse("NIVEL=medio\n")))->toBeNull();
+    expect(OllamaPage::ollamaLevelRefusal(null))->not->toBeNull();
 });
 
 it('script que voltou com nível alto vira recusa', function () {
     $r = new PsResult(output: "NIVEL=alto\r\n", exitCode: 5, timedOut: false, durationMs: 10);
 
-    expect(Pages::ollamaNotice($r))->toContain('administrador');
+    expect(OllamaPage::ollamaNotice($r))->toContain('administrador');
 });
 
 it('lê GPU do nvidia-smi e, sem ele, do CIM como aproximado', function () {

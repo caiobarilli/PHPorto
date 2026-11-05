@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Http\Pages;
+use App\Http\Pages\WinPage;
 use App\Http\WinTab;
 use App\Win\SshKeyFolder;
 use App\Win\SshKeyOutput;
@@ -60,7 +60,7 @@ it('recusa gerar quando já existe a privada, a pública ou as duas', function (
     }
 
     $params = WinAction::SshKeys->validate(['SubAction' => 'generate', 'KeyName' => 'minha']);
-    $msg    = Pages::sshKeyRefusal(WinAction::SshKeys, $params, $perfil);
+    $msg    = WinPage::sshKeyRefusal(WinAction::SshKeys, $params, $perfil);
 
     expect($msg)->toContain('Já existe')->toContain('nada foi sobrescrito');
     foreach ($arquivos as $a) {
@@ -77,13 +77,13 @@ it('deixa gerar quando o nome está livre, e não se mete nas outras subações'
     $perfil = sshPerfil();
     file_put_contents($perfil . '/.ssh/id_ed25519', 'x');
 
-    expect(Pages::sshKeyRefusal(WinAction::SshKeys, ['SubAction' => 'generate', 'KeyName' => 'nova'], $perfil))->toBeNull()
-        ->and(Pages::sshKeyRefusal(WinAction::SshKeys, ['SubAction' => 'status', 'KeyName' => 'id_ed25519'], $perfil))->toBeNull()
-        ->and(Pages::sshKeyRefusal(WinAction::Rdp, ['SubAction' => 'generate'], $perfil))->toBeNull();
+    expect(WinPage::sshKeyRefusal(WinAction::SshKeys, ['SubAction' => 'generate', 'KeyName' => 'nova'], $perfil))->toBeNull()
+        ->and(WinPage::sshKeyRefusal(WinAction::SshKeys, ['SubAction' => 'status', 'KeyName' => 'id_ed25519'], $perfil))->toBeNull()
+        ->and(WinPage::sshKeyRefusal(WinAction::Rdp, ['SubAction' => 'generate'], $perfil))->toBeNull();
 });
 
 it('o handler recusa antes de despachar para o worker', function () {
-    $pages  = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    $pages  = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages/WinPage.php');
     $ini    = (int) strpos($pages, 'private function handleWinPost(');
     $corpo  = substr($pages, $ini, (int) strpos($pages, 'private function ', $ini + 10) - $ini);
 

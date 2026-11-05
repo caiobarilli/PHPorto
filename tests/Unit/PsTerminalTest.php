@@ -179,7 +179,7 @@ it('O TERMINAL NÃO PASSA PELO PROCESSO ELEVADO: nem o runner nem o handler toca
     $raiz    = dirname(__DIR__, 2);
     $fontes  = (string) file_get_contents($raiz . '/src/Win/PsTerminalProcess.php')
         . (string) file_get_contents($raiz . '/src/Win/PsTerminalCommand.php');
-    $pages   = (string) file_get_contents($raiz . '/src/Http/Pages.php');
+    $pages   = (string) file_get_contents($raiz . '/src/Http/Pages/WinPage.php');
     $ini     = (int) strpos($pages, 'private function runTerminal(');
     $handler = substr($pages, $ini, (int) strpos($pages, "\n    }\n", $ini) - $ini);
 
@@ -189,7 +189,7 @@ it('O TERMINAL NÃO PASSA PELO PROCESSO ELEVADO: nem o runner nem o handler toca
 });
 
 it('o handler confere o CSRF antes de despachar para o terminal', function () {
-    $pages  = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    $pages  = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages/WinPage.php');
     $ini    = (int) strpos($pages, 'private function handleWinPost(');
     $corpo  = substr($pages, $ini, (int) strpos($pages, 'private function ', $ini + 10) - $ini);
     $csrf   = strpos($corpo, 'Csrf::consume()');

@@ -202,7 +202,7 @@ it('zip sem libtcc.dll não instala', function () {
 
 it('fora do Windows o botão de instalar não baixa nada', function () {
     $chamou = false;
-    $msg    = \App\Http\Pages::tccInstall(cPainel(new TccStatus('/tmp/x'), windows: false), static function (string $url) use (&$chamou): ?string {
+    $msg    = \App\Http\Pages\PhpPage::tccInstall(cPainel(new TccStatus('/tmp/x'), windows: false), static function (string $url) use (&$chamou): ?string {
         $chamou = true;
 
         return null;
@@ -320,7 +320,7 @@ it('a tela mostra versão, libtcc.dll e o último resultado no console', functio
 });
 
 it('o POST da seção C consome o CSRF antes de qualquer ramo e não eleva', function () {
-    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages/PhpPage.php');
     $corpo = substr($fonte, (int) strpos($fonte, 'private function handlePhpPost'));
     $csrf  = strpos($corpo, 'Csrf::consume');
 

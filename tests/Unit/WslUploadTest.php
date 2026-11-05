@@ -76,7 +76,7 @@ it('o corpo acima do post_max_size é reconhecido antes do token', function () {
 });
 
 it('a /wsl confere o estouro antes do token, e o token antes do anexo', function () {
-    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages/WslPage.php');
     $corpo = substr($fonte, (int) strpos($fonte, 'private function handlePost('));
 
     $estouro = strpos($corpo, 'Upload::postOverflow(');

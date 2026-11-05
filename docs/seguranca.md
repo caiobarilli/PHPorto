@@ -482,7 +482,7 @@ O PHPorto **pede** o PIN, mas **não guarda** senha nem PIN em repouso:
 | --- | --- |
 | formulário | `POST` no corpo, nunca na URL; senha em `type=password`; os campos voltam vazios (o script do sem-reload limpa senha e PIN) |
 | mensagens de validação | citam o nome do campo, nunca o valor |
-| histórico (`Pages::describe`) | `-Password *** -Pin ***` (`WinAction::SECRET_PARAMS`), também no recolhimento de órfãs |
+| histórico (`Page::describe`) | `-Password *** -Pin ***` (`WinAction::SECRET_PARAMS`), também no recolhimento de órfãs |
 | pedido `files/win-oneshot-<id>.json` | **em claro** enquanto o UAC está na tela (até ~75 s); apagado pelo worker ao consumir e pelo `finally` do PHP. Com o UAC fraco o PHP recusa **antes** de gravar o pedido |
 | linha de comando do processo elevado | só caminhos e hashes, como em toda ação sensível |
 | `win-exec-<id>.ps1` (pasta protegida) | os parâmetros em base64 enquanto o filho roda; sai no fim |
@@ -576,7 +576,7 @@ fim, fora de `[HOST=]`/`[PATH=]`) no `php.ini` carregado, pelo mesmo caminho de
 gravação da tabela: login, CSRF consumido antes do ramo, checagem de Host, marca
 SHA256 do arquivo lido, cópia em `.bak`, gravação atômica e sem UAC. Se a linha
 já estiver ativa, nada é gravado. Um nome fora da lista é recusado no servidor,
-em `Pages::extensionEnable` e de novo em `PhpIni::enableExtension`. Vale depois
+em `PhpPage::extensionEnable` e de novo em `PhpIni::enableExtension`. Vale depois
 de fechar o `php -S` e subir de novo.
 
 ## O que fica gravado

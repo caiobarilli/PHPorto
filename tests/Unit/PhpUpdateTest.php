@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Http\Pages;
+use App\Http\Pages\PhpPage;
 use App\Http\PhpView;
 use App\Http\Respond;
 use App\Php\PhpBuild;
@@ -324,16 +324,16 @@ it('o worker usa os mesmos formatos da ação php-update', function () {
 });
 
 it('o POST monta os parâmetros do plano, e não do navegador', function () {
-    expect(Pages::phpUpdateParams(atualizarPlano(atualizarBuild()), '8.5.13'))
+    expect(PhpPage::phpUpdateParams(atualizarPlano(atualizarBuild()), '8.5.13'))
         ->toBe(['Version' => '8.5.13', 'Sha256' => ATUALIZAR_HASH, 'PhpDir' => 'C:\\php']);
 });
 
 it('o POST recusa versão que não é a do plano, e plano sem atualização', function () {
-    expect(fn () => Pages::phpUpdateParams(atualizarPlano(atualizarBuild()), '8.5.14'))
+    expect(fn () => PhpPage::phpUpdateParams(atualizarPlano(atualizarBuild()), '8.5.14'))
         ->toThrow(InvalidArgumentException::class, 'A lista oficial mudou desde que a tela abriu: agora o patch é o 8.5.13. Releia a página. Nada foi feito.')
-        ->and(fn () => Pages::phpUpdateParams(atualizarPlano(atualizarBuild()), ['8.5.13']))
+        ->and(fn () => PhpPage::phpUpdateParams(atualizarPlano(atualizarBuild()), ['8.5.13']))
         ->toThrow(InvalidArgumentException::class, 'A lista oficial mudou')
-        ->and(fn () => Pages::phpUpdateParams(atualizarPlano(atualizarBuild('8.5.13')), '8.5.13'))
+        ->and(fn () => PhpPage::phpUpdateParams(atualizarPlano(atualizarBuild('8.5.13')), '8.5.13'))
         ->toThrow(InvalidArgumentException::class, 'Em dia: 8.5.13 é o último patch da linha 8.5. Nada foi feito.');
 });
 
@@ -341,22 +341,22 @@ it('o aviso do POST traz o backup no sucesso e o último erro na falha', functio
     $params = ['Version' => '8.5.13', 'Sha256' => ATUALIZAR_HASH, 'PhpDir' => 'C:\\php'];
 
     $ok = new PsResult("[ INFO ] Downloading x\n[ OK ] SHA256 checked: x\n[ OK ] Backup: C:\\php-8.5.11\n[ OK ] PHP 8.5.11 -> 8.5.13 in C:\\php.\n", 0, false, 10);
-    expect(Pages::phpUpdateNotice($params, $ok))
+    expect(PhpPage::phpUpdateNotice($params, $ok))
         ->toBe('PHP atualizado para 8.5.13 na mesma pasta. A versão anterior ficou em C:\\php-8.5.11. Feche o php -S e suba de novo para usar a versão nova.');
 
     $ja = new PsResult("[ OK ] php.exe in C:\\php is already 8.5.13. Nothing was changed.\n", 0, false, 10);
-    expect(Pages::phpUpdateNotice($params, $ja))->toContain('já é o 8.5.13. Nada mudou.');
+    expect(PhpPage::phpUpdateNotice($params, $ja))->toContain('já é o 8.5.13. Nada mudou.');
 
     $falha = new PsResult("[ INFO ] Downloading x\n[ ERROR ] SHA256 mismatch: expected a, got b. The zip was discarded. Nothing was changed.\n", 1, false, 10);
-    expect(Pages::phpUpdateNotice($params, $falha))
+    expect(PhpPage::phpUpdateNotice($params, $falha))
         ->toBe('A atualização do PHP para 8.5.13 não foi feita. SHA256 mismatch: expected a, got b. The zip was discarded. Nothing was changed. Detalhes no histórico do Windows.');
 
     $prazo = new PsResult('', null, true, 600000);
-    expect(Pages::phpUpdateNotice($params, $prazo))->toContain('passou do prazo');
+    expect(PhpPage::phpUpdateNotice($params, $prazo))->toContain('passou do prazo');
 });
 
 it('o POST da /php separa a atualização da gravação do php.ini, depois do CSRF', function () {
-    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages.php');
+    $fonte = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Pages/PhpPage.php');
     $ini   = strpos($fonte, 'private function handlePhpPost(');
     $fim   = strpos($fonte, 'private function handlePhpUpdate(');
 
