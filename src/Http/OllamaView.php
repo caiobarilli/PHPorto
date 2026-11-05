@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http;
 
 use App\Win\Ollama;
+use App\Win\OllamaModel;
 use App\Win\OllamaStatus;
 use Closure;
 
@@ -69,6 +70,18 @@ final readonly class OllamaView
             'pull'   => $livre && $this->version !== null && $this->models !== null && !$tem && !$this->pulling(),
             'remove' => $livre && $tem,
         ];
+    }
+
+    public function fitsInGpu(string $model): ?bool
+    {
+        $modelo = OllamaModel::tryFrom($model);
+        $st = $this->status;
+
+        if ($modelo === null || $st === null || $st->vramMb === null || $st->vramUsedMb === null) {
+            return null;
+        }
+
+        return $modelo->minVramMb() <= $st->vramMb - $st->vramUsedMb;
     }
 
     /**

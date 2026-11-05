@@ -92,7 +92,7 @@ $bt = $view->buttons();
         <tr>
           <td><?= Respond::e($m->value) ?></td>
           <td><?= $m->sizeMb() ?> MiB</td>
-          <td><?= $m->minVramMb() ?> MiB</td>
+          <td><?= $m->minVramMb() ?> MiB<?php if ($view->fitsInGpu($m->value) === false): ?><br><span class="dica">não cabe inteiro na GPU (usa a CPU também)</span><?php endif; ?></td>
           <td><?= $view->models === null ? '—' : ($tem ? $mb($view->models[$m->value]) : 'não') ?></td>
           <td>
             <?= $form('pull', 'Baixar', $mbt['pull'], $m->value) ?>
