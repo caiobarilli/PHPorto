@@ -94,6 +94,28 @@ final readonly class OllamaView
         return false;
     }
 
+    /**
+     * @return array<string, int>
+     */
+    public function extraModels(): array
+    {
+        if ($this->models === null) {
+            return [];
+        }
+
+        $extras = [];
+
+        foreach ($this->models as $name => $size) {
+            if (OllamaModel::tryFrom($name) === null) {
+                $extras[$name] = $size;
+            }
+        }
+
+        ksort($extras);
+
+        return $extras;
+    }
+
     public function fitsInGpu(string $model): ?bool
     {
         if ($this->isLoaded($model)) {

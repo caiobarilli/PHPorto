@@ -110,6 +110,15 @@ ob_start();
       <?php endforeach; ?>
       </tbody>
     </table>
+    <?php $extras = $view->extraModels(); ?>
+    <?php if ($extras !== []): ?>
+      <h3>Fora da lista</h3>
+      <ul id="ollama-modelos-fora">
+      <?php foreach ($extras as $nome => $tamanho): ?>
+        <li><code><?= Respond::e($nome) ?></code> — <?= $mb($tamanho) ?></li>
+      <?php endforeach; ?>
+      </ul>
+    <?php endif; ?>
     <?php if ($txtPull !== null): ?>
       <p class="dica" id="ollama-pull">Último download de modelo: <?= Respond::e($txtPull) ?></p>
     <?php endif; ?>
