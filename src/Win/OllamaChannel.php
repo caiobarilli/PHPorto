@@ -70,7 +70,7 @@ final class OllamaChannel
     }
 
     /**
-     * @return array{estado: string, bytes: int, total: int}|null
+     * @return array{estado: string, bytes: int, total: int, duration_ms: int}|null
      */
     public function progress(string $arquivo): ?array
     {

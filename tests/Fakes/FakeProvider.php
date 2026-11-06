@@ -6,6 +6,9 @@ namespace Tests\Fakes;
 
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\OllamaExecution;
+use App\Domain\OllamaExecutionAction;
+use App\Domain\OllamaExecutionStatus;
 use App\Domain\WinState;
 use App\Domain\WinStateScope;
 use App\Providers\DatabaseProviderInterface;
@@ -21,6 +24,11 @@ final class FakeProvider implements DatabaseProviderInterface
      * @var array<string, WinState>
      */
     public array $winState = [];
+
+    /** @var list<OllamaExecution> */
+    public array $ollama = [];
+
+    private int $ollamaSeq = 0;
 
     public function insert(Execution $execution): Execution
     {
@@ -113,5 +121,106 @@ final class FakeProvider implements DatabaseProviderInterface
         unset($this->winState[$chave]);
 
         return 1;
+    }
+
+    public function insertOllama(OllamaExecution $execution): OllamaExecution
+    {
+        $safe = $execution->withRedaction();
+        $this->ollamaSeq++;
+        $stored = new OllamaExecution(
+            action: $safe->action,
+            output: $safe->output,
+            status: $safe->status,
+            durationMs: $safe->durationMs,
+            model: $safe->model,
+            prompt: $safe->prompt,
+            user: OllamaExecution::USER,
+            createdAt: $safe->createdAt ?? gmdate(DATE_ATOM),
+            updatedAt: $safe->updatedAt,
+            id: $this->ollamaSeq,
+        );
+        $this->ollama[] = $stored;
+
+        return $stored;
+    }
+
+    public function finalizeOllama(int $id, OllamaExecutionStatus $status, string $output, int $durationMs): ?OllamaExecution
+    {
+        foreach ($this->ollama as $i => $row) {
+            if ($row->id !== $id || $row->status !== OllamaExecutionStatus::Iniciado) {
+                continue;
+            }
+
+            $updated = new OllamaExecution(
+                action: $row->action,
+                output: OllamaExecution::redact($output),
+                status: $status,
+                durationMs: max(0, $durationMs),
+                model: $row->model,
+                prompt: $row->prompt,
+                user: OllamaExecution::USER,
+                createdAt: $row->createdAt,
+                updatedAt: gmdate(DATE_ATOM),
+                id: $row->id,
+            );
+            $this->ollama[$i] = $updated;
+
+            return $updated;
+        }
+
+        return null;
+    }
+
+    public function openOllamaPull(?string $model = null): ?OllamaExecution
+    {
+        for ($i = count($this->ollama) - 1; $i >= 0; $i--) {
+            $row = $this->ollama[$i];
+
+            if ($row->status !== OllamaExecutionStatus::Iniciado || $row->action !== OllamaExecutionAction::Pull) {
+                continue;
+            }
+
+            if ($model !== null && $row->model !== $model) {
+                continue;
+            }
+
+            return $row;
+        }
+
+        return null;
+    }
+
+    public function recentOllama(int $limit, int $offset = 0): array
+    {
+        $todas = array_reverse($this->ollama);
+
+        return array_slice($todas, $offset, $limit);
+    }
+
+    public function countOllama(): int
+    {
+        return count($this->ollama);
+    }
+
+    public function clearOllama(): int
+    {
+        $n = count($this->ollama);
+        $this->ollama = [];
+
+        return $n;
+    }
+
+    public function trimOllama(int $keep): int
+    {
+        $total = count($this->ollama);
+
+        if ($total <= $keep) {
+            return 0;
+        }
+
+        $excess = $total - $keep;
+        $this->ollama = array_values(array_slice($this->ollama, $excess));
+
+        return $excess;
     }
 }

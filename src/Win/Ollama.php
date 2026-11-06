@@ -219,13 +219,15 @@ final class Ollama
             . '$url = ' . var_export(self::apiUrl('/api/pull'), true) . ";\n"
             . '$corpo = ' . var_export((string) json_encode(['model' => $model->value, 'stream' => true]), true) . ";\n"
             . <<<'PHP'
+                $inicio = (int) floor(hrtime(true) / 1_000_000);
                 $ctx = stream_context_create(['http' => [
                     'method' => 'POST', 'header' => "Content-Type: application/json\r\n", 'content' => $corpo,
                     'timeout' => 600, 'ignore_errors' => true, 'follow_location' => 0,
                 ]]);
                 $h = @fopen($url, 'r', false, $ctx);
                 if ($h === false) {
-                    @file_put_contents($prog, '{"error":"sem conexao com 127.0.0.1:11434"}', LOCK_EX);
+                    $ms = max(0, (int) floor(hrtime(true) / 1_000_000) - $inicio);
+                    @file_put_contents($prog, (string) json_encode(['error' => 'sem conexao com 127.0.0.1:11434', 'duration_ms' => $ms]), LOCK_EX);
                     exit(1);
                 }
                 while (($l = fgets($h)) !== false) {
@@ -235,6 +237,14 @@ final class Ollama
                     }
                 }
                 fclose($h);
+                $ms = max(0, (int) floor(hrtime(true) / 1_000_000) - $inicio);
+                $raw = @file_get_contents($prog);
+                $d = is_string($raw) ? json_decode($raw, true) : null;
+                if (!is_array($d)) {
+                    $d = ['status' => 'success'];
+                }
+                $d['duration_ms'] = $ms;
+                @file_put_contents($prog, (string) json_encode($d), LOCK_EX);
                 @unlink(__FILE__);
 
                 PHP;
@@ -427,7 +437,7 @@ final class Ollama
     }
 
     /**
-     * @return array{estado: string, bytes: int, total: int}|null
+     * @return array{estado: string, bytes: int, total: int, duration_ms: int}|null
      */
     public static function parseProgress(string $json): ?array
     {
@@ -437,8 +447,10 @@ final class Ollama
             return null;
         }
 
+        $duration = is_int($d['duration_ms'] ?? null) ? max(0, $d['duration_ms']) : 0;
+
         if (is_string($d['error'] ?? null)) {
-            return ['estado' => 'erro: ' . $d['error'], 'bytes' => 0, 'total' => 0];
+            return ['estado' => 'erro: ' . $d['error'], 'bytes' => 0, 'total' => 0, 'duration_ms' => $duration];
         }
 
         $estado = is_string($d['estado'] ?? null) ? $d['estado'] : (is_string($d['status'] ?? null) ? $d['status'] : null);
@@ -448,9 +460,10 @@ final class Ollama
         }
 
         return [
-            'estado' => $estado,
-            'bytes'  => is_int($d['bytes'] ?? null) ? $d['bytes'] : (is_int($d['completed'] ?? null) ? $d['completed'] : 0),
-            'total'  => is_int($d['total'] ?? null) ? $d['total'] : 0,
+            'estado'      => $estado,
+            'bytes'       => is_int($d['bytes'] ?? null) ? $d['bytes'] : (is_int($d['completed'] ?? null) ? $d['completed'] : 0),
+            'total'       => is_int($d['total'] ?? null) ? $d['total'] : 0,
+            'duration_ms' => $duration,
         ];
     }
 

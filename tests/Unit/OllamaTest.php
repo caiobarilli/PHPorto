@@ -125,9 +125,9 @@ it('lê /api/tags e o progresso do pull e do download', function () {
     expect(Ollama::parseTags('{"models":[{"name":"qwen3:4b","size":2620788019}]}'))->toBe(['qwen3:4b' => 2620788019]);
     expect(Ollama::parseTags('lixo'))->toBe([]);
     expect(Ollama::parseProgress('{"status":"pulling abc","total":100,"completed":40}'))
-        ->toBe(['estado' => 'pulling abc', 'bytes' => 40, 'total' => 100]);
-    expect(Ollama::parseProgress('{"error":"x"}'))->toBe(['estado' => 'erro: x', 'bytes' => 0, 'total' => 0]);
-    expect(Ollama::parseProgress('{"estado":"baixando","bytes":5}'))->toBe(['estado' => 'baixando', 'bytes' => 5, 'total' => 0]);
+        ->toBe(['estado' => 'pulling abc', 'bytes' => 40, 'total' => 100, 'duration_ms' => 0]);
+    expect(Ollama::parseProgress('{"error":"x"}'))->toBe(['estado' => 'erro: x', 'bytes' => 0, 'total' => 0, 'duration_ms' => 0]);
+    expect(Ollama::parseProgress('{"estado":"baixando","bytes":5}'))->toBe(['estado' => 'baixando', 'bytes' => 5, 'total' => 0, 'duration_ms' => 0]);
 });
 
 it('o download e o pull filhos são PHP válido com os valores fixos', function () {
