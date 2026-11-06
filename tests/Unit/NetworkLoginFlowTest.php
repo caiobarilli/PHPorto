@@ -14,6 +14,8 @@ use App\Network\State;
 use App\Services\ExecutionLogService;
 use Tests\Fakes\FakeProvider;
 
+require_once __DIR__ . '/NetworkLoginAttemptsTest.php';
+
 it('aplica cinco falhas por IP no fluxo, bloqueia a sexta e aceita outro IP', function () {
     $dir = networkLoginDir();
     $provider = new FakeProvider();
@@ -126,4 +128,58 @@ it('mantém o aviso ausente quando não há estado de rede', function () {
     $html = Respond::render('layout.php', new LayoutView('teste', '<div>x</div>'));
 
     expect($html)->not->toContain('aviso-rede', 'Acessível pela rede interna');
+});
+
+it('um cookie válido continua independente do limite de novos tokens', function () {
+    $dir = networkLoginDir();
+    $attempts = new LoginAttempts($dir, static fn (): int => 1_000_000);
+    $audit = new LoginAudit(loginNetworkFixture(), static fn (): ExecutionLogService => new ExecutionLogService(new FakeProvider()));
+    $flow = new LoginFlow($attempts, loginNetworkFixture(), $audit);
+    $server = loginServerFixture();
+    $auth = new Auth('token-correto', $dir . DIRECTORY_SEPARATOR . 'auth.json');
+
+    foreach (range(1, 5) as $attempt) {
+        $flow->check($auth, 'errado', $server);
+    }
+    $cookie = $auth->issueCookie();
+    $_COOKIE[Auth::COOKIE] = $cookie['value'];
+    $_SERVER = $server;
+    $_POST = [];
+
+    ob_start();
+    try {
+        \App\Http\Login::guard($auth, 'GET', $flow);
+        $valid = true;
+    } finally {
+        ob_end_clean();
+        unset($_COOKIE[Auth::COOKIE]);
+    }
+
+    expect($valid)->toBeTrue()
+        ->and($flow->before($server)?->outcome)->toBe(AuthOutcome::Locked);
+    networkLoginCleanup($dir);
+});
+
+it('o login inicial e as mensagens de sessão recebem a rede no layout', function () {
+    $source = (string) file_get_contents(dirname(__DIR__, 2) . '/src/Http/Login.php');
+
+    expect($source)->toContain('AuthOutcome::Missing       => self::page($decisao, \'\', network: $network),')
+        ->and($source)->toContain('AuthOutcome::Wrong         => self::page($decisao, \'A sessão deste navegador não vale mais. Entre de novo.\', true, $network),')
+        ->and($source)->toContain('AuthOutcome::Expired       => self::page($decisao, \'A sessão expirou. Entre de novo.\', true, $network),');
+});
+
+it('não abre o histórico quando não há login de fora', function () {
+    $opened = false;
+    $audit = new LoginAudit(null, static function () use (&$opened): ExecutionLogService {
+        $opened = true;
+
+        throw new RuntimeException('O banco não deve ser aberto.');
+    });
+    $dir = networkLoginDir();
+    $flow = new LoginFlow(new LoginAttempts($dir), null, $audit);
+    $auth = new Auth('correto', $dir . DIRECTORY_SEPARATOR . 'auth.json');
+
+    expect($flow->check($auth, 'errado', loginServerFixture())->decision->outcome)->toBe(AuthOutcome::Wrong)
+        ->and($opened)->toBeFalse();
+    networkLoginCleanup($dir);
 });

@@ -27,10 +27,10 @@ final class Login
         match ($decisao->outcome) {
             AuthOutcome::Allowed       => null,
             AuthOutcome::NotConfigured => Respond::authRefused($decisao),
-            AuthOutcome::Expired       => self::page($decisao, 'A sessão expirou. Entre de novo.', true),
-            AuthOutcome::Wrong         => self::page($decisao, 'A sessão deste navegador não vale mais. Entre de novo.', true),
+            AuthOutcome::Expired       => self::page($decisao, 'A sessão expirou. Entre de novo.', true, $network),
+            AuthOutcome::Wrong         => self::page($decisao, 'A sessão deste navegador não vale mais. Entre de novo.', true, $network),
             AuthOutcome::Locked        => self::page($decisao, '', network: $network),
-            AuthOutcome::Missing       => self::page($decisao, ''),
+            AuthOutcome::Missing       => self::page($decisao, '', network: $network),
         };
     }
 
