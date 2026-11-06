@@ -6,6 +6,8 @@ namespace App\Providers;
 
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\OllamaExecution;
+use App\Domain\OllamaExecutionStatus;
 use App\Domain\WinState;
 use App\Domain\WinStateScope;
 use App\Exceptions\StorageException;
@@ -21,6 +23,8 @@ final class MySQLProvider implements DatabaseProviderInterface
     private string $table;
 
     private string $stateTable;
+
+    private OllamaExecutionsStore $ollama;
 
     /**
      * @param array{host: string, port: string, database: string, user: string, password: string, table: string} $config
@@ -48,6 +52,8 @@ final class MySQLProvider implements DatabaseProviderInterface
                 PDO::ATTR_EMULATE_PREPARES   => false,
             ]);
             $this->ensureTable();
+            $this->ollama = new OllamaExecutionsStore($this->pdo, '`', '`');
+            $this->ollama->ensureMysql();
         } catch (PDOException $e) {
             throw new StorageException('Falha ao inicializar o MySQL: ' . $e->getMessage(), 0, $e);
         }
@@ -376,5 +382,40 @@ final class MySQLProvider implements DatabaseProviderInterface
         }
 
         return $name;
+    }
+
+    public function insertOllama(OllamaExecution $execution): OllamaExecution
+    {
+        return $this->ollama->insert($execution);
+    }
+
+    public function finalizeOllama(int $id, OllamaExecutionStatus $status, string $output, int $durationMs): ?OllamaExecution
+    {
+        return $this->ollama->finalize($id, $status, $output, $durationMs);
+    }
+
+    public function openOllamaPull(?string $model = null): ?OllamaExecution
+    {
+        return $this->ollama->openPull($model);
+    }
+
+    public function recentOllama(int $limit, int $offset = 0): array
+    {
+        return $this->ollama->recent($limit, $offset);
+    }
+
+    public function countOllama(): int
+    {
+        return $this->ollama->count();
+    }
+
+    public function clearOllama(): int
+    {
+        return $this->ollama->clear();
+    }
+
+    public function trimOllama(int $keep): int
+    {
+        return $this->ollama->trim($keep, true);
     }
 }

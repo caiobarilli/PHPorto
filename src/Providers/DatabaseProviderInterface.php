@@ -6,6 +6,8 @@ namespace App\Providers;
 
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\OllamaExecution;
+use App\Domain\OllamaExecutionStatus;
 use App\Domain\WinState;
 use App\Domain\WinStateScope;
 use App\Exceptions\StorageException;
@@ -47,4 +49,40 @@ interface DatabaseProviderInterface
      * @throws StorageException
      */
     public function forgetWinState(WinStateScope $scope, string $action): int;
+
+    /**
+     * @throws StorageException
+     */
+    public function insertOllama(OllamaExecution $execution): OllamaExecution;
+
+    /**
+     * @throws StorageException
+     */
+    public function finalizeOllama(int $id, OllamaExecutionStatus $status, string $output, int $durationMs): ?OllamaExecution;
+
+    /**
+     * @throws StorageException
+     */
+    public function openOllamaPull(?string $model = null): ?OllamaExecution;
+
+    /**
+     * @return list<OllamaExecution>
+     * @throws StorageException
+     */
+    public function recentOllama(int $limit, int $offset = 0): array;
+
+    /**
+     * @throws StorageException
+     */
+    public function countOllama(): int;
+
+    /**
+     * @throws StorageException
+     */
+    public function clearOllama(): int;
+
+    /**
+     * @throws StorageException
+     */
+    public function trimOllama(int $keep): int;
 }

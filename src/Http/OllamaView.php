@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http;
 
+use App\Domain\OllamaExecution;
 use App\Win\Ollama;
 use App\Win\OllamaModel;
 use App\Win\OllamaStatus;
@@ -17,9 +18,10 @@ final readonly class OllamaView
 
     /**
      * @param array<string, int>|null $models
-     * @param array{estado: string, bytes: int, total: int}|null $download
-     * @param array{estado: string, bytes: int, total: int}|null $pull
+     * @param array{estado: string, bytes: int, total: int, duration_ms: int}|null $download
+     * @param array{estado: string, bytes: int, total: int, duration_ms: int}|null $pull
      * @param list<array{name: string, size: int, size_vram: int, expires_at: ?string}>|null $loaded
+     * @param list<OllamaExecution> $history
      */
     public function __construct(
         public ?string $blocked,
@@ -36,6 +38,12 @@ final readonly class OllamaView
         public string $parte = self::PARTE_COMPLETA,
         public ?string $confirmModel = null,
         public ?int $diskFreeBytes = null,
+        public array $history = [],
+        public int $historyTotal = 0,
+        public int $historyPage = 1,
+        public int $historyPages = 1,
+        public string $tz = 'America/Sao_Paulo',
+        public ?string $historyFailed = null,
     ) {
     }
 
@@ -203,7 +211,7 @@ final readonly class OllamaView
     }
 
     /**
-     * @param array{estado: string, bytes: int, total: int} $p
+     * @param array{estado: string, bytes: int, total: int, duration_ms: int} $p
      * @param Closure(int): string $mb
      */
     public static function progressText(array $p, Closure $mb): string

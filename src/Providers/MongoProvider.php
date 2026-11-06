@@ -6,6 +6,9 @@ namespace App\Providers;
 
 use App\Domain\Execution;
 use App\Domain\ExecutionKind;
+use App\Domain\OllamaExecution;
+use App\Domain\OllamaExecutionAction;
+use App\Domain\OllamaExecutionStatus;
 use App\Domain\WinState;
 use App\Domain\WinStateScope;
 use App\Exceptions\StorageException;
@@ -19,6 +22,8 @@ final class MongoProvider implements DatabaseProviderInterface
     private Collection $collection;
 
     private Collection $stateCollection;
+
+    private Collection $ollamaCollection;
 
     /**
      * @param array{uri: string, database: string, collection: string} $config
@@ -43,7 +48,12 @@ final class MongoProvider implements DatabaseProviderInterface
                 $config['database'],
                 $config['collection'] . self::STATE_SUFFIX
             );
+            $this->ollamaCollection = $client->selectCollection(
+                $config['database'],
+                OllamaExecution::TABLE
+            );
             $this->ensureIndex();
+            $this->ensureOllamaIndex();
         } catch (MongoDriverException $e) {
             throw new StorageException('Falha ao inicializar o MongoDB: ' . $e->getMessage(), 0, $e);
         }
@@ -262,5 +272,223 @@ final class MongoProvider implements DatabaseProviderInterface
         }
 
         return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    public function insertOllama(OllamaExecution $execution): OllamaExecution
+    {
+        $safe = $execution->withRedaction();
+        $createdAt = new UTCDateTime();
+
+        if ($safe->createdAt !== null) {
+            try {
+                $createdAt = new UTCDateTime(
+                    new \DateTimeImmutable($safe->createdAt, new \DateTimeZone('UTC'))
+                );
+            } catch (\Exception) {
+                $createdAt = new UTCDateTime();
+            }
+        }
+
+        try {
+            $seq = $this->ollamaCollection->countDocuments() + 1;
+            $this->ollamaCollection->insertOne([
+                'seq'         => $seq,
+                'action'      => $safe->action->value,
+                'model'       => $safe->model,
+                'prompt'      => $safe->prompt,
+                'output'      => $safe->output,
+                'status'      => $safe->status->value,
+                'duration_ms' => $safe->durationMs,
+                'user'        => OllamaExecution::USER,
+                'created_at'  => $createdAt,
+                'updated_at'  => null,
+            ]);
+        } catch (MongoDriverException $e) {
+            throw new StorageException('Falha ao gravar ollama_executions: ' . $e->getMessage(), 0, $e);
+        }
+
+        return new OllamaExecution(
+            action: $safe->action,
+            output: $safe->output,
+            status: $safe->status,
+            durationMs: $safe->durationMs,
+            model: $safe->model,
+            prompt: $safe->prompt,
+            user: OllamaExecution::USER,
+            createdAt: $this->formatDate($createdAt),
+            id: $seq,
+        );
+    }
+
+    public function finalizeOllama(int $id, OllamaExecutionStatus $status, string $output, int $durationMs): ?OllamaExecution
+    {
+        $output = OllamaExecution::redact($output);
+        $updatedAt = new UTCDateTime();
+
+        try {
+            $result = $this->ollamaCollection->findOneAndUpdate(
+                [
+                    'seq' => $id,
+                    'status' => OllamaExecutionStatus::Iniciado->value,
+                ],
+                ['$set' => [
+                    'status' => $status->value,
+                    'output' => $output,
+                    'duration_ms' => max(0, $durationMs),
+                    'updated_at' => $updatedAt,
+                ]],
+                [
+                    'returnDocument' => \MongoDB\Operation\FindOneAndUpdate::RETURN_DOCUMENT_AFTER,
+                    'typeMap' => ['root' => 'array', 'document' => 'array'],
+                ]
+            );
+        } catch (MongoDriverException $e) {
+            throw new StorageException('Falha ao finalizar ollama_executions: ' . $e->getMessage(), 0, $e);
+        }
+
+        return is_array($result) ? $this->hydrateOllama($result) : null;
+    }
+
+    public function openOllamaPull(?string $model = null): ?OllamaExecution
+    {
+        $filter = [
+            'status' => OllamaExecutionStatus::Iniciado->value,
+            'action' => OllamaExecutionAction::Pull->value,
+        ];
+
+        if ($model !== null) {
+            $filter['model'] = $model;
+        }
+
+        try {
+            $doc = $this->ollamaCollection->findOne(
+                $filter,
+                [
+                    'sort' => ['created_at' => -1, '_id' => -1],
+                    'typeMap' => ['root' => 'array', 'document' => 'array'],
+                ]
+            );
+        } catch (MongoDriverException $e) {
+            throw new StorageException('Falha ao buscar pull aberto: ' . $e->getMessage(), 0, $e);
+        }
+
+        return is_array($doc) ? $this->hydrateOllama($doc) : null;
+    }
+
+    public function recentOllama(int $limit, int $offset = 0): array
+    {
+        try {
+            $cursor = $this->ollamaCollection->find(
+                [],
+                [
+                    'sort' => ['created_at' => -1, '_id' => -1],
+                    'limit' => $limit,
+                    'skip' => $offset,
+                    'typeMap' => ['root' => 'array', 'document' => 'array'],
+                ]
+            );
+
+            $rows = [];
+            foreach ($cursor as $doc) {
+                if (is_array($doc)) {
+                    $rows[] = $this->hydrateOllama($doc);
+                }
+            }
+
+            return $rows;
+        } catch (MongoDriverException $e) {
+            throw new StorageException('Falha ao listar ollama_executions: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    public function countOllama(): int
+    {
+        try {
+            return $this->ollamaCollection->countDocuments();
+        } catch (MongoDriverException $e) {
+            throw new StorageException('Falha ao contar ollama_executions: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    public function clearOllama(): int
+    {
+        try {
+            return $this->ollamaCollection->deleteMany([])->getDeletedCount();
+        } catch (MongoDriverException $e) {
+            throw new StorageException('Falha ao limpar ollama_executions: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    public function trimOllama(int $keep): int
+    {
+        if ($keep < 1) {
+            throw new StorageException('Retenção ollama_executions inválida.');
+        }
+
+        $total = $this->countOllama();
+
+        if ($total <= $keep) {
+            return 0;
+        }
+
+        $excess = $total - $keep;
+
+        try {
+            $cursor = $this->ollamaCollection->find(
+                [],
+                [
+                    'sort' => ['created_at' => 1, '_id' => 1],
+                    'limit' => $excess,
+                    'projection' => ['_id' => 1],
+                    'typeMap' => ['root' => 'array', 'document' => 'array'],
+                ]
+            );
+            $ids = [];
+            foreach ($cursor as $doc) {
+                if (is_array($doc) && isset($doc['_id'])) {
+                    $ids[] = $doc['_id'];
+                }
+            }
+
+            if ($ids === []) {
+                return 0;
+            }
+
+            return $this->ollamaCollection->deleteMany(['_id' => ['$in' => $ids]])->getDeletedCount();
+        } catch (MongoDriverException $e) {
+            throw new StorageException('Falha ao reter ollama_executions: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $doc
+     */
+    private function hydrateOllama(array $doc): OllamaExecution
+    {
+        $model = $doc['model'] ?? null;
+        $prompt = $doc['prompt'] ?? null;
+        $output = $doc['output'] ?? '';
+        $duration = $doc['duration_ms'] ?? 0;
+        $user = $doc['user'] ?? OllamaExecution::USER;
+        $seq = $doc['seq'] ?? null;
+
+        return new OllamaExecution(
+            action: OllamaExecutionAction::fromStorage($doc['action'] ?? null),
+            output: is_string($output) ? $output : '',
+            status: OllamaExecutionStatus::fromStorage($doc['status'] ?? null),
+            durationMs: is_numeric($duration) ? (int) $duration : 0,
+            model: is_string($model) && $model !== '' ? $model : null,
+            prompt: is_string($prompt) ? $prompt : null,
+            user: is_string($user) && $user !== '' ? $user : OllamaExecution::USER,
+            createdAt: $this->formatDate($doc['created_at'] ?? null),
+            updatedAt: $this->formatDate($doc['updated_at'] ?? null),
+            id: is_numeric($seq) ? (int) $seq : null,
+        );
+    }
+
+    private function ensureOllamaIndex(): void
+    {
+        $this->ollamaCollection->createIndex(['created_at' => -1, '_id' => -1]);
+        $this->ollamaCollection->createIndex(['status' => 1, 'action' => 1, '_id' => -1]);
     }
 }

@@ -6,8 +6,10 @@ declare(strict_types=1);
  * @var \App\Http\OllamaView $view
  */
 
+use App\Domain\OllamaExecution;
 use App\Http\OllamaView;
 use App\Http\Respond;
+use App\Services\ExecutionLogService;
 use App\Win\Ollama;
 use App\Win\OllamaModel;
 
@@ -157,6 +159,72 @@ if ($view->parte === OllamaView::PARTE_ESTADO) {
   <div id="ollama-leitura">
 <?= $corpo ?>
   </div>
+
+  <section id="ollama-historico">
+    <h2>Histórico</h2>
+    <?php if ($view->historyFailed !== null): ?>
+      <div class="alert alert-block"><?= Respond::e($view->historyFailed) ?></div>
+    <?php elseif ($view->history === []): ?>
+      <p class="empty">Nenhuma ação do Ollama registrada ainda.</p>
+    <?php else: ?>
+      <table>
+        <thead>
+          <tr>
+            <th>Ação</th>
+            <th>Modelo</th>
+            <th>Saída</th>
+            <th>Usuário</th>
+            <th>Status</th>
+            <th>Quando</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($view->history as $row): ?>
+            <tr>
+              <td><code><?= Respond::e($row->action->value) ?></code><?php if ($row->prompt !== null): ?> <span class="tag">chat</span><?php endif; ?></td>
+              <td><?= $row->model === null ? '—' : '<code>' . Respond::e($row->model) . '</code>' ?></td>
+              <td><pre><?= Respond::e($row->output) ?></pre><?php if ($row->prompt !== null && $row->prompt !== ''): ?><pre class="meta"><?= Respond::e($row->prompt) ?></pre><?php endif; ?></td>
+              <td><?= Respond::e(OllamaExecution::USER) ?></td>
+              <td>
+                <?php if ($row->status->value === 'ok'): ?>
+                  <span class="ok">ok</span>
+                <?php elseif ($row->status->value === 'iniciado'): ?>
+                  <span class="tag">iniciado</span>
+                <?php else: ?>
+                  <span class="bad">erro</span>
+                <?php endif; ?>
+                <br>
+                <span class="meta"><?= Respond::e(number_format($row->durationSeconds(), 1, ',', '.')) ?> s</span>
+              </td>
+              <td><?= Respond::e(Respond::dateTime($row->createdAt, $view->tz)) ?></td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      <?php if ($view->historyPages > 1): ?>
+        <p class="row">
+          <?php if ($view->historyPage > 1): ?>
+            <a class="btn btn-sm btn-ghost" href="/ollama?pagina=<?= (int) ($view->historyPage - 1) ?>">Anterior</a>
+          <?php endif; ?>
+          <span class="meta">página <?= (int) $view->historyPage ?> de <?= (int) $view->historyPages ?> (<?= (int) $view->historyTotal ?> registro(s), <?= (int) ExecutionLogService::OLLAMA_PAGE_SIZE ?> por página)</span>
+          <?php if ($view->historyPage < $view->historyPages): ?>
+            <a class="btn btn-sm btn-ghost" href="/ollama?pagina=<?= (int) ($view->historyPage + 1) ?>">Próxima</a>
+          <?php endif; ?>
+        </p>
+      <?php else: ?>
+        <p class="meta"><?= (int) $view->historyTotal ?> registro(s)</p>
+      <?php endif; ?>
+    <?php endif; ?>
+
+    <form method="post" action="/ollama" id="form-ollama-apagar" style="margin-top:14px">
+      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+      <input type="hidden" name="acao" value="limpar">
+      <div class="row">
+        <button type="submit" class="btn btn-danger btn-sm" id="btn-ollama-apagar">Apagar histórico</button>
+      </div>
+      <p class="dica">Apaga só o histórico do Ollama. Os registros antigos na /win ficam.</p>
+    </form>
+  </section>
 </div>
 <dialog id="modal-ollama-adicionar">
   <form method="post" action="/ollama">
@@ -210,6 +278,15 @@ setTimeout(function () { location.replace('/ollama'); }, 5000);
 <script>
 (function () {
   'use strict';
+
+  var formApagar = document.getElementById('form-ollama-apagar');
+  if (formApagar) {
+    formApagar.addEventListener('submit', function (ev) {
+      if (!confirm('Apagar o histórico do Ollama? Não tem como desfazer.')) {
+        ev.preventDefault();
+      }
+    });
+  }
 
   document.addEventListener('click', function (ev) {
     var btn = ev.target.closest('#btn-ollama-adicionar');
