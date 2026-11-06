@@ -24,16 +24,16 @@ it('ExecutionKind vai e volta pelo valor de armazenamento', function () {
     expect(ExecutionKind::Comando->value)->toBe('comando')
         ->and(ExecutionKind::Anexo->value)->toBe('anexo')
         ->and(ExecutionKind::Windows->value)->toBe('windows')
+        ->and(ExecutionKind::Rede->value)->toBe('rede')
         ->and(ExecutionKind::fromStorage('anexo'))->toBe(ExecutionKind::Anexo)
-        ->and(ExecutionKind::fromStorage('windows'))->toBe(ExecutionKind::Windows);
+        ->and(ExecutionKind::fromStorage('windows'))->toBe(ExecutionKind::Windows)
+        ->and(ExecutionKind::fromStorage('rede'))->toBe(ExecutionKind::Rede);
 });
 
 it('ExecutionKind cai em Comando para valor ausente ou desconhecido', function (mixed $bruto) {
     expect(ExecutionKind::fromStorage($bruto))->toBe(ExecutionKind::Comando);
 })->with([null, '', 'coisa-que-nao-existe', 123]);
 
-it('os tipos do WSL são todos os casos menos o do Windows', function () {
-    $esperado = array_values(array_filter(ExecutionKind::cases(), static fn (ExecutionKind $k): bool => $k !== ExecutionKind::Windows));
-
-    expect(ExecutionKind::WSL)->toBe($esperado);
+it('os tipos do WSL continuam só comando e anexo', function () {
+    expect(ExecutionKind::WSL)->toBe([ExecutionKind::Comando, ExecutionKind::Anexo]);
 });

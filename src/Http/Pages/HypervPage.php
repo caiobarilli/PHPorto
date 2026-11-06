@@ -44,7 +44,7 @@ final class HypervPage extends Page
                 csrfToken: Csrf::token(),
                 csrfField: Csrf::fieldName(),
                 parte: HypervView::PARTE_CASCA,
-            )));
+            )), $this->network);
         }
 
         $blocked  = $this->winBlockingReason();
@@ -89,7 +89,7 @@ final class HypervPage extends Page
             Respond::partial(Respond::render('hyperv.php', $view));
         }
 
-        Respond::html('PHPorto — Hyper-V', Respond::render('hyperv.php', $view));
+        Respond::html('PHPorto — Hyper-V', Respond::render('hyperv.php', $view), $this->network);
     }
 
     public static function hypervParte(mixed $valor): string

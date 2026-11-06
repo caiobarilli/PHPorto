@@ -27,6 +27,6 @@ final class HomePage extends Page
             hypervReason: 'O painel do Hyper-V está desligado. Ligue na configuração — uma vez ligado, ele sobrevive a reiniciar.',
         );
 
-        Respond::html('PHPorto', Respond::render('home.php', $view));
+        Respond::html('PHPorto', Respond::render('home.php', $view), $this->network);
     }
 }

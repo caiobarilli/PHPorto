@@ -157,6 +157,20 @@ use App\Http\Respond;
     -webkit-font-smoothing: antialiased;
   }
   a { color: inherit; }
+  .aviso-rede {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 1000;
+    padding: 9px 20px;
+    border-bottom: 1px solid var(--cuidado-borda);
+    background: var(--cuidado-bg);
+    color: var(--nota);
+    font-size: 13px;
+    text-align: center;
+  }
+  .aviso-rede a { font-weight: 600; }
 
   .home {
     min-height: 100%;
@@ -432,6 +446,12 @@ use App\Http\Respond;
 </style>
 </head>
 <body>
+<?php if ($view->network?->enabled === true): ?>
+<div class="aviso-rede" role="status">
+  Acessível pela rede interna em <?= Respond::e($view->network->address()) ?>, permitido para: <?= Respond::e(implode(', ', $view->network->allow)) ?>.
+  <a href="/config">Configurações</a>
+</div>
+<?php endif; ?>
 <main id="conteudo"><?= $view->content ?></main>
 
 <div class="aviso-rodape" id="aviso-rodape" role="status" aria-live="polite" hidden>

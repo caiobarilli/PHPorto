@@ -15,6 +15,9 @@ use App\Http\Pages\PhpPage;
 use App\Http\Pages\WinPage;
 use App\Http\Pages\WslPage;
 use App\Http\Respond;
+use App\Network\LoginAttempts;
+use App\Network\LoginFlow;
+use App\Network\LoginAudit;
 use App\Network\Store as NetworkStore;
 use App\Php\C\CProcess;
 use App\Services\ExecutionLogService;
@@ -74,20 +77,34 @@ if ($recusa !== null) {
     Front::refuse($recusa);
 }
 
+$makeService = Closure::fromCallable($app['makeService']);
+$networkLoginFlow = new LoginFlow(
+    new LoginAttempts($filesDir),
+    $network,
+    new LoginAudit($network, $makeService),
+);
+
 $auth = new Auth(
     $config['auth_token'],
     dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . Auth::COUNTER_FILE,
 );
 
 if (str_starts_with($path, '/api/')) {
-    $senha   = $_SERVER['PHP_AUTH_PW'] ?? null;
-    $decisao = $auth->check(is_string($senha) ? $senha : null);
+    $password = $_SERVER['PHP_AUTH_PW'] ?? null;
+    $password = is_string($password) && $password !== '' ? $password : null;
+    $wait = $networkLoginFlow->before($_SERVER);
+
+    if ($wait !== null) {
+        Respond::authRefused($wait);
+    }
+
+    $decisao = $networkLoginFlow->check($auth, $password, $_SERVER)->decision;
 
     if ($decisao->outcome !== AuthOutcome::Allowed) {
         Respond::authRefused($decisao);
     }
 } else {
-    Login::guard($auth, $method);
+    Login::guard($auth, $method, $networkLoginFlow);
 }
 
 $distro      = new Distro($config['wsl']['distro']);
@@ -137,6 +154,7 @@ $deps = [
     'terminal'      => new PsTerminalProcess($filesDir),
     'c'             => new CProcess($filesDir),
     'storageDir'    => dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
+    'network'       => $network,
 ];
 
 match ($path) {

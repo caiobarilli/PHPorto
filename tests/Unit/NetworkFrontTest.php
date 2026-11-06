@@ -40,6 +40,7 @@ it('a matriz do roteador recusa fora sem rede habilitada ou fora da allow', func
     'listener diferente' => [lanServer(['SERVER_ADDR' => '192.168.1.21']), lanState(), 403],
     'listener loopback' => [lanServer(['SERVER_ADDR' => '127.0.0.1']), lanState(), 403],
     'listener ausente' => [lanServer(['SERVER_ADDR' => null]), lanState(), 403],
+    'porta do listener diferente' => [lanServer(['SERVER_PORT' => '4002']), lanState(), 421],
     'IPv6 mapeado não é IPv4 de LAN' => [lanServer(['REMOTE_ADDR' => '::ffff:192.168.1.50']), lanState(), 403],
     'público não está na faixa privada' => [lanServer(['REMOTE_ADDR' => '8.8.8.8']), lanState(), 403],
 ]);

@@ -72,11 +72,16 @@ final readonly class State
 
         return $this->enabled
             && is_string($listener)
-            && is_string($remote)
             && $this->bindIp !== null
             && hash_equals($this->bindIp, $listener)
-            && filter_var($remote, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false
-            && Ipv4::allows($remote, $this->allow);
+            && $this->allowsIp($remote);
+    }
+
+    public function allowsIp(mixed $ip): bool
+    {
+        return is_string($ip)
+            && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false
+            && Ipv4::allows($ip, $this->allow);
     }
 
     public function host(): string

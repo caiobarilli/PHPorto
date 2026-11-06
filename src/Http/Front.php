@@ -57,7 +57,7 @@ final class Front
         }
 
         if (!self::isLoopback($server)) {
-            return $network?->accepts($server) === true && hash_equals($network->host(), $host);
+            return $network?->accepts($server) === true && self::port($server) === $network->port && hash_equals($network->host(), $host);
         }
 
         return in_array($host, self::allowedHosts($server), true);

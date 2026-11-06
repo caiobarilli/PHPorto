@@ -142,7 +142,7 @@ final class WinPage extends Page
             wslDistros: $aba === WinTab::ChavesSsh ? ($this->distroChecker->registered() ?? []) : [],
         );
 
-        Respond::html('PHPorto — Windows', Respond::render('win.php', $view));
+        Respond::html('PHPorto — Windows', Respond::render('win.php', $view), $this->network);
     }
 
     private function handleWinPost(WinTab $aba): never

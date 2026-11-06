@@ -60,7 +60,7 @@ final class PhpPage extends Page
             ),
         )->withC($this->cPanel())->withExtensions(PhpExtension::loadedMap());
 
-        Respond::html('PHPorto — PHP', Respond::render('php.php', $view));
+        Respond::html('PHPorto — PHP', Respond::render('php.php', $view), $this->network);
     }
 
     private function handlePhpPost(): never

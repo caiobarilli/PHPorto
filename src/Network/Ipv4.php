@@ -76,9 +76,8 @@ final class Ipv4
             return null;
         }
 
-        $mask = $prefix === 32 ? 0xFFFFFFFF : ((1 << $prefix) - 1) << (32 - $prefix);
-        $first = $number & $mask;
-        $size = 1 << (32 - $prefix);
+        $size = 2 ** (32 - $prefix);
+        $first = intdiv($number, $size) * $size;
 
         if (!self::isPrivateAddress($first) || !self::isPrivateAddress($first + $size - 1)) {
             return null;
@@ -89,9 +88,9 @@ final class Ipv4
 
     private static function isPrivateAddress(int $number): bool
     {
-        return ($number >= 0x0A000000 && $number <= 0x0AFFFFFF)
-            || ($number >= 0xAC100000 && $number <= 0xAC1FFFFF)
-            || ($number >= 0xC0A80000 && $number <= 0xC0A8FFFF);
+        return ($number >= 167772160 && $number <= 184549375)
+            || ($number >= 2886729728 && $number <= 2887778303)
+            || ($number >= 3232235520 && $number <= 3232301055);
     }
 
     private static function number(string $ip): ?int
