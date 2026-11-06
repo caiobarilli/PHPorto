@@ -15,6 +15,7 @@ use App\Http\Pages\PhpPage;
 use App\Http\Pages\WinPage;
 use App\Http\Pages\WslPage;
 use App\Http\Respond;
+use App\Network\Store as NetworkStore;
 use App\Php\C\CProcess;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
@@ -47,6 +48,8 @@ $app = require dirname(__DIR__) . '/src/bootstrap.php';
 mb_internal_encoding('UTF-8');
 
 $config = $app['config'];
+$filesDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'files';
+$network = (new NetworkStore($filesDir))->load();
 
 date_default_timezone_set($config['tz']);
 
@@ -65,7 +68,7 @@ if (!is_string($path) || $path === '') {
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $method = is_string($method) ? strtoupper($method) : 'GET';
 
-$recusa = Front::refusal($_SERVER, $path, $config['api_enabled']);
+$recusa = Front::refusal($_SERVER, $path, $config['api_enabled'], $network);
 
 if ($recusa !== null) {
     Front::refuse($recusa);
@@ -87,7 +90,6 @@ if (str_starts_with($path, '/api/')) {
     Login::guard($auth, $method);
 }
 
-$filesDir    = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'files';
 $distro      = new Distro($config['wsl']['distro']);
 $makeService = Closure::fromCallable($app['makeService']);
 
