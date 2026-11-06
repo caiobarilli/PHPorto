@@ -26,6 +26,10 @@ final class Ollama
 
     public const F_PULL = 'pull.json';
 
+    public const CONFIRM_PULL = 'ConfirmPull';
+
+    public const REGISTRO_PULL_NOVO_CONFIRMADO = 'pull de modelo novo, confirmado';
+
     public const NIVEL_MEDIO = 'medio';
 
     private const NIVEL_FUNCS = <<<'PS'
@@ -284,6 +288,84 @@ final class Ollama
         }
 
         return null;
+    }
+
+    /**
+     * @param array<string, int>|null $installed
+     */
+    public static function pullNeedsConfirm(OllamaModel $model, ?array $installed): bool
+    {
+        if (OllamaModel::isRecommended($model->value)) {
+            return false;
+        }
+
+        return !is_array($installed) || !isset($installed[$model->value]);
+    }
+
+    public static function isPullConfirmed(mixed $value): bool
+    {
+        return $value === '1';
+    }
+
+    public static function pullConfirmRefusal(): string
+    {
+        return 'Este modelo não está na lista recomendada e o tamanho é desconhecido antes do download. Confirme na tela antes de baixar. Nada foi baixado.';
+    }
+
+    /**
+     * @param array<string, int>|null $installed
+     */
+    public static function pullUnconfirmedRefusal(OllamaModel $model, ?array $installed, bool $confirmado): ?string
+    {
+        if (self::pullNeedsConfirm($model, $installed) && !$confirmado) {
+            return self::pullConfirmRefusal();
+        }
+
+        return null;
+    }
+
+    public static function modelsDir(): string
+    {
+        $env = getenv('OLLAMA_MODELS');
+
+        if (is_string($env) && $env !== '') {
+            return $env;
+        }
+
+        $home = getenv('USERPROFILE');
+
+        if (!is_string($home) || $home === '') {
+            $home = getenv('HOME');
+        }
+
+        if (!is_string($home) || $home === '') {
+            return '';
+        }
+
+        return $home . DIRECTORY_SEPARATOR . '.ollama' . DIRECTORY_SEPARATOR . 'models';
+    }
+
+    public static function diskFreeBytes(?string $dir = null): ?int
+    {
+        $alvo = $dir ?? self::modelsDir();
+
+        if ($alvo === '') {
+            return null;
+        }
+
+        while (!is_dir($alvo)) {
+            $pai = dirname($alvo);
+
+            if ($pai === $alvo) {
+                return null;
+            }
+
+            $alvo = $pai;
+        }
+
+        $livre = @disk_free_space($alvo);
+
+        return $livre === false ? null : (int) $livre;
     }
 
     /**

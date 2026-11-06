@@ -34,6 +34,8 @@ final readonly class OllamaView
         public string $csrfField = '',
         public ?array $loaded = null,
         public string $parte = self::PARTE_COMPLETA,
+        public ?string $confirmModel = null,
+        public ?int $diskFreeBytes = null,
     ) {
     }
 
@@ -146,6 +148,42 @@ final readonly class OllamaView
     public function canAddModel(): bool
     {
         return $this->blocked === null && $this->version !== null && !$this->pulling();
+    }
+
+    public function confirmPull(): bool
+    {
+        return $this->confirmModel !== null && $this->confirmModel !== '';
+    }
+
+    public function confirmVramText(): string
+    {
+        $mb = $this->status?->vramMb;
+
+        if ($mb === null) {
+            return 'Não deu para medir a VRAM da placa.';
+        }
+
+        return 'A placa tem ' . $mb . ' MiB de VRAM.';
+    }
+
+    public function confirmDiskText(): string
+    {
+        if ($this->diskFreeBytes === null) {
+            return 'Não deu para medir o espaço livre no disco onde o Ollama guarda os modelos.';
+        }
+
+        $gb = number_format($this->diskFreeBytes / 1073741824, 1, ',', '.');
+
+        return 'O disco tem ' . $gb . ' GB livres (pasta dos modelos do Ollama).';
+    }
+
+    public function confirmLibraryUrl(): string
+    {
+        if ($this->confirmModel === null || !OllamaModel::isValid($this->confirmModel)) {
+            return 'https://ollama.com/library';
+        }
+
+        return (new OllamaModel($this->confirmModel))->libraryUrl();
     }
 
     public function versionMatch(): ?bool

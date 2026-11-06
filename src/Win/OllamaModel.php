@@ -71,6 +71,20 @@ final readonly class OllamaModel
         return $tamanho === null ? null : $tamanho + self::OVERHEAD_VRAM_MB;
     }
 
+    public function libraryPath(): string
+    {
+        if (preg_match('/\A(.+):([a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)\z/', $this->value, $m) === 1) {
+            return $m[1];
+        }
+
+        return $this->value;
+    }
+
+    public function libraryUrl(): string
+    {
+        return 'https://ollama.com/library/' . $this->libraryPath();
+    }
+
     public static function minVramFromBytes(int $bytes): int
     {
         return intdiv(max(0, $bytes), 1048576) + self::OVERHEAD_VRAM_MB;

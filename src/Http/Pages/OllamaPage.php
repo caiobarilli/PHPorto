@@ -20,6 +20,8 @@ use Throwable;
 
 final class OllamaPage extends Page
 {
+    private const SESSION_CONFIRM = 'phporto_ollama_confirm';
+
     public function handle(string $method = 'GET'): never
     {
         if ($method === 'POST') {
@@ -56,6 +58,7 @@ final class OllamaPage extends Page
 
         $versao = $blocked === null ? $canal->version() : null;
         $loaded = $versao !== null ? $canal->loaded() : null;
+        $confirm = $parte === OllamaView::PARTE_ESTADO ? null : $this->takeConfirmModel();
 
         return new OllamaView(
             blocked: $blocked,
@@ -70,6 +73,8 @@ final class OllamaPage extends Page
             csrfField: Csrf::fieldName(),
             loaded: $loaded,
             parte: $parte,
+            confirmModel: $confirm,
+            diskFreeBytes: Ollama::diskFreeBytes(),
         );
     }
 
@@ -145,7 +150,8 @@ final class OllamaPage extends Page
         }
 
         $inicio = hrtime(true);
-        [$aviso, $saida, $codigo] = $this->ollamaRun($canal, $sub, $modelo, $status);
+        $confirmado = Ollama::isPullConfirmed($_POST[Ollama::CONFIRM_PULL] ?? null);
+        [$aviso, $saida, $codigo] = $this->ollamaRun($canal, $sub, $modelo, $status, $confirmado);
 
         try {
             ($this->makeService)()->record(new Execution(
@@ -167,7 +173,7 @@ final class OllamaPage extends Page
     /**
      * @return array{0: string, 1: string, 2: int}
      */
-    private function ollamaRun(OllamaChannel $canal, OllamaSub $sub, ?OllamaModel $modelo, ?OllamaStatus $status): array
+    private function ollamaRun(OllamaChannel $canal, OllamaSub $sub, ?OllamaModel $modelo, ?OllamaStatus $status, bool $pullConfirmado = false): array
     {
         if (!$canal->ensureDir()) {
             return ['Não deu para criar a pasta ' . $canal->dir() . '. Nada foi feito.', '', 1];
@@ -214,6 +220,16 @@ final class OllamaPage extends Page
                 return ['O Ollama não está respondendo em 127.0.0.1:11434. Inicie antes de baixar um modelo.', '', 1];
             }
 
+            $instalados = $canal->models();
+            $precisaConfirm = Ollama::pullNeedsConfirm($modelo, $instalados);
+            $semConfirm = Ollama::pullUnconfirmedRefusal($modelo, $instalados, $pullConfirmado);
+
+            if ($semConfirm !== null) {
+                $this->storeConfirmModel($modelo->value);
+
+                return [$semConfirm, '', 1];
+            }
+
             $vram = Ollama::vramRefusal($modelo, $status);
 
             if ($vram !== null) {
@@ -222,12 +238,17 @@ final class OllamaPage extends Page
 
             $canal->clearProgress(Ollama::F_PULL);
             $r = $canal->spawnChild('pull', Ollama::pullChild($modelo, $canal->dir() . DIRECTORY_SEPARATOR . Ollama::F_PULL));
+            $saida = $r->output ?? '';
+
+            if ($precisaConfirm && $pullConfirmado && Ollama::marker($saida, 'FILHO') === 'iniciado') {
+                $saida = ($saida === '' ? '' : $saida . "\n") . Ollama::REGISTRO_PULL_NOVO_CONFIRMADO;
+            }
 
             return [
                 Ollama::marker($r->output ?? '', 'FILHO') === 'iniciado'
                     ? 'Baixando o ' . $modelo->value . '. Acompanhe o progresso abaixo.'
                     : self::ollamaNotice($r),
-                $r->output ?? '',
+                $saida,
                 $r->exitCode ?? 1,
             ];
         }
@@ -239,5 +260,20 @@ final class OllamaPage extends Page
         });
 
         return [self::ollamaNotice($r), $r->output ?? '', $r->exitCode ?? 1];
+    }
+
+    private function storeConfirmModel(string $modelo): void
+    {
+        Csrf::start();
+        $_SESSION[self::SESSION_CONFIRM] = $modelo;
+    }
+
+    private function takeConfirmModel(): ?string
+    {
+        Csrf::start();
+        $modelo = $_SESSION[self::SESSION_CONFIRM] ?? null;
+        unset($_SESSION[self::SESSION_CONFIRM]);
+
+        return is_string($modelo) && OllamaModel::isValid($modelo) ? $modelo : null;
     }
 }

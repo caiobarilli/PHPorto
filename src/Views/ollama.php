@@ -180,6 +180,28 @@ if ($view->parte === OllamaView::PARTE_ESTADO) {
     </div>
   </form>
 </dialog>
+<?php if ($view->confirmPull()): ?>
+<?php $confirmNome = (string) $view->confirmModel; ?>
+<dialog id="modal-ollama-confirmar">
+  <form method="post" action="/ollama">
+    <div class="modal-corpo">
+      <h3>Baixar modelo sem tamanho conhecido?</h3>
+      <p>O tamanho e a VRAM necessária de <code><?= Respond::e($confirmNome) ?></code> são desconhecidos antes do download.</p>
+      <p><?= Respond::e($view->confirmVramText()) ?></p>
+      <p><?= Respond::e($view->confirmDiskText()) ?></p>
+      <p>Confira o tamanho na <a href="<?= Respond::e($view->confirmLibraryUrl()) ?>" target="_blank" rel="noopener noreferrer">página do modelo na biblioteca do Ollama</a>.</p>
+      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+      <input type="hidden" name="SubAction" value="pull">
+      <input type="hidden" name="Model" value="<?= Respond::e($confirmNome) ?>">
+      <input type="hidden" name="<?= Respond::e(Ollama::CONFIRM_PULL) ?>" value="1">
+    </div>
+    <div class="modal-acoes">
+      <button type="button" class="btn btn-ghost btn-sm" data-fechar>Cancelar</button>
+      <button type="submit" class="btn btn-sm" id="btn-ollama-confirmar-baixar">Baixar mesmo assim</button>
+    </div>
+  </form>
+</dialog>
+<?php endif; ?>
 <?php if ($baixando): ?>
 <script>
 setTimeout(function () { location.replace('/ollama'); }, 5000);
@@ -195,6 +217,9 @@ setTimeout(function () { location.replace('/ollama'); }, 5000);
     var modal = document.getElementById('modal-ollama-adicionar');
     if (modal && modal.showModal) { modal.showModal(); }
   });
+
+  var confirmar = document.getElementById('modal-ollama-confirmar');
+  if (confirmar && confirmar.showModal) { confirmar.showModal(); }
 
   if (!window.fetch || !window.DOMParser) { return; }
 
