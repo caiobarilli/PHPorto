@@ -60,7 +60,7 @@ final class WslPage extends Page
             maxUploadBytes: Upload::limit(),
         );
 
-        Respond::html('PHPorto — WSL', Respond::render('wsl.php', $view));
+        Respond::html('PHPorto — WSL', Respond::render('wsl.php', $view), $this->network);
     }
 
     private function handlePost(): never

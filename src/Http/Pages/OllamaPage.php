@@ -40,7 +40,7 @@ final class OllamaPage extends Page
             Respond::partial(Respond::render('ollama.php', $view));
         }
 
-        Respond::html('PHPorto — Ollama', Respond::render('ollama.php', $view));
+        Respond::html('PHPorto — Ollama', Respond::render('ollama.php', $view), $this->network);
     }
 
     public static function ollamaParte(mixed $valor): string

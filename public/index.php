@@ -15,6 +15,10 @@ use App\Http\Pages\PhpPage;
 use App\Http\Pages\WinPage;
 use App\Http\Pages\WslPage;
 use App\Http\Respond;
+use App\Network\LoginAttempts;
+use App\Network\LoginFlow;
+use App\Network\LoginAudit;
+use App\Network\Store as NetworkStore;
 use App\Php\C\CProcess;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
@@ -47,6 +51,8 @@ $app = require dirname(__DIR__) . '/src/bootstrap.php';
 mb_internal_encoding('UTF-8');
 
 $config = $app['config'];
+$filesDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'files';
+$network = (new NetworkStore($filesDir))->load();
 
 date_default_timezone_set($config['tz']);
 
@@ -65,11 +71,18 @@ if (!is_string($path) || $path === '') {
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $method = is_string($method) ? strtoupper($method) : 'GET';
 
-$recusa = Front::refusal($_SERVER, $path, $config['api_enabled']);
+$recusa = Front::refusal($_SERVER, $path, $config['api_enabled'], $network);
 
 if ($recusa !== null) {
     Front::refuse($recusa);
 }
+
+$makeService = Closure::fromCallable($app['makeService']);
+$networkLoginFlow = new LoginFlow(
+    new LoginAttempts($filesDir),
+    $network,
+    new LoginAudit($network, $makeService),
+);
 
 $auth = new Auth(
     $config['auth_token'],
@@ -77,17 +90,23 @@ $auth = new Auth(
 );
 
 if (str_starts_with($path, '/api/')) {
-    $senha   = $_SERVER['PHP_AUTH_PW'] ?? null;
-    $decisao = $auth->check(is_string($senha) ? $senha : null);
+    $password = $_SERVER['PHP_AUTH_PW'] ?? null;
+    $password = is_string($password) && $password !== '' ? $password : null;
+    $wait = $networkLoginFlow->before($_SERVER);
+
+    if ($wait !== null) {
+        Respond::authRefused($wait);
+    }
+
+    $decisao = $networkLoginFlow->check($auth, $password, $_SERVER)->decision;
 
     if ($decisao->outcome !== AuthOutcome::Allowed) {
         Respond::authRefused($decisao);
     }
 } else {
-    Login::guard($auth, $method);
+    Login::guard($auth, $method, $networkLoginFlow);
 }
 
-$filesDir    = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'files';
 $distro      = new Distro($config['wsl']['distro']);
 $makeService = Closure::fromCallable($app['makeService']);
 
@@ -135,6 +154,7 @@ $deps = [
     'terminal'      => new PsTerminalProcess($filesDir),
     'c'             => new CProcess($filesDir),
     'storageDir'    => dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage',
+    'network'       => $network,
 ];
 
 match ($path) {

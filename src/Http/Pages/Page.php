@@ -6,6 +6,7 @@ namespace App\Http\Pages;
 
 use App\Http\Csrf;
 use App\Php\C\CCompiler;
+use App\Network\State;
 use App\Services\ExecutionLogService;
 use App\Win\Elevation;
 use App\Win\HypervGate;
@@ -39,6 +40,7 @@ abstract class Page
         protected readonly PsTerminal $terminal,
         protected readonly CCompiler $c,
         protected readonly string $storageDir,
+        protected readonly State $network,
     ) {
     }
 

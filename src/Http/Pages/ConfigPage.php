@@ -79,7 +79,7 @@ final class ConfigPage extends Page
             wslDistro: $this->distroChecker->name(),
         );
 
-        Respond::html('PHPorto — configuração', Respond::render('config.php', $view));
+        Respond::html('PHPorto — configuração', Respond::render('config.php', $view), $this->network);
     }
 
     private function handleConfigPost(): never

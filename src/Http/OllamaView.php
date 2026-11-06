@@ -185,7 +185,7 @@ final readonly class OllamaView
         return 'O disco tem ' . $gb . ' GB livres (pasta dos modelos do Ollama).';
     }
 
-    public function confirmLibraryUrl(): string
+    public function confirmLibraryUrl(): ?string
     {
         if ($this->confirmModel === null || !OllamaModel::isValid($this->confirmModel)) {
             return 'https://ollama.com/library';

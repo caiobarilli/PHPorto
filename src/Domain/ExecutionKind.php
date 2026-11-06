@@ -11,6 +11,8 @@ enum ExecutionKind: string
 
     case Windows = 'windows';
 
+    case Rede = 'rede';
+
     public const WSL = [self::Comando, self::Anexo];
 
     public static function fromStorage(mixed $value): self

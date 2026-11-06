@@ -62,6 +62,19 @@ final class Auth
         return $this->fail($estado['falhas'], $agora);
     }
 
+    public function checkNetwork(?string $password): AuthDecision
+    {
+        if ($this->token === '') {
+            return new AuthDecision(AuthOutcome::NotConfigured);
+        }
+
+        if ($password === null) {
+            return new AuthDecision(AuthOutcome::Missing);
+        }
+
+        return new AuthDecision(hash_equals($this->token, $password) ? AuthOutcome::Allowed : AuthOutcome::Wrong);
+    }
+
     public function isConfigured(): bool
     {
         return $this->token !== '';

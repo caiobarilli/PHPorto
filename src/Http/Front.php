@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http;
 
+use App\Network\State;
+
 final class Front
 {
     public const DEFAULT_PORT = 4001;
@@ -46,17 +48,37 @@ final class Front
     /**
      * @param array<array-key, mixed> $server
      */
-    public static function hostAllowed(array $server): bool
+    public static function hostAllowed(array $server, ?State $network = null): bool
     {
         $host = $server['HTTP_HOST'] ?? null;
 
-        return is_string($host) && in_array($host, self::allowedHosts($server), true);
+        if (!is_string($host)) {
+            return false;
+        }
+
+        if (!self::isLoopback($server)) {
+            return $network?->accepts($server) === true && self::port($server) === $network->port && hash_equals($network->host(), $host);
+        }
+
+        return in_array($host, self::allowedHosts($server), true);
     }
 
     /**
      * @param array<array-key, mixed> $server
      */
-    public static function remoteAllowed(array $server): bool
+    public static function remoteAllowed(array $server, ?State $network = null): bool
+    {
+        if (self::isLoopback($server)) {
+            return true;
+        }
+
+        return $network?->accepts($server) === true;
+    }
+
+    /**
+     * @param array<array-key, mixed> $server
+     */
+    public static function isLoopback(array $server): bool
     {
         $ip = $server['REMOTE_ADDR'] ?? null;
 
@@ -89,13 +111,13 @@ final class Front
     /**
      * @param array<array-key, mixed> $server
      */
-    public static function refusal(array $server, string $path, bool $apiEnabled): ?int
+    public static function refusal(array $server, string $path, bool $apiEnabled, ?State $network = null): ?int
     {
-        if (!self::remoteAllowed($server)) {
+        if (!self::remoteAllowed($server, $network)) {
             return self::FORBIDDEN;
         }
 
-        if (!self::hostAllowed($server)) {
+        if (!self::hostAllowed($server, $network)) {
             return self::MISDIRECTED;
         }
 

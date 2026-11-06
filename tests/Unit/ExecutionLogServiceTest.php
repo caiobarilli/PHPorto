@@ -147,6 +147,17 @@ it('a lista do WSL lê e apaga comando e anexo, e deixa o Windows', function () 
         ->and($service->recent(100)[0]->kind)->toBe(ExecutionKind::Windows);
 });
 
+it('a limpeza do WSL não apaga os acessos de rede', function () {
+    $service = new ExecutionLogService(new FakeProvider());
+    $service->record(exec_('um comando'));
+    $service->record(exec_('rede login de fora', 0, ExecutionKind::Rede));
+
+    expect($service->clear(ExecutionKind::WSL))->toBe(1)
+        ->and($service->recent(100, ExecutionKind::WSL))->toHaveCount(0)
+        ->and($service->recent(100, [ExecutionKind::Rede]))->toHaveCount(1)
+        ->and($service->recent(100)[0]->kind)->toBe(ExecutionKind::Rede);
+});
+
 it('putWinState repassa e devolve com o updated_at carimbado', function () {
     $provider = new FakeProvider();
     $service  = new ExecutionLogService($provider);

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http;
 
+use App\Network\State;
+
 final class Respond
 {
     public static function e(?string $text): string
@@ -34,14 +36,14 @@ final class Respond
         return (string) ob_get_clean();
     }
 
-    public static function html(string $title, string $content): never
+    public static function html(string $title, string $content, ?State $network = null): never
     {
         header('Content-Type: text/html; charset=utf-8');
         header('X-Content-Type-Options: nosniff');
         header('Referrer-Policy: no-referrer');
         header('Cache-Control: no-store');
 
-        $view = new LayoutView($title, $content);
+        $view = new LayoutView($title, $content, $network);
         echo self::render('layout.php', $view);
         exit;
     }
