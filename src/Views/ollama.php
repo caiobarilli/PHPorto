@@ -91,16 +91,19 @@ ob_start();
 
   <section id="ollama-modelos">
     <h2>Modelos</h2>
+    <p>
+      <button type="button" class="btn btn-sm" id="btn-ollama-adicionar"<?= $view->canAddModel() ? '' : ' disabled' ?>>Adicionar novo</button>
+    </p>
     <table>
       <thead><tr><th>Modelo</th><th>Tamanho</th><th>VRAM mínima</th><th>Baixado</th><th></th></tr></thead>
       <tbody>
-      <?php foreach (OllamaModel::cases() as $m): ?>
+      <?php foreach (OllamaModel::recommended() as $m): ?>
         <?php $tem = isset($view->models[$m->value]); ?>
         <?php $mbt = $view->modelButtons($m->value); ?>
         <tr>
           <td><?= Respond::e($m->value) ?><?php if ($view->isLoaded($m->value)): ?> <span class="tag">carregado</span><?php endif; ?></td>
-          <td><?= $m->sizeMb() ?> MiB</td>
-          <td><?= $m->minVramMb() ?> MiB<?php if ($view->fitsInGpu($m->value) === false): ?><br><span class="dica">não cabe inteiro na GPU (usa a CPU também)</span><?php endif; ?></td>
+          <td><?= (int) $m->sizeMb() ?> MiB</td>
+          <td><?= (int) $m->minVramMb() ?> MiB<?php if ($view->fitsInGpu($m->value) === false): ?><br><span class="dica">não cabe inteiro na GPU (usa a CPU também)</span><?php endif; ?></td>
           <td><?= $view->models === null ? '—' : ($tem ? $mb($view->models[$m->value]) : 'não') ?></td>
           <td>
             <?= $form('pull', 'Baixar', $mbt['pull'], $m->value) ?>
@@ -108,17 +111,20 @@ ob_start();
           </td>
         </tr>
       <?php endforeach; ?>
+      <?php foreach ($view->extraModels() as $nome => $tamanho): ?>
+        <?php $mbt = $view->modelButtons($nome); ?>
+        <tr>
+          <td><code><?= Respond::e($nome) ?></code><?php if ($view->isLoaded($nome)): ?> <span class="tag">carregado</span><?php endif; ?></td>
+          <td><?= OllamaModel::sizeMbFromBytes($tamanho) ?> MiB</td>
+          <td><?= OllamaModel::minVramFromBytes($tamanho) ?> MiB<?php if ($view->fitsInGpu($nome) === false): ?><br><span class="dica">não cabe inteiro na GPU (usa a CPU também)</span><?php endif; ?></td>
+          <td><?= $mb($tamanho) ?></td>
+          <td>
+            <?= $form('remove', 'Remover', $mbt['remove'], $nome, 'btn btn-sm btn-danger') ?>
+          </td>
+        </tr>
+      <?php endforeach; ?>
       </tbody>
     </table>
-    <?php $extras = $view->extraModels(); ?>
-    <?php if ($extras !== []): ?>
-      <h3>Fora da lista</h3>
-      <ul id="ollama-modelos-fora">
-      <?php foreach ($extras as $nome => $tamanho): ?>
-        <li><code><?= Respond::e($nome) ?></code> — <?= $mb($tamanho) ?></li>
-      <?php endforeach; ?>
-      </ul>
-    <?php endif; ?>
     <?php if ($txtPull !== null): ?>
       <p class="dica" id="ollama-pull">Último download de modelo: <?= Respond::e($txtPull) ?></p>
     <?php endif; ?>
@@ -152,6 +158,28 @@ if ($view->parte === OllamaView::PARTE_ESTADO) {
 <?= $corpo ?>
   </div>
 </div>
+<dialog id="modal-ollama-adicionar">
+  <form method="post" action="/ollama">
+    <div class="modal-corpo">
+      <h3>Adicionar modelo</h3>
+      <p>
+        Digite o nome exato do modelo (por exemplo <code>gemma3:1b</code>).
+        Para procurar nomes, abra a
+        <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer">biblioteca do Ollama</a>.
+      </p>
+      <div class="campo">
+        <label for="ollama-modelo-novo">Nome</label>
+        <input type="text" id="ollama-modelo-novo" name="Model" required maxlength="128" spellcheck="false" autocomplete="off" placeholder="gemma3:1b" pattern="([a-z0-9]([a-z0-9._-]*[a-z0-9])?/)?([a-z0-9]([a-z0-9._-]*[a-z0-9])?/)?[a-z0-9]([a-z0-9._-]*[a-z0-9])?(:[a-z0-9]([a-z0-9._-]*[a-z0-9])?)?">
+      </div>
+      <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+      <input type="hidden" name="SubAction" value="pull">
+    </div>
+    <div class="modal-acoes">
+      <button type="button" class="btn btn-ghost btn-sm" data-fechar>Cancelar</button>
+      <button type="submit" class="btn btn-sm">Baixar</button>
+    </div>
+  </form>
+</dialog>
 <?php if ($baixando): ?>
 <script>
 setTimeout(function () { location.replace('/ollama'); }, 5000);
@@ -160,6 +188,13 @@ setTimeout(function () { location.replace('/ollama'); }, 5000);
 <script>
 (function () {
   'use strict';
+
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('#btn-ollama-adicionar');
+    if (!btn || btn.disabled) { return; }
+    var modal = document.getElementById('modal-ollama-adicionar');
+    if (modal && modal.showModal) { modal.showModal(); }
+  });
 
   if (!window.fetch || !window.DOMParser) { return; }
 

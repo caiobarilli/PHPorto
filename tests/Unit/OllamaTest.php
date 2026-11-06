@@ -11,16 +11,33 @@ use App\Win\OllamaSub;
 use App\Win\PsResult;
 use App\Win\PsScriptBuilder;
 
-it('aceita só os dois modelos da lista', function () {
-    expect(array_map(static fn (OllamaModel $m): string => $m->value, OllamaModel::cases()))
+it('a lista recomendada continua com os dois modelos conhecidos', function () {
+    expect(array_map(static fn (OllamaModel $m): string => $m->value, OllamaModel::recommended()))
         ->toBe(['qwen3:4b', 'llama3.2:3b']);
-    expect(OllamaModel::parse('qwen3:4b'))->toBe(OllamaModel::Qwen3);
-    expect(OllamaModel::parse('llama3.2:3b'))->toBe(OllamaModel::Llama32);
+    expect(OllamaModel::parse('qwen3:4b')->value)->toBe('qwen3:4b');
+    expect(OllamaModel::parse('llama3.2:3b')->value)->toBe('llama3.2:3b');
+    expect(OllamaModel::parse('gemma3:1b')->value)->toBe('gemma3:1b');
+    expect(OllamaModel::parse('library/phi3:mini')->value)->toBe('library/phi3:mini');
 });
 
-it('recusa modelo fora da lista', function (mixed $valor) {
+it('recusa nome de modelo inválido ou com injeção', function (mixed $valor) {
     expect(fn () => OllamaModel::parse($valor))->toThrow(InvalidArgumentException::class);
-})->with([['qwen3:8b'], ['llama3.2'], ['QWEN3:4B'], [' qwen3:4b'], ['qwen3:4b; rm'], [''], [null], [['qwen3:4b']], [42]]);
+})->with([
+    ['QWEN3:4B'],
+    [' qwen3:4b'],
+    ['qwen3:4b; rm'],
+    ['qwen3:4b$(reboot)'],
+    ['qwen3:4b`id`'],
+    ['../etc/passwd'],
+    ['a/b/c/d'],
+    ['model name'],
+    ['model\\tag'],
+    [''],
+    [null],
+    [['qwen3:4b']],
+    [42],
+    [str_repeat('a', 129)],
+]);
 
 it('aceita as oito subações e recusa o resto', function () {
     expect(array_map(static fn (OllamaSub $s): string => $s->value, OllamaSub::cases()))
@@ -97,10 +114,11 @@ it('recusa pull sem VRAM medida ou com VRAM pequena', function () {
     $gtx = OllamaStatus::parse("NIVEL=medio\nGPU=GTX 1650, 4096, 0\n");
     $pequena = OllamaStatus::parse("NIVEL=medio\nGPU=GT 710, 2048, 0\n");
 
-    expect(Ollama::vramRefusal(OllamaModel::Qwen3, $gtx))->toBeNull();
-    expect(Ollama::vramRefusal(OllamaModel::Llama32, $gtx))->toBeNull();
-    expect(Ollama::vramRefusal(OllamaModel::Llama32, $pequena))->not->toBeNull();
-    expect(Ollama::vramRefusal(OllamaModel::Qwen3, OllamaStatus::parse("NIVEL=medio\n")))->not->toBeNull();
+    expect(Ollama::vramRefusal(OllamaModel::parse('qwen3:4b'), $gtx))->toBeNull();
+    expect(Ollama::vramRefusal(OllamaModel::parse('llama3.2:3b'), $gtx))->toBeNull();
+    expect(Ollama::vramRefusal(OllamaModel::parse('llama3.2:3b'), $pequena))->not->toBeNull();
+    expect(Ollama::vramRefusal(OllamaModel::parse('qwen3:4b'), OllamaStatus::parse("NIVEL=medio\n")))->not->toBeNull();
+    expect(Ollama::vramRefusal(OllamaModel::parse('gemma3:1b'), $pequena))->toBeNull();
 });
 
 it('lê /api/tags e o progresso do pull e do download', function () {
@@ -114,7 +132,7 @@ it('lê /api/tags e o progresso do pull e do download', function () {
 
 it('o download e o pull filhos são PHP válido com os valores fixos', function () {
     $d = Ollama::downloadChild('C:\\x\\OllamaSetup.exe', 'C:\\x\\baixar.json');
-    $p = Ollama::pullChild(OllamaModel::Qwen3, 'C:\\x\\pull.json');
+    $p = Ollama::pullChild(OllamaModel::parse('qwen3:4b'), 'C:\\x\\pull.json');
 
     foreach ([$d, $p] as $codigo) {
         $f = tempnam(sys_get_temp_dir(), 'olc') . '.php';
