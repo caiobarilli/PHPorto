@@ -80,9 +80,23 @@ final readonly class OllamaModel
         return $this->value;
     }
 
-    public function libraryUrl(): string
+    public function libraryUrl(): ?string
     {
-        return 'https://ollama.com/library/' . $this->libraryPath();
+        $path = $this->libraryPath();
+
+        if (str_starts_with($path, 'library/')) {
+            return 'https://ollama.com/library/' . substr($path, strlen('library/'));
+        }
+
+        if (str_starts_with($path, 'hf.co/')) {
+            return 'https://huggingface.co/' . substr($path, strlen('hf.co/'));
+        }
+
+        if (str_contains($path, '/')) {
+            return null;
+        }
+
+        return 'https://ollama.com/library/' . $path;
     }
 
     public static function minVramFromBytes(int $bytes): int

@@ -120,12 +120,12 @@ it('o nome e o link da confirmação saem escapados na tela', function () {
 it('o link da biblioteca usa o nome sem a tag', function () {
     expect(OllamaModel::parse('gemma3:1b')->libraryPath())->toBe('gemma3')
         ->and(OllamaModel::parse('gemma3:1b')->libraryUrl())->toBe('https://ollama.com/library/gemma3')
-        ->and(OllamaModel::parse('library/mistral:7b')->libraryUrl())->toBe('https://ollama.com/library/library/mistral')
+        ->and(OllamaModel::parse('library/mistral:7b')->libraryUrl())->toBe('https://ollama.com/library/mistral')
         ->and(OllamaModel::parse('mistral')->libraryUrl())->toBe('https://ollama.com/library/mistral');
 
     $html = Respond::render('ollama.php', ollamaConfirmarView('phi3:mini'));
     expect($html)->toContain('href="https://ollama.com/library/phi3"')
-        ->and($html)->toContain('página do modelo na biblioteca do Ollama');
+        ->and($html)->toContain('página do modelo na origem');
 });
 
 it('modelsDir honra OLLAMA_MODELS e diskFreeBytes mede ou devolve null', function () {
@@ -171,3 +171,21 @@ it('o modal de confirmação fica fora do miolo que o sem-reload troca', functio
         ->and($estado)->toContain('id="ollama-leitura"')
         ->and($estado)->not->toContain('modal-ollama-confirmar');
 });
+
+it('liga huggingface e não inventa links para origens desconhecidas', function (string $modelo, ?string $url) {
+    expect(OllamaModel::parse($modelo)->libraryUrl())->toBe($url);
+
+    $html = Respond::render('ollama.php', ollamaConfirmarView($modelo));
+
+    if ($url === null) {
+        expect($html)->toContain('confira o tamanho na origem do modelo')
+            ->and($html)->toContain('id="modal-ollama-confirmar"')
+            ->and($html)->not->toContain('página do modelo na origem');
+    } else {
+        expect($html)->toContain('href="' . $url . '"');
+    }
+})->with([
+    'Hugging Face'                   => ['hf.co/org/model:q4_k_m', 'https://huggingface.co/org/model'],
+    'host desconhecido'              => ['example.com/org/model:1b', null],
+    'namespace fora da biblioteca'   => ['org/model:1b', null],
+]);

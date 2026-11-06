@@ -257,7 +257,11 @@ if ($view->parte === OllamaView::PARTE_ESTADO) {
       <p>O tamanho e a VRAM necessária de <code><?= Respond::e($confirmNome) ?></code> são desconhecidos antes do download.</p>
       <p><?= Respond::e($view->confirmVramText()) ?></p>
       <p><?= Respond::e($view->confirmDiskText()) ?></p>
-      <p>Confira o tamanho na <a href="<?= Respond::e($view->confirmLibraryUrl()) ?>" target="_blank" rel="noopener noreferrer">página do modelo na biblioteca do Ollama</a>.</p>
+      <?php if ($view->confirmLibraryUrl() !== null): ?>
+        <p>Confira o tamanho na <a href="<?= Respond::e($view->confirmLibraryUrl()) ?>" target="_blank" rel="noopener noreferrer">página do modelo na origem</a>.</p>
+      <?php else: ?>
+        <p>confira o tamanho na origem do modelo</p>
+      <?php endif; ?>
       <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
       <input type="hidden" name="SubAction" value="pull">
       <input type="hidden" name="Model" value="<?= Respond::e($confirmNome) ?>">
