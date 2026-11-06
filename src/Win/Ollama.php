@@ -268,12 +268,18 @@ final class Ollama
 
     public static function vramRefusal(OllamaModel $model, ?OllamaStatus $status): ?string
     {
+        $min = $model->minVramMb();
+
+        if ($min === null) {
+            return null;
+        }
+
         if ($status === null || $status->vramMb === null) {
             return 'Não deu para medir a memória da placa de vídeo. Nada foi baixado.';
         }
 
-        if ($status->vramMb < $model->minVramMb()) {
-            return 'O ' . $model->value . ' pede ' . $model->minVramMb() . ' MiB de memória de vídeo e a placa tem '
+        if ($status->vramMb < $min) {
+            return 'O ' . $model->value . ' pede ' . $min . ' MiB de memória de vídeo e a placa tem '
                 . $status->vramMb . ' MiB. Nada foi baixado.';
         }
 

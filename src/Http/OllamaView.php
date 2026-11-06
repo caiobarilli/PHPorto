@@ -106,7 +106,7 @@ final readonly class OllamaView
         $extras = [];
 
         foreach ($this->models as $name => $size) {
-            if (OllamaModel::tryFrom($name) === null) {
+            if (!OllamaModel::isRecommended($name)) {
                 $extras[$name] = $size;
             }
         }
@@ -122,14 +122,30 @@ final readonly class OllamaView
             return true;
         }
 
-        $modelo = OllamaModel::tryFrom($model);
         $st = $this->status;
 
-        if ($modelo === null || $st === null || $st->vramMb === null || $st->vramUsedMb === null) {
+        if ($st === null || $st->vramMb === null || $st->vramUsedMb === null) {
             return null;
         }
 
-        return $modelo->minVramMb() <= $st->vramMb - $st->vramUsedMb;
+        $min = null;
+
+        if (isset($this->models[$model]) && $this->models[$model] > 0) {
+            $min = OllamaModel::minVramFromBytes($this->models[$model]);
+        } else {
+            $min = (new OllamaModel($model))->minVramMb();
+        }
+
+        if ($min === null) {
+            return null;
+        }
+
+        return $min <= $st->vramMb - $st->vramUsedMb;
+    }
+
+    public function canAddModel(): bool
+    {
+        return $this->blocked === null && $this->version !== null && !$this->pulling();
     }
 
     public function versionMatch(): ?bool
