@@ -488,6 +488,32 @@ linha de comando equivalente, a saída, o código de saída e a duração, com a
 no fuso de `PHPORTO_TZ`. Senha e PIN do Sunshine aparecem como `***`. **Limpar histórico do Windows** apaga só os registros
 de tipo `windows`; o do WSL fica.
 
+## Iniciar com o Windows
+
+```bash
+php phporto autostart on
+php phporto autostart status
+php phporto autostart off
+```
+
+O `on` cria a tarefa `PHPorto` no Agendador de Tarefas, com UAC: dispara na
+inicialização, na sua conta, mesmo sem sessão aberta (logon S4U, sem guardar
+senha), sem nível elevado, e roda `php.exe <raiz>\phporto serve`. Reinicia em
+falha e não deixa uma segunda instância. Nenhuma senha passa pelo PHPorto.
+
+- **Independente da rede:** ligar o início não liga a rede privada, e desligar a
+  rede não desliga o início. O estado mora em `files/autostart.json`.
+- **Desligar:** `off` remove a tarefa e não derruba o servidor em execução. O
+  botão Parar agora da `/config` encerra o servidor iniciado pela tarefa.
+- **Sem ninguém na tela:** as ações que pedem UAC falham com o motivo, nunca
+  ficam penduradas. O firewall nunca é criado no boot.
+- **Se o IP da rede mudar:** o `serve` do boot sobe só o loopback e o motivo vai
+  para o histórico. Rode `php phporto network on` de novo.
+- **O `serve` se cuida:** reinicia o servidor que cair, com espera crescente e
+  teto de tentativas.
+
+Decisão em `.ai/adr/0012-iniciar-com-o-windows.md`.
+
 ## Onde as ações gravam
 
 | pasta | o quê |

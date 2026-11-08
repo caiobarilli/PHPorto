@@ -97,6 +97,14 @@ Opcionais, por recurso:
 
    E abra <http://127.0.0.1:4001>. O painel recusa conexões que não venham da própria máquina.
 
+## Iniciar com o Windows
+
+`php phporto autostart on` cria a tarefa `PHPorto` no Agendador (UAC): sobe o
+`php phporto serve` na inicialização, na sua conta, sem sessão aberta, sem nível
+elevado e sem guardar senha. `autostart off` remove a tarefa e `autostart status`
+mostra o estado. Também há a seção na `/config`. Não liga a rede privada. Detalhes
+em [docs/windows.md](docs/windows.md).
+
 ## Acesso pela rede privada
 
 Desligado de fábrica. `php phporto network on` (confirmação digitada, UAC para a
