@@ -17,3 +17,5 @@ Antes de qualquer rota, do login e da `/api/`, o front controller confere o `REM
 ## Consequência
 
 O painel não atende pela rede, mesmo que suba em `0.0.0.0`. Um proxy reverso na própria máquina passaria nesta checagem, porque o `REMOTE_ADDR` seria o dele; isso fica fora e cabe ao filtro de Host e ao token. Acesso remoto ao painel fica fora; para usar o Windows de longe existem o RDP e o Sunshine. Um IPv4 compatível (`::127.0.0.1`) é recusado de propósito.
+
+Exceção aprovada: o ADR 0011 abre a rede privada, opt-in e fail-closed. Fora dela, esta decisão segue valendo.

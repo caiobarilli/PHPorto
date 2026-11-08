@@ -97,6 +97,13 @@ Opcionais, por recurso:
 
    E abra <http://127.0.0.1:4001>. O painel recusa conexões que não venham da própria máquina.
 
+## Acesso pela rede privada
+
+Desligado de fábrica. `php phporto network on` (confirmação digitada, UAC para a
+regra de firewall no perfil Private) libera o painel para IPs da sua rede
+privada; `php phporto network status` mostra o estado e `php phporto network off`
+desliga. O HTTP não tem TLS. Detalhes em [docs/seguranca.md](docs/seguranca.md).
+
 ## Telas
 
 | rota | o que faz |
