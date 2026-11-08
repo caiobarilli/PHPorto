@@ -109,15 +109,15 @@ Describe 'bootstrap - o que veio do upstream' {
 
 Describe 'bootstrap - as acoes migradas' {
 
-    It 'actions/ tem as vinte e uma, e so elas' {
+    It 'actions/ tem as vinte e duas, e so elas' {
         $nomes = @(Get-ChildItem -Path (Join-Path $Script:PastaWin 'actions') -Filter 'Invoke-*.ps1' -File |
             Select-Object -ExpandProperty BaseName | Sort-Object)
 
-        $nomes.Count | Should -Be 21
+        $nomes.Count | Should -Be 22
         $nomes | Should -Be @(
             'Invoke-Audit', 'Invoke-Debloat', 'Invoke-DNS', 'Invoke-Exporter',
             'Invoke-Gdid', 'Invoke-GPU', 'Invoke-Hyperv', 'Invoke-HypervVm', 'Invoke-Install',
-            'Invoke-Memory', 'Invoke-Network', 'Invoke-OpenSsh', 'Invoke-Optimize', 'Invoke-Performance',
+            'Invoke-Memory', 'Invoke-NetFirewall', 'Invoke-Network', 'Invoke-OpenSsh', 'Invoke-Optimize', 'Invoke-Performance',
             'Invoke-PhpUpdate', 'Invoke-Processes', 'Invoke-Rdp', 'Invoke-SshKeys', 'Invoke-Sunshine', 'Invoke-Tweaks', 'Invoke-Wsl'
         )
     }
@@ -259,11 +259,11 @@ Describe 'bootstrap - despachante' {
             Should -Not -BeNullOrEmpty
     }
 
-    It 'o mapa conhece as vinte e tres acoes' {
+    It 'o mapa conhece as vinte e quatro acoes' {
         $chaves = @($global:PhportoWinActions.Keys | Sort-Object)
         $chaves | Should -Be @(
             'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
-            'memory', 'network', 'openssh', 'optimize', 'performance', 'php-update', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl', 'wsl-enable', 'wsl-install-distro'
+            'memory', 'net-firewall', 'network', 'openssh', 'optimize', 'performance', 'php-update', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl', 'wsl-enable', 'wsl-install-distro'
         )
     }
 

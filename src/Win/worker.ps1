@@ -130,6 +130,14 @@ $ALLOWLIST = @{
         'Distro' = @{ tipo = 'text'; max = 64; padrao = '\A[A-Za-z0-9][A-Za-z0-9._-]{0,63}\z' }
     }
 
+    'net-firewall' = @{
+        'SubAction' = @{ tipo = 'set'; valores = @('add', 'remove') }
+        'BindIp'    = @{ tipo = 'text'; max = 15; padrao = '\A(?:[0-9]{1,3}\.){3}[0-9]{1,3}\z' }
+        'Port'      = @{ tipo = 'int'; min = 1; max = 65535 }
+        'Allow'     = @{ tipo = 'text'; max = 512; padrao = '\A[0-9./]+(?:,[0-9./]+)*\z' }
+        'Program'   = @{ tipo = 'text'; max = 260; padrao = '\A[A-Za-z]:(?:\x5C(?!\.{1,2}(?:\x5C|\z))[^\x5C\x2F:*?"<>|\x00-\x1F]+)+\x5Cphp\.exe\z' }
+    }
+
     'php-update'  = @{
         'Version' = @{ tipo = 'text'; max = 10; padrao = '\A([0-9]{1,2})\.([0-9]{1,2})\.([0-9]{1,3})\z' }
         'Sha256'  = @{ tipo = 'text'; max = 64; min = 64; padrao = '\A[0-9a-f]{64}\z' }
@@ -149,6 +157,7 @@ $SENSIVEIS = @{
     'php-update' = '*'
     'wsl-enable' = '*'
     'wsl-install-distro' = '*'
+    'net-firewall' = '*'
 }
 
 $SEGREDOS = @{
