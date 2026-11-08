@@ -37,3 +37,11 @@ Não está no log. Os merges medidos saltam de `#2` (`9321917`) para `#4` (`ea0d
 ## Aspa curva no worker
 
 PR #1 (`a50824b`): parâmetro como dado; aspa tipográfica deixava de ser dado e virava código. Por isso a proibição de aspas tipográficas e travessão em string de `.ps1`.
+
+## php -S não define SERVER_ADDR
+
+O servidor embutido define `REMOTE_ADDR`, `SERVER_NAME` (o endereço do `-S`), `SERVER_PORT` e `HTTP_HOST`, mas não `SERVER_ADDR`. O `State::accepts` exigia `SERVER_ADDR`, e todo acesso pela rede levava 403. Os testes não pegaram porque montavam o `$_SERVER` à mão.
+
+Medido num `php -S` real: com `Host` forjado pelo cliente, o `SERVER_NAME` continua sendo o endereço de escuta. Por isso o endereço de escuta é `SERVER_ADDR` quando existe e, senão, `SERVER_NAME`, só valendo se for IPv4 igual ao `bind_ip`.
+
+Evidência: `tests/Integration/ServerVarsTest.php` (SAPI real); `State::listenerAddress`.
