@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Cli;
 
+use App\Autostart\History as AutostartHistory;
+use App\Autostart\Level;
 use App\Config\Config;
 use App\Network\History;
 use App\Network\Launcher;
@@ -23,8 +25,12 @@ final class Serve
     /** @var list<string> */
     private array $loopback = [];
 
+    /** @var Closure(): ?string */
+    private Closure $level;
+
     /**
      * @param (Closure(array<string, list<string>>, string, Closure(): list<string>, Closure(string, string, ?int): void, Closure(string): ?list<string>): int)|null $runner
+     * @param (Closure(): ?string)|null $level
      */
     public function __construct(
         private string $root,
@@ -33,8 +39,11 @@ final class Serve
         private ?Launcher $launcher = null,
         private ?History $history = null,
         private ?Store $store = null,
+        ?Closure $level = null,
+        private ?AutostartHistory $refusals = null,
     ) {
         $this->runner = $runner ?? Supervisor::run(...);
+        $this->level = $level ?? static fn (): ?string => Level::current();
     }
 
     /**
@@ -52,6 +61,15 @@ final class Serve
             $this->console->err("Argumento inesperado em serve.\n\n" . Help::for('serve'));
 
             return Status::USAGE;
+        }
+
+        $level = ($this->level)();
+
+        if (Level::elevated($level)) {
+            $this->console->err(self::refusalMessage($level));
+            $this->refusals?->record('serve recusado', 'nível de integridade ' . $level . ': o servidor não sobe elevado', false);
+
+            return Status::FAILURE;
         }
 
         $env = EnvReader::load($this->root, $this->console);
@@ -83,6 +101,14 @@ final class Serve
         $this->console->out('PHPorto em http://' . self::HOST . ':' . $port . "  (Ctrl+C encerra)\n");
 
         return ($this->runner)($children, $this->root, $this->tick(...), $this->event(...), $this->respawn(...));
+    }
+
+    public static function refusalMessage(?string $level): string
+    {
+        return 'Recusado: este processo roda em nível de integridade ' . ($level ?? 'alto') . " (elevado).\n"
+            . "O painel executa ações de administrador pelo UAC e, elevado, esse limite deixa de existir. O servidor não sobe.\n"
+            . "Inicie por um terminal comum (não elevado) ou pela tarefa do Agendador: schtasks /Run /TN PHPorto\n"
+            . "Uma sessão SSH de conta administradora é elevada: use a tarefa.\n";
     }
 
     /**

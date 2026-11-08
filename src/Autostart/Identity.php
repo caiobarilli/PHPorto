@@ -20,7 +20,7 @@ final readonly class Identity
      */
     public static function current(?Closure $whoami = null): ?self
     {
-        $output = ($whoami ?? self::runWhoami(...))();
+        $output = ($whoami ?? static fn (): ?string => self::whoami(['/user', '/fo', 'csv', '/nh']))();
 
         return $output === null ? null : self::parse($output);
     }
@@ -48,12 +48,20 @@ final readonly class Identity
         return preg_match('/' . self::SID_PATTERN . '/', $sid) === 1;
     }
 
-    private static function runWhoami(): ?string
+    /**
+     * @param list<string> $args
+     */
+    public static function whoami(array $args): ?string
     {
         try {
-            $nulo = DIRECTORY_SEPARATOR === chr(92) ? 'NUL' : '/dev/null';
+            $windows = DIRECTORY_SEPARATOR === chr(92);
+            $root = getenv('SystemRoot');
+            $exe = $windows && is_string($root) && $root !== '' && is_file($root . chr(92) . 'System32' . chr(92) . 'whoami.exe')
+                ? $root . chr(92) . 'System32' . chr(92) . 'whoami.exe'
+                : 'whoami';
+            $nulo = $windows ? 'NUL' : '/dev/null';
             $proc = proc_open(
-                ['whoami', '/user', '/fo', 'csv', '/nh'],
+                [$exe, ...$args],
                 [0 => ['file', $nulo, 'r'], 1 => ['pipe', 'w'], 2 => ['file', $nulo, 'w']],
                 $pipes,
             );

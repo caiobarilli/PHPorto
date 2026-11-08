@@ -32,6 +32,11 @@ final readonly class ConfigView
      * @param list<string> $networkAllow
      * @param bool $autostartEnabled
      * @param ?string $autostartUpdatedAt
+     * @param ?string $autostartPresence
+     * @param bool $autostartMatches
+     * @param ?string $autostartLogon
+     * @param ?string $autostartLevel
+     * @param ?string $autostartXmlPath
      */
     public function __construct(
         public string $provider,
@@ -63,6 +68,11 @@ final readonly class ConfigView
         public ?string $networkUpdatedAt = null,
         public bool $autostartEnabled = false,
         public ?string $autostartUpdatedAt = null,
+        public ?string $autostartPresence = null,
+        public bool $autostartMatches = false,
+        public ?string $autostartLogon = null,
+        public ?string $autostartLevel = null,
+        public ?string $autostartXmlPath = null,
     ) {
     }
 }

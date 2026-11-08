@@ -32,8 +32,8 @@ final class AutostartCommand
             return Status::OK;
         }
 
-        if (count($args) !== 1 || !in_array($args[0], ['on', 'off', 'status'], true)) {
-            $this->console->err("Use: php phporto autostart on|off|status\n\n" . Help::for('autostart'));
+        if (count($args) !== 1 || !in_array($args[0], ['on', 'off', 'status', 'restart'], true)) {
+            $this->console->err("Use: php phporto autostart on|off|status|restart\n\n" . Help::for('autostart'));
 
             return Status::USAGE;
         }
@@ -41,6 +41,7 @@ final class AutostartCommand
         return match ($args[0]) {
             'on' => $this->finish(($this->manager)()->enable()),
             'off' => $this->finish(($this->manager)()->disable()),
+            'restart' => $this->finish(($this->manager)()->restart()),
             default => $this->status(),
         };
     }
@@ -54,10 +55,12 @@ final class AutostartCommand
         $this->console->out('Tarefa do Agendador: ' . ($task->present() ? 'presente' : ($task->absent() ? 'ausente' : 'não foi possível ler')) . "\n");
 
         if ($task->present()) {
+            $this->console->out('Logon da tarefa: ' . ($task->logon() ?? 'desconhecido') . "\n");
             $this->console->out('Estado da tarefa: ' . ($task->state() ?? 'desconhecido') . "\n");
-            $this->console->out('Tarefa igual ao esperado (conta, php.exe, phporto serve, S4U, sem nível elevado, na inicialização): ' . ($report->matches ? 'sim' : 'não') . "\n");
+            $this->console->out('Tarefa igual ao esperado (conta, php.exe, phporto serve, logon com senha, sem nível elevado, na inicialização): ' . ($report->matches ? 'sim' : 'não') . "\n");
         }
 
+        $this->console->out('Nível do servidor (este processo): ' . ($report->level ?? 'não foi possível ler') . "\n");
         $this->console->out('Servidor responde no loopback: ' . ($report->serving ? 'sim' : 'não') . "\n");
 
         return Status::OK;

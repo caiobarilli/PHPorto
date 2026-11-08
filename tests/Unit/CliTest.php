@@ -42,7 +42,7 @@ function cliRun(string $root, array $args, string $input = '', ?Closure $runner 
     fwrite($in, $input);
     rewind($in);
     $console = new Console($in, $out, $err);
-    $serve = $runner === null ? null : static fn (): Serve => new Serve($root, $console, $runner);
+    $serve = $runner === null ? null : static fn (): Serve => new Serve($root, $console, $runner, null, null, null, static fn (): string => 'médio');
     $code = (new Main($root, $console, $serve))->run($args);
     rewind($out);
     rewind($err);
@@ -212,3 +212,47 @@ it('phporto fora do CLI responde 404 antes de carregar a aplicação', function 
     expect(strpos($fonte, "PHP_SAPI !== 'cli'"))->toBeLessThan((int) strpos($fonte, 'require $autoload'))
         ->and($fonte)->toContain('http_response_code(404)');
 });
+
+/**
+ * @return array{0: int, 1: string, 2: bool, 3: list<string>}
+ */
+function cliServeNivel(?string $nivel, array &$historico = []): array
+{
+    $root = cliRoot("PHPORTO_AUTH_TOKEN=x
+");
+    $err = fopen('php://memory', 'w+');
+    $console = new Console(fopen('php://memory', 'w+'), fopen('php://memory', 'w+'), $err);
+    $chamou = false;
+    $gravados = [];
+    $provider = new Tests\Fakes\FakeProvider();
+    $history = new App\Autostart\History(static fn (): App\Services\ExecutionLogService => new App\Services\ExecutionLogService($provider));
+    $serve = new Serve($root, $console, static function () use (&$chamou): int {
+        $chamou = true;
+
+        return 0;
+    }, null, null, null, static fn (): ?string => $nivel, $history);
+    $code = $serve->run([]);
+    rewind($err);
+    foreach ($provider->inserted as $e) {
+        $gravados[] = $e->command . ' ' . $e->output;
+    }
+    cliClean($root);
+
+    return [$code, (string) stream_get_contents($err), $chamou, $gravados];
+}
+
+it('serve recusa subir em nível alto ou de sistema, não sobe nada, e explica como iniciar', function (string $nivel) {
+    [$code, $err, $chamou, $gravados] = cliServeNivel($nivel);
+
+    expect($code)->toBe(Status::FAILURE)
+        ->and($chamou)->toBeFalse()
+        ->and($err)->toContain('Recusado')->toContain('nível de integridade ' . $nivel)->toContain('schtasks /Run /TN PHPorto')->toContain('terminal comum')->toContain('SSH')
+        ->and($gravados)->toHaveCount(1)
+        ->and($gravados[0])->toContain('serve recusado')->toContain($nivel);
+})->with(['alto', 'sistema']);
+
+it('serve sobe em nível médio ou baixo, e sem conseguir ler o nível', function (?string $nivel) {
+    [$code, $err, $chamou, $gravados] = cliServeNivel($nivel);
+
+    expect($code)->toBe(Status::OK)->and($chamou)->toBeTrue()->and($err)->not->toContain('Recusado')->and($gravados)->toBe([]);
+})->with(['médio', 'baixo', null]);

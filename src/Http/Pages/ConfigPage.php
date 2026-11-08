@@ -9,6 +9,7 @@ use App\Autostart\Identity;
 use App\Autostart\Manager as AutostartManager;
 use App\Autostart\Store as AutostartStore;
 use App\Autostart\Task as AutostartTask;
+use App\Autostart\TaskXml as AutostartTaskXml;
 use App\Config\Config;
 use App\Config\Flags;
 use App\Domain\Execution;
@@ -28,6 +29,7 @@ use App\Win\JobChannel;
 use App\Win\PsResult;
 use App\Win\WinAction;
 use App\Wsl\Distro;
+use Closure;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -65,6 +67,7 @@ final class ConfigPage extends Page
         $wslDistros = $wslEnabled ? $this->distroChecker->registered() : null;
 
         $autostart = new AutostartStore($this->filesDir);
+        $autostartReport = $this->autostartManager(static fn (int $port): bool => true)->report(0);
 
         $view = new ConfigView(
             provider: $provider === '' ? 'desconhecido' : $provider,
@@ -96,6 +99,11 @@ final class ConfigPage extends Page
             networkUpdatedAt: $this->network->updatedAt,
             autostartEnabled: $autostart->enabled(),
             autostartUpdatedAt: $autostart->updatedAt(),
+            autostartPresence: $autostartReport->task->present() ? 'presente' : ($autostartReport->task->absent() ? 'ausente' : null),
+            autostartMatches: $autostartReport->matches,
+            autostartLogon: $autostartReport->task->logon(),
+            autostartLevel: $autostartReport->level,
+            autostartXmlPath: is_file($this->autostartXmlPath()) ? $this->autostartXmlPath() : null,
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view), $this->network);
@@ -138,7 +146,7 @@ final class ConfigPage extends Page
             $this->handlePowerShellToggle(($_POST['ps_enabled'] ?? '') === '1');
         }
 
-        if (in_array($action, ['autostart-ligar', 'autostart-desligar', 'autostart-parar'], true)) {
+        if (in_array($action, ['autostart-ligar', 'autostart-desligar', 'autostart-parar', 'autostart-reiniciar'], true)) {
             $this->handleAutostart($action);
         }
 
@@ -439,10 +447,19 @@ final class ConfigPage extends Page
         ];
     }
 
-    private function handleAutostart(string $action): never
+    private function autostartXmlPath(): string
+    {
+        return $this->filesDir . DIRECTORY_SEPARATOR . AutostartTaskXml::FILE;
+    }
+
+    /**
+     * @param (Closure(int): bool)|null $responds
+     */
+    private function autostartManager(?Closure $responds = null): AutostartManager
     {
         $oneShot = $this->oneShot;
-        $gestor = new AutostartManager(
+
+        return new AutostartManager(
             new AutostartStore($this->filesDir),
             new AutostartTask($this->filesDir),
             static fn (WinAction $a, array $params, int $timeout): PsResult => $oneShot->dispatch($a, $params, $timeout),
@@ -450,11 +467,20 @@ final class ConfigPage extends Page
             dirname($this->filesDir),
             PHP_BINARY,
             Identity::current(),
+            $responds,
+            null,
+            $this->filesDir,
         );
+    }
+
+    private function handleAutostart(string $action): never
+    {
+        $gestor = $this->autostartManager();
 
         $result = match ($action) {
             'autostart-ligar' => $gestor->enable(),
             'autostart-desligar' => $gestor->disable(),
+            'autostart-reiniciar' => $gestor->restart(),
             default => $gestor->stopNow(),
         };
 

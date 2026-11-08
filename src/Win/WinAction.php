@@ -139,13 +139,9 @@ enum WinAction: string
 
     public const NET_FIREWALL_PROGRAM_MAX = 260;
 
-    public const AUTOSTART_SUBACTIONS = ['on', 'off', 'stop'];
-
-    public const AUTOSTART_SID_PATTERN = '\AS-1-5-21-[0-9]{1,10}-[0-9]{1,10}-[0-9]{1,10}-[0-9]{1,10}\z';
+    public const AUTOSTART_SUBACTIONS = ['off', 'stop', 'restart'];
 
     public const AUTOSTART_SCRIPT_PATTERN = '\A[A-Za-z]:(?:\x5C(?!\.{1,2}(?:\x5C|\z))[^\x5C\x2F:*?"<>|\x00-\x1F]+)+\x5Cphporto\z';
-
-    public const AUTOSTART_SID_MAX = 60;
 
     public const AUTOSTART_PATH_MAX = 260;
 
@@ -833,22 +829,7 @@ enum WinAction: string
             throw new InvalidArgumentException('Script não é o arquivo phporto de uma pasta local do Windows.');
         }
 
-        if ($sub === 'stop') {
-            return ['SubAction' => $sub, 'Script' => $script];
-        }
-
-        $sid = trim($input['Sid'] ?? '');
-        $programa = trim($input['Program'] ?? '');
-
-        if ($sid === '' || strlen($sid) > self::AUTOSTART_SID_MAX || preg_match('/' . self::AUTOSTART_SID_PATTERN . '/', $sid) !== 1) {
-            throw new InvalidArgumentException('Sid não é um SID de conta S-1-5-21.');
-        }
-
-        if ($programa === '' || strlen($programa) > self::NET_FIREWALL_PROGRAM_MAX || preg_match('/' . self::NET_FIREWALL_PROGRAM_PATTERN . '/', $programa) !== 1) {
-            throw new InvalidArgumentException('Program não é um php.exe local do Windows aceito.');
-        }
-
-        return ['SubAction' => $sub, 'Sid' => $sid, 'Program' => $programa, 'Script' => $script];
+        return ['SubAction' => $sub, 'Script' => $script];
     }
 
     /**

@@ -84,12 +84,16 @@ Uso:
   php phporto autostart on
   php phporto autostart off
   php phporto autostart status
+  php phporto autostart restart
 
-on      Cria a tarefa PHPorto no Agendador de Tarefas (UAC): dispara na inicialização do
-        Windows, na conta do próprio usuário, sem precisar de sessão aberta (logon S4U),
-        sem nível elevado, e roda php.exe <raiz>\phporto serve. Reinicia em falha e não
-        deixa uma segunda instância. Nenhuma senha é lida, recebida ou guardada.
-        Não liga a rede privada. Repetir não muda nada.
+on      Gera o XML da tarefa PHPorto (files/PHPorto-tarefa.xml): dispara na inicialização
+        do Windows, na conta do próprio usuário, com logon por senha ("com ou sem usuário
+        conectado") e sem nível elevado. Você importa o XML no taskschd.msc, e o diálogo
+        do Windows pede a senha: o PHPorto nunca lê, recebe nem guarda a senha. Uma tarefa
+        antiga com outro logon (S4U) é removida antes (UAC). Não liga a rede privada.
+        Repetir com a tarefa já correta não muda nada.
+restart Encerra o servidor e roda a tarefa de novo (UAC). Serve para depois de uma
+        atualização, sem terminal.
 off     Remove a tarefa (UAC). Pode ser repetido sem erro. Não derruba o servidor que
         estiver rodando e não mexe na rede privada.
 status  Só leitura: o estado guardado, a tarefa do Agendador e se o servidor responde.

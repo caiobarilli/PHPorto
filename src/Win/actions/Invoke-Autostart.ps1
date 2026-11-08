@@ -162,56 +162,11 @@ function Stop-PhportoTree {
 function Invoke-Autostart {
     param(
         [string]$SubAction,
-        [string]$Sid,
-        [string]$Program,
         [string]$Script
     )
 
     $taskName = 'PHPorto'
-    $opcoes   = 'on, off, stop'
-
-    function Test-AutostartPaths {
-        if ([string]::IsNullOrWhiteSpace($Program) -or [IO.Path]::GetFileName($Program) -ne 'php.exe' -or -not (Test-Path -LiteralPath $Program -PathType Leaf)) {
-            Write-Status ERROR "Program is not an existing php.exe: '$Program'."
-            return $false
-        }
-        if ([string]::IsNullOrWhiteSpace($Script) -or [IO.Path]::GetFileName($Script) -ne 'phporto' -or -not (Test-Path -LiteralPath $Script -PathType Leaf)) {
-            Write-Status ERROR "Script is not an existing phporto file: '$Script'."
-            return $false
-        }
-        return $true
-    }
-
-    function Test-AutostartUser {
-        if ([string]::IsNullOrWhiteSpace($Sid) -or $Sid -notmatch '\AS-1-5-21-[0-9]{1,10}-[0-9]{1,10}-[0-9]{1,10}-[0-9]{1,10}\z') {
-            Write-Status ERROR "Sid is not an account SID. Nothing was created."
-            return $false
-        }
-        $atual = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-        if ($Sid -cne $atual) {
-            Write-Status ERROR "Sid does not match the account of this process. Nothing was created."
-            return $false
-        }
-        return $true
-    }
-
-    function Enable-AutostartTask {
-        if (-not (Test-AutostartPaths)) { return }
-        if (-not (Test-AutostartUser)) { return }
-
-        try {
-            $action    = New-ScheduledTaskAction -Execute $Program -Argument ('"' + $Script + '" serve') -WorkingDirectory (Split-Path -Parent $Script)
-            $trigger   = New-ScheduledTaskTrigger -AtStartup
-            $settings  = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
-                -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-            $conta     = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-            $principal = New-ScheduledTaskPrincipal -UserId $conta -LogonType S4U -RunLevel Limited
-            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-            Write-Status OK "Scheduled task '$taskName' registered (at startup, $conta, S4U, RunLevel Limited, no password stored)."
-        } catch {
-            Write-Status ERROR "Failed to register scheduled task: $($_.Exception.Message)"
-        }
-    }
+    $opcoes   = 'off, stop, restart'
 
     function Disable-AutostartTask {
         try {
@@ -248,15 +203,40 @@ function Invoke-Autostart {
         }
     }
 
+    function Restart-AutostartTask {
+        if ([string]::IsNullOrWhiteSpace($Script) -or [IO.Path]::GetFileName($Script) -ne 'phporto') {
+            Write-Status ERROR "Script is not a phporto file: '$Script'."
+            return
+        }
+
+        try {
+            $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+            if (-not $task) {
+                Write-Status ERROR "Scheduled task '$taskName' does not exist. Nothing was stopped."
+                return
+            }
+
+            $busca = Find-PhportoServe -Script $Script
+            foreach ($id in $busca.Ids) {
+                Stop-PhportoTree -ProcessId $id
+            }
+            Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+            Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+            Write-Status OK "Server restarted by the task ($($busca.Ids.Count) process tree(s) stopped). $($busca.SemConfirmar) php.exe process(es) could not be confirmed and were left alone."
+        } catch {
+            Write-Status ERROR "Failed to restart the server by the task: $($_.Exception.Message)"
+        }
+    }
+
     if (-not $SubAction) {
         Write-Status ERROR "SubAction required. Options: $opcoes"
         return
     }
 
     switch ($SubAction) {
-        'on'    { Enable-AutostartTask }
         'off'   { Disable-AutostartTask }
         'stop'  { Stop-AutostartTask }
+        'restart' { Restart-AutostartTask }
         default { Write-Status ERROR "Unknown subaction '$SubAction'. Options: $opcoes" }
     }
 }

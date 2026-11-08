@@ -200,27 +200,46 @@ use App\Wsl\Distro;
       Estado: <strong><?= $view->autostartEnabled ? 'ligado' : 'desligado' ?></strong><?php if ($view->autostartUpdatedAt !== null): ?>
         desde <strong><?= Respond::e(Respond::dateTime($view->autostartUpdatedAt, $view->tz)) ?></strong><?php endif; ?>.
       Ligado, o Agendador de Tarefas sobe o <code>php phporto serve</code> na inicialização do Windows, na sua
-      conta, mesmo sem sessão aberta, sem nível elevado e sem guardar senha. É independente da rede privada:
-      ligar um não liga o outro. Pelo terminal: <code>php phporto autostart on|off|status</code>.
+      conta, mesmo sem sessão aberta e sem nível elevado. É independente da rede privada: ligar um não liga o outro.
+      Pelo terminal: <code>php phporto autostart on|off|status|restart</code>.
     </p>
 
+    <ul class="nota-estado" id="iniciar-situacao">
+      <li>Tarefa no Agendador: <strong><?= Respond::e($view->autostartPresence ?? 'não foi possível ler') ?></strong><?php if ($view->autostartPresence === 'presente'): ?>,
+        <?= $view->autostartMatches ? 'como o esperado' : 'diferente do esperado' ?><?php endif; ?>.</li>
+      <?php if ($view->autostartLogon !== null): ?>
+        <li>Logon da tarefa: <strong><?= Respond::e($view->autostartLogon) ?></strong><?php if (strtolower($view->autostartLogon) === 's4u'): ?>
+          (antigo: numa conta administradora sobe elevado; clique em Ligar para substituir)<?php endif; ?>.</li>
+      <?php endif; ?>
+      <li>Nível em que o servidor roda: <strong><?= Respond::e($view->autostartLevel ?? 'não foi possível ler') ?></strong><?php if ($view->autostartLevel === 'alto' || $view->autostartLevel === 'sistema'): ?>
+        (elevado: o <code>php phporto serve</code> recusa subir assim)<?php endif; ?>.</li>
+    </ul>
+
     <div class="linha-acao">
-      <?php foreach ([['autostart-ligar', 'Ligar', 'btn-sm'], ['autostart-desligar', 'Desligar', 'btn-sm'], ['autostart-parar', 'Parar agora', 'btn-danger btn-sm']] as [$valor, $rotulo, $classe]): ?>
+      <?php foreach ([
+        ['autostart-ligar', 'Ligar', 'btn-sm', $view->autostartMatches],
+        ['autostart-desligar', 'Desligar', 'btn-sm', $view->autostartPresence === 'ausente'],
+        ['autostart-reiniciar', 'Reiniciar o servidor pela tarefa', 'btn-sm', $view->autostartPresence === 'ausente'],
+        ['autostart-parar', 'Parar agora', 'btn-danger btn-sm', false],
+      ] as [$valor, $rotulo, $classe, $desativado]): ?>
         <form method="post" id="form-<?= Respond::e($valor) ?>" data-sem-reload>
           <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
           <input type="hidden" name="acao" value="<?= Respond::e($valor) ?>">
-          <button type="submit" class="btn <?= Respond::e($classe) ?>" id="btn-<?= Respond::e($valor) ?>"><?= Respond::e($rotulo) ?></button>
+          <button type="submit" class="btn <?= Respond::e($classe) ?>" id="btn-<?= Respond::e($valor) ?>"<?= $desativado ? ' disabled' : '' ?>><?= Respond::e($rotulo) ?></button>
         </form>
       <?php endforeach; ?>
     </div>
 
     <p class="nota-estado">
-      Ligar e desligar pedem o UAC (a tarefa é criada ou removida com privilégio, mas roda sem). Sem alguém na
-      frente da tela, o UAC não é respondido e a ação falha com o motivo. <strong>Parar agora</strong> encerra
-      qualquer <code>php phporto serve</code> deste projeto, inclusive um aberto à mão; desligar só remove a tarefa e não derruba o servidor em execução.
+      <strong>Ligar</strong> não cria a tarefa sozinho: gera o XML<?php if ($view->autostartXmlPath !== null): ?> (<code><?= Respond::e($view->autostartXmlPath) ?></code>)<?php endif; ?>
+      e você o importa no Agendador de Tarefas (<code>taskschd.msc</code>, como administrador, Ação, Importar Tarefa).
+      A <strong>senha da conta é pedida só pelo diálogo do Windows</strong>; o PHPorto nunca a vê, lê ou guarda.
+      Se já existe uma tarefa antiga, ela é removida antes, com o UAC. <strong>Desligar</strong> remove a tarefa (UAC) e não derruba o
+      servidor em execução. <strong>Reiniciar o servidor pela tarefa</strong> encerra o servidor e roda a tarefa de novo (UAC): o painel
+      fica fora do ar por alguns segundos. <strong>Parar agora</strong> encerra qualquer <code>php phporto serve</code> deste
+      projeto, inclusive um aberto à mão. Sem alguém na frente da tela, o UAC não é respondido e a ação falha com o motivo.
     </p>
   </section>
-
   <?php if (!$view->wslEnabled): ?>
     <section id="wsl">
       <h2>WSL</h2>

@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 use App\Autostart\History;
 use App\Autostart\Identity;
+use App\Autostart\Level;
 use App\Autostart\Manager;
 use App\Autostart\Store;
 use App\Autostart\Task;
 use App\Autostart\TaskObservation;
+use App\Autostart\TaskXml;
 use App\Cli\Console;
 use App\Cli\Main;
 use App\Cli\Status;
@@ -21,12 +23,12 @@ const ASM_SID = 'S-1-5-21-1111111111-2222222222-3333333333-1001';
 const ASM_NAME = 'DESKTOP\\dev';
 const ASM_PHP = 'C:\\php\\php.exe';
 const ASM_ROOT = 'C:\\Users\\dev\\code\\PHPorto';
-const ASM_TASK_OK = "TASK=presente\nSTATE=Ready\nUSER=WORKGROUP\\dev\nSID=S-1-5-21-1111111111-2222222222-3333333333-1001\nLOGON=S4U\nRUNLEVEL=Limited\nEXEC=C:\\php\\php.exe\nARGS=\"C:\\Users\\dev\\code\\PHPorto\\phporto\" serve\nTRIGGERS=MSFT_TaskBootTrigger\n";
+const ASM_TASK_OK = "TASK=presente\nSTATE=Ready\nUSER=WORKGROUP\\dev\nSID=S-1-5-21-1111111111-2222222222-3333333333-1001\nLOGON=Password\nRUNLEVEL=Limited\nEXEC=C:\\php\\php.exe\nARGS=\"C:\\Users\\dev\\code\\PHPorto\\phporto\" serve\nTRIGGERS=MSFT_TaskBootTrigger\n";
 
 /**
  * @return array{dir: string, provider: FakeProvider, calls: ArrayObject<int, array<string, mixed>>, store: Store, manager: Manager, probes: ArrayObject<int, string>}
  */
-function asManager(string $probe = 'TASK=ausente', bool $uac = true, string $dispatchOutput = "[ OK ] feito\n", bool $serving = false): array
+function asManager(string $probe = 'TASK=ausente', bool $uac = true, string $dispatchOutput = "[ OK ] feito\n", bool $serving = false, ?string $level = 'médio'): array
 {
     $dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto-asm-' . bin2hex(random_bytes(5));
     mkdir($dir);
@@ -55,6 +57,8 @@ function asManager(string $probe = 'TASK=ausente', bool $uac = true, string $dis
         ASM_PHP,
         new Identity(ASM_NAME, ASM_SID),
         static fn (int $port): bool => $serving,
+        static fn (): ?string => $level,
+        $dir,
     );
 
     return ['dir' => $dir, 'provider' => $provider, 'calls' => $calls, 'store' => $store, 'manager' => $manager, 'probes' => $probes];
@@ -71,68 +75,172 @@ function asClean(string $dir): void
     rmdir($dir);
 }
 
-it('ligar cria a tarefa uma vez, grava o estado próprio e registra sem segredo', function () {
+it('ligar gera o XML para importar, não cria a tarefa, não pede UAC e não liga o estado', function () {
     $a = asManager();
     $r = $a['manager']->enable();
+    $xml = $a['dir'] . DIRECTORY_SEPARATOR . TaskXml::FILE;
 
     expect($r->ok)->toBeTrue()
-        ->and($a['store']->enabled())->toBeTrue()
-        ->and($a['calls']->getArrayCopy())->toBe([[
-            'SubAction' => 'on', 'Sid' => ASM_SID, 'Program' => ASM_PHP, 'Script' => ASM_ROOT . '\\phporto',
-        ]])
-        ->and(array_map(static fn ($e): string => $e->command, $a['provider']->inserted))->toBe(['iniciar com o Windows ligado'])
-        ->and(implode("\n", array_map(static fn ($e): string => $e->output, $a['provider']->inserted)))->not->toMatch('/senha|password|credential|token/i')
-        ->and(implode("\n", $r->lines))->not->toMatch('/senha|password|credential/i');
+        ->and(count($a['calls']))->toBe(0)
+        ->and($a['store']->enabled())->toBeFalse()
+        ->and(is_file($xml))->toBeTrue()
+        ->and($a['manager']->xmlPath())->toBe($xml)
+        ->and(implode(' ', $r->lines))->toContain('ainda NÃO está criada')->toContain('taskschd.msc')->toContain('nunca pelo PHPorto')
+        ->and(array_map(static fn ($e): string => $e->command, $a['provider']->inserted))->toBe(['iniciar com o Windows XML da tarefa gerado'])
+        ->and(implode(' ', array_map(static fn ($e): string => $e->output, $a['provider']->inserted)))->not->toMatch('/senha|password|credential|token/i');
+
+    $doc = new DOMDocument();
+    expect($doc->loadXML((string) file_get_contents($xml)))->toBeTrue();
 
     asClean($a['dir']);
 });
 
-it('ligar é idempotente: com a tarefa já igual ao esperado não pede UAC', function () {
+it('o XML da tarefa: SID, logon com senha, nível limitado, disparo no boot, php.exe e phporto serve, sem nenhuma senha', function () {
+    $texto = TaskXml::decode(TaskXml::build(ASM_SID, ASM_PHP, ASM_ROOT . DIRECTORY_SEPARATOR . 'phporto'));
+    $xml = simplexml_load_string(str_replace('encoding="UTF-16"', 'encoding="UTF-8"', $texto));
+
+    expect($xml)->not->toBeFalse();
+
+    $ns = $xml->children('http://schemas.microsoft.com/windows/2004/02/mit/task');
+    $principal = $ns->Principals->Principal;
+    $exec = $ns->Actions->Exec;
+
+    expect((string) $principal->UserId)->toBe(ASM_SID)
+        ->and((string) $principal->LogonType)->toBe('Password')
+        ->and((string) $principal->RunLevel)->toBe('LeastPrivilege')
+        ->and(isset($ns->Triggers->BootTrigger))->toBeTrue()
+        ->and((string) $exec->Command)->toBe(ASM_PHP)
+        ->and((string) $exec->Arguments)->toBe('"' . ASM_ROOT . DIRECTORY_SEPARATOR . 'phporto" serve')
+        ->and((string) $exec->WorkingDirectory)->toBe(ASM_ROOT)
+        ->and((string) $ns->Settings->MultipleInstancesPolicy)->toBe('IgnoreNew')
+        ->and((string) $ns->Settings->RestartOnFailure->Count)->toBe('3')
+        ->and($texto)->not->toContain('S4U')->not->toContain('Highest')->not->toMatch('/<Password>/i');
+});
+
+it('o XML escapa o que vem de caminho e começa com BOM UTF-16', function () {
+    $bruto = TaskXml::build(ASM_SID, 'C:' . chr(92) . 'a&b' . chr(92) . 'php.exe', 'C:' . chr(92) . 'x<y' . chr(92) . 'phporto');
+    $texto = TaskXml::decode($bruto);
+
+    expect(substr($bruto, 0, 2))->toBe("\xFF\xFE")
+        ->and($texto)->toContain('a&amp;b')->toContain('x&lt;y')->not->toContain('a&b' . chr(92));
+});
+
+it('ligar é idempotente: com a tarefa já igual ao esperado não pede UAC nem gera XML', function () {
     $a = asManager(ASM_TASK_OK);
     $r = $a['manager']->enable();
 
     expect($r->ok)->toBeTrue()
         ->and(count($a['calls']))->toBe(0)
+        ->and(is_file($a['manager']->xmlPath()))->toBeFalse()
         ->and($a['store']->enabled())->toBeTrue()
         ->and(implode(' ', $r->lines))->toContain('já estava ligado');
 
     asClean($a['dir']);
 });
 
-it('ligar com a tarefa diferente do esperado recria a tarefa', function (string $probe) {
+it('ligar com a tarefa diferente (S4U, elevada, outro php, sem boot) a remove com UAC antes de gerar o XML', function (string $probe) {
     $a = asManager($probe);
+    $a['store']->set(true);
+    $r = $a['manager']->enable();
 
-    expect($a['manager']->enable()->ok)->toBeTrue()->and(count($a['calls']))->toBe(1);
+    expect($r->ok)->toBeTrue()
+        ->and($a['calls']->getArrayCopy())->toBe([['SubAction' => 'off']])
+        ->and($a['store']->enabled())->toBeFalse()
+        ->and(is_file($a['manager']->xmlPath()))->toBeTrue()
+        ->and(implode(' ', $r->lines))->toContain('foi removida para ser substituída');
 
     asClean($a['dir']);
 })->with([
+    'logon S4U (a antiga)' => [str_replace('LOGON=Password', 'LOGON=S4U', ASM_TASK_OK)],
     'nível elevado' => [str_replace('Limited', 'Highest', ASM_TASK_OK)],
-    'outro logon' => [str_replace('S4U', 'Password', ASM_TASK_OK)],
     'outro programa' => [str_replace('C:\\php\\php.exe', 'C:\\x\\php.exe', ASM_TASK_OK)],
     'sem disparo no boot' => [str_replace('MSFT_TaskBootTrigger', 'MSFT_TaskLogonTrigger', ASM_TASK_OK)],
-    'leitura falhou' => ['TASK=erro'],
+    'outro SID' => [str_replace('1001', '1002', ASM_TASK_OK)],
 ]);
 
-it('ligar com o UAC recusado falha fechado, com o motivo, sem gravar o estado', function () {
-    $a = asManager(uac: false);
+it('ligar sem conseguir ler a tarefa só gera o XML', function () {
+    $a = asManager('TASK=erro');
+
+    expect($a['manager']->enable()->ok)->toBeTrue()->and(count($a['calls']))->toBe(0)->and(is_file($a['manager']->xmlPath()))->toBeTrue();
+
+    asClean($a['dir']);
+});
+
+it('ligar com o UAC recusado ao remover a tarefa antiga falha fechado, sem XML e sem mexer no estado', function () {
+    $a = asManager(str_replace('LOGON=Password', 'LOGON=S4U', ASM_TASK_OK), uac: false);
+    $a['store']->set(true);
     $r = $a['manager']->enable();
 
     expect($r->ok)->toBeFalse()
-        ->and(implode(' ', $r->lines))->toContain('recusou o UAC')
-        ->and($a['store']->enabled())->toBeFalse()
-        ->and($a['provider']->inserted[0]->command)->toBe('iniciar com o Windows ligar falhou')
+        ->and(implode(' ', $r->lines))->toContain('recusou o UAC')->toContain('S4U')
+        ->and($a['store']->enabled())->toBeTrue()
+        ->and(is_file($a['manager']->xmlPath()))->toBeFalse()
+        ->and($a['provider']->inserted[0]->command)->toBe('iniciar com o Windows substituir falhou')
         ->and($a['provider']->inserted[0]->exitCode)->toBe(1);
 
     asClean($a['dir']);
 });
 
-it('ligar com a ação devolvendo erro ou sem confirmação falha', function (string $saida) {
-    $a = asManager(dispatchOutput: $saida);
+it('ligar com a remoção devolvendo erro ou sem confirmação falha sem gerar XML', function (string $saida) {
+    $a = asManager(str_replace('LOGON=Password', 'LOGON=S4U', ASM_TASK_OK), dispatchOutput: $saida);
 
-    expect($a['manager']->enable()->ok)->toBeFalse()->and($a['store']->enabled())->toBeFalse();
+    expect($a['manager']->enable()->ok)->toBeFalse()->and(is_file($a['manager']->xmlPath()))->toBeFalse();
 
     asClean($a['dir']);
 })->with(['erro' => ["[ ERROR ] sem acesso\n"], 'sem marca' => ["nada\n"]]);
+
+it('ligar sem SID legível ou com caminho fora do formato falha e nada é criado', function () {
+    $a = asManager();
+    $sem = new Manager($a['store'], new Task($a['dir'], static fn (): string => 'TASK=ausente'), static fn (): PsResult => new PsResult('', 0, false, 1), new History(static fn (): ExecutionLogService => new ExecutionLogService($a['provider'])), ASM_ROOT, ASM_PHP, null, null, null, $a['dir']);
+    $fora = new Manager($a['store'], new Task($a['dir'], static fn (): string => 'TASK=ausente'), static fn (): PsResult => new PsResult('', 0, false, 1), new History(static fn (): ExecutionLogService => new ExecutionLogService($a['provider'])), ASM_ROOT, 'C:' . chr(92) . 'x' . chr(92) . 'notepad.exe', new Identity(ASM_NAME, ASM_SID), null, null, $a['dir']);
+
+    expect($sem->enable()->ok)->toBeFalse()->and(implode(' ', $sem->enable()->lines))->toContain('SID')
+        ->and($fora->enable()->ok)->toBeFalse()
+        ->and(is_file($a['manager']->xmlPath()))->toBeFalse();
+
+    asClean($a['dir']);
+});
+
+it('reiniciar pela tarefa pede a ação restart com o script, registra, e recusa sem tarefa', function () {
+    $a = asManager(ASM_TASK_OK);
+    $r = $a['manager']->restart();
+
+    expect($r->ok)->toBeTrue()
+        ->and($a['calls']->getArrayCopy())->toBe([['SubAction' => 'restart', 'Script' => ASM_ROOT . '\\phporto']])
+        ->and($a['provider']->inserted[0]->command)->toBe('iniciar com o Windows reiniciado pela tarefa')
+        ->and(implode(' ', $r->lines))->toContain('fora do ar');
+
+    asClean($a['dir']);
+
+    $b = asManager('TASK=ausente');
+    $r2 = $b['manager']->restart();
+
+    expect($r2->ok)->toBeFalse()->and(count($b['calls']))->toBe(0)->and(implode(' ', $r2->lines))->toContain('Não há tarefa');
+
+    asClean($b['dir']);
+
+    $c = asManager(ASM_TASK_OK, uac: false);
+
+    expect($c['manager']->restart()->ok)->toBeFalse();
+
+    asClean($c['dir']);
+});
+
+it('o nível de integridade vem do SID S-1-16 do whoami /groups', function (string $saida, ?string $esperado, bool $elevado) {
+    expect(Level::parse($saida))->toBe($esperado)->and(Level::elevated($esperado))->toBe($elevado);
+})->with([
+    'médio' => ['"Mandatory Label\\Medium Mandatory Level","Label","S-1-16-8192",""', 'médio', false],
+    'médio em pt-BR' => ['"Rótulo Obrigatório\\Nível Obrigatório Médio","Rótulo","S-1-16-8192",""', 'médio', false],
+    'alto' => ['"x","Label","S-1-16-12288",""', 'alto', true],
+    'sistema' => ['"x","Label","S-1-16-16384",""', 'sistema', true],
+    'baixo' => ['"x","Label","S-1-16-4096",""', 'baixo', false],
+    'sem rótulo' => ['"Todos","Well-known group","S-1-1-0",""', null, false],
+]);
+
+it('o nível lido da saída injetada e sem leitura', function () {
+    expect(Level::current(static fn (): string => '"x","Label","S-1-16-12288",""'))->toBe('alto')
+        ->and(Level::current(static fn (): ?string => null))->toBeNull();
+});
 
 it('desligar remove a tarefa e é idempotente', function () {
     $a = asManager(ASM_TASK_OK);
@@ -175,6 +283,7 @@ it('ligar o início com o Windows não liga a rede, e desligar a rede não desli
     $network = new NetworkStore($a['dir'], static fn (): string => '2026-11-07T10:00:00+00:00');
 
     $a['manager']->enable();
+    $a['store']->set(true);
     expect($network->load()->enabled)->toBeFalse()->and(is_file($network->path()))->toBeFalse();
 
     $network->writeForCli(true, '192.168.1.20', 4001, ['192.168.1.0/24']);
@@ -221,6 +330,8 @@ it('o relatório é só leitura: lê a tarefa e o loopback e não pede UAC', fun
         ->and($report->task->state())->toBe('Ready')
         ->and($report->matches)->toBeTrue()
         ->and($report->serving)->toBeTrue()
+        ->and($report->level)->toBe('médio')
+        ->and($report->task->logon())->toBe('Password')
         ->and(count($a['calls']))->toBe(0)
         ->and($a['probes'][0])->not->toMatch('/\b(New|Set|Remove|Register|Unregister|Start|Stop)-/');
 
@@ -282,18 +393,18 @@ function asRun(array $a, array $args): array
 it('php phporto autostart on e off saem 0, repetidos, e status só lê', function () {
     $a = asManager();
 
-    [$on] = asRun($a, ['autostart', 'on']);
+    [$on, $onOut] = asRun($a, ['autostart', 'on']);
     [$off] = asRun($a, ['autostart', 'off']);
     [$off2] = asRun($a, ['autostart', 'off']);
 
-    expect($on)->toBe(Status::OK)->and($off)->toBe(Status::OK)->and($off2)->toBe(Status::OK);
+    expect($on)->toBe(Status::OK)->and($onOut)->toContain('ainda NÃO está criada')->and($off)->toBe(Status::OK)->and($off2)->toBe(Status::OK);
 
     $antes = (string) file_get_contents($a['store']->path());
     $calls = count($a['calls']);
     [$st, $out] = asRun($a, ['autostart', 'status']);
 
     expect($st)->toBe(Status::OK)
-        ->and($out)->toContain('Início com o Windows: desligado')->toContain('Tarefa do Agendador: ausente')->toContain('Servidor responde no loopback: não')
+        ->and($out)->toContain('Início com o Windows: desligado')->toContain('Tarefa do Agendador: ausente')->toContain('Nível do servidor (este processo): médio')->toContain('Servidor responde no loopback: não')
         ->and((string) file_get_contents($a['store']->path()))->toBe($antes)
         ->and(count($a['calls']))->toBe($calls);
 
@@ -304,13 +415,13 @@ it('php phporto autostart sai 64 com argumento inválido, sem pedir senha nem co
     $a = asManager();
     [$code, , $err] = asRun($a, $args);
 
-    expect($code)->toBe(Status::USAGE)->and($err)->toContain('autostart on|off|status')->and(count($a['calls']))->toBe(0);
+    expect($code)->toBe(Status::USAGE)->and($err)->toContain('autostart on|off|status|restart')->and(count($a['calls']))->toBe(0);
 
     asClean($a['dir']);
-})->with([[['autostart']], [['autostart', 'foo']], [['autostart', 'on', '--password']], [['autostart', 'stop']]]);
+})->with([[['autostart']], [['autostart', 'foo']], [['autostart', 'on', '--password']], [['autostart', 'stop']], [['autostart', 'restart', 'x']]]);
 
-it('php phporto autostart on com UAC recusado sai 1 e mostra o motivo no STDERR', function () {
-    $a = asManager(uac: false);
+it('php phporto autostart on com UAC recusado ao trocar a tarefa antiga sai 1 e mostra o motivo no STDERR', function () {
+    $a = asManager(str_replace('LOGON=Password', 'LOGON=S4U', ASM_TASK_OK), uac: false);
     [$code, , $err] = asRun($a, ['autostart', 'on']);
 
     expect($code)->toBe(Status::FAILURE)->and($err)->toContain('recusou o UAC');
