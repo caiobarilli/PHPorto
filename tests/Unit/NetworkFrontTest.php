@@ -97,3 +97,31 @@ it('uma rede habilitada não libera Host de LAN para um pedido local', function 
     expect(Front::hostAllowed($server, lanState()))->toBeFalse()
         ->and(Front::refusal($server, '/', true, lanState()))->toBe(421);
 });
+
+it('sem SERVER_ADDR, o SERVER_NAME do php -S vale como endereço de escuta', function () {
+    $server = lanServer(['SERVER_ADDR' => null, 'SERVER_NAME' => '192.168.1.20']);
+    unset($server['SERVER_ADDR']);
+
+    expect(Front::refusal($server, '/', true, lanState()))->toBeNull()
+        ->and(lanState()->accepts($server))->toBeTrue()
+        ->and(State::listenerAddress($server))->toBe('192.168.1.20');
+});
+
+it('o SERVER_NAME diferente do bind_ip ou que não é IPv4 é recusado', function (array $extra, int $expected) {
+    $server = lanServer($extra);
+    unset($server['SERVER_ADDR']);
+
+    expect(Front::refusal($server, '/', true, lanState()))->toBe($expected);
+})->with([
+    'outro IP' => [['SERVER_NAME' => '192.168.1.21'], 403],
+    'nome de host' => [['SERVER_NAME' => 'localhost'], 403],
+    'vazio' => [['SERVER_NAME' => ''], 403],
+    'IPv6' => [['SERVER_NAME' => 'fe80::1'], 403],
+    'ausente' => [[], 403],
+]);
+
+it('o SERVER_ADDR, quando existe, tem precedência sobre o SERVER_NAME', function () {
+    $server = lanServer(['SERVER_ADDR' => '192.168.1.21', 'SERVER_NAME' => '192.168.1.20']);
+
+    expect(lanState()->accepts($server))->toBeFalse();
+});

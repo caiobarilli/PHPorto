@@ -45,3 +45,10 @@ Numa máquina sem domínio, `$env:USERDOMAIN` pode dizer `WORKGROUP` enquanto `w
 A identidade vem do token do processo, não do ambiente: `App\Autostart\Identity` lê o SID com `whoami /user`, e o script elevado compara com `GetCurrent().User.Value`.
 
 Evidência: `tests/Unit/AutostartIdentityTest.php`; `tests/Pester/Invoke-Autostart.Tests.ps1`.
+## php -S não define SERVER_ADDR
+
+O servidor embutido define `REMOTE_ADDR`, `SERVER_NAME` (o endereço do `-S`), `SERVER_PORT` e `HTTP_HOST`, mas não `SERVER_ADDR`. O `State::accepts` exigia `SERVER_ADDR`, e todo acesso pela rede levava 403. Os testes não pegaram porque montavam o `$_SERVER` à mão.
+
+Medido num `php -S` real: com `Host` forjado pelo cliente, o `SERVER_NAME` continua sendo o endereço de escuta. Por isso o endereço de escuta é `SERVER_ADDR` quando existe e, senão, `SERVER_NAME`, só valendo se for IPv4 igual ao `bind_ip`.
+
+Evidência: `tests/Integration/ServerVarsTest.php` (SAPI real); `State::listenerAddress`.
