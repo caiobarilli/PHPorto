@@ -6,6 +6,8 @@ namespace App\Network;
 
 final readonly class State
 {
+    public const MAX_ALLOW = 16;
+
     /**
      * @param list<string> $allow
      */
@@ -35,6 +37,7 @@ final readonly class State
             || !is_array($data['allow'] ?? null)
             || !array_is_list($data['allow'])
             || $data['allow'] === []
+            || count($data['allow']) > self::MAX_ALLOW
             || !is_string($data['updated_at'] ?? null)
             || $data['updated_at'] === '') {
             return null;

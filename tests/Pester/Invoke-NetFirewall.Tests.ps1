@@ -112,6 +112,75 @@ Describe "Invoke-NetFirewall - add" {
     }
 }
 
+Describe "Invoke-NetFirewall - allowlist validated on the elevated side" {
+
+    BeforeEach {
+        Mock Get-NetFirewallRule    { [PSCustomObject]@{ Name = 'antiga' } }
+        Mock Remove-NetFirewallRule { }
+        Mock New-NetFirewallRule    { }
+    }
+
+    It "accepts <Caso>" -ForEach @(
+        @{ Caso = 'a private IP';              Allow = '192.168.1.20' }
+        @{ Caso = 'a private CIDR';            Allow = '192.168.1.0/24' }
+        @{ Caso = '10/8';                      Allow = '10.0.0.0/8' }
+        @{ Caso = '172.16/12';                 Allow = '172.16.0.0/12' }
+        @{ Caso = '192.168/16';                Allow = '192.168.0.0/16' }
+        @{ Caso = '172.31 single host';        Allow = '172.31.255.255' }
+        @{ Caso = 'a CIDR with unaligned base'; Allow = '192.168.1.17/24' }
+        @{ Caso = 'a mix of valid entries';    Allow = '192.168.1.0/24, 10.0.0.8,172.16.5.0/24' }
+    ) {
+        $output = (Invoke-NetFirewall -SubAction add -BindIp '192.168.1.20' -Port 4001 -Allow $Allow -Program $Script:PhpExe) 6>&1 | Out-String
+        $output | Should -Match '\[ OK \]'
+        Should -Invoke -CommandName New-NetFirewallRule -Times 1 -Exactly
+    }
+
+    It "refuses <Caso> and keeps the existing rule" -ForEach @(
+        @{ Caso = 'a public IP';                 Allow = '8.8.8.8' }
+        @{ Caso = '0.0.0.0/0';                   Allow = '0.0.0.0/0' }
+        @{ Caso = 'a CIDR that escapes 172.16/12'; Allow = '172.16.0.0/11' }
+        @{ Caso = 'a CIDR that escapes 10/8';    Allow = '10.0.0.0/7' }
+        @{ Caso = 'a CIDR that escapes 192.168'; Allow = '192.168.0.0/15' }
+        @{ Caso = 'a prefix below /8';           Allow = '10.0.0.0/7' }
+        @{ Caso = 'a /0 prefix';                 Allow = '192.168.1.0/0' }
+        @{ Caso = 'a prefix above /32';          Allow = '192.168.1.0/33' }
+        @{ Caso = 'an octet above 255';          Allow = '192.168.1.256' }
+        @{ Caso = 'garbage';                     Allow = 'qualquer coisa' }
+        @{ Caso = 'a word';                      Allow = 'Any' }
+        @{ Caso = 'a dotted mask';               Allow = '192.168.1.0/255.255.255.0' }
+        @{ Caso = 'an IPv6 address';             Allow = 'fe80::1' }
+        @{ Caso = 'an empty list';               Allow = '' }
+        @{ Caso = 'a blank list';                Allow = '   ' }
+        @{ Caso = 'a trailing comma';            Allow = '192.168.1.0/24,' }
+        @{ Caso = 'a leading comma';             Allow = ',192.168.1.0/24' }
+        @{ Caso = 'a doubled comma';             Allow = '192.168.1.0/24,,10.0.0.8' }
+    ) {
+        $output = (Invoke-NetFirewall -SubAction add -BindIp '192.168.1.20' -Port 4001 -Allow $Allow -Program $Script:PhpExe) 6>&1 | Out-String
+        $output | Should -Match '\[ ERROR \]'
+        $output | Should -Not -Match '\[ OK \]'
+        Should -Invoke -CommandName Remove-NetFirewallRule -Times 0 -Exactly
+        Should -Invoke -CommandName New-NetFirewallRule    -Times 0 -Exactly
+    }
+
+    It "one invalid entry among valid ones refuses everything and preserves the existing rule" {
+        $output = (Invoke-NetFirewall -SubAction add -BindIp '192.168.1.20' -Port 4001 -Allow '192.168.1.0/24,8.8.8.8,10.0.0.8' -Program $Script:PhpExe) 6>&1 | Out-String
+        $output | Should -Match '\[ ERROR \]'
+        $output | Should -Match '8\.8\.8\.8'
+        Should -Invoke -CommandName Remove-NetFirewallRule -Times 0 -Exactly
+        Should -Invoke -CommandName New-NetFirewallRule    -Times 0 -Exactly
+    }
+
+    It "refuses more than 16 entries and keeps the existing rule" {
+        $muitas = (1..17 | ForEach-Object { "10.0.0.$_" }) -join ','
+        $output = (Invoke-NetFirewall -SubAction add -BindIp '192.168.1.20' -Port 4001 -Allow $muitas -Program $Script:PhpExe) 6>&1 | Out-String
+        $output | Should -Match '\[ ERROR \]'
+        Should -Invoke -CommandName Remove-NetFirewallRule -Times 0 -Exactly
+
+        $dezesseis = (1..16 | ForEach-Object { "10.0.0.$_" }) -join ','
+        $ok = (Invoke-NetFirewall -SubAction add -BindIp '192.168.1.20' -Port 4001 -Allow $dezesseis -Program $Script:PhpExe) 6>&1 | Out-String
+        $ok | Should -Match '\[ OK \]'
+    }
+}
 Describe "Invoke-NetFirewall - remove" {
 
     It "removes the rule by its fixed group" {

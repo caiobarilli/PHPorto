@@ -23,6 +23,40 @@
         return ($a -eq 10) -or ($a -eq 172 -and $b -ge 16 -and $b -le 31) -or ($a -eq 192 -and $b -eq 168)
     }
 
+    $maxAllow = 16
+
+    function ConvertTo-NetFirewallNumber {
+        param([string]$Ip)
+        $o = $Ip -split '\.'
+        return ([long]$o[0] * 16777216) + ([long]$o[1] * 65536) + ([long]$o[2] * 256) + [long]$o[3]
+    }
+
+    function Test-NetFirewallAllowEntry {
+        param([string]$Entry)
+        if ($Entry -notmatch '\A(?<ip>[0-9]{1,3}(?:\.[0-9]{1,3}){3})(?:/(?<prefix>[0-9]{1,2}))?\z') { return $false }
+        foreach ($p in ($Matches['ip'] -split '\.')) {
+            if ([int]$p -gt 255) { return $false }
+        }
+        $prefix = 32
+        if ($Matches['prefix']) {
+            $prefix = [int]$Matches['prefix']
+            if ($prefix -lt 8 -or $prefix -gt 32) { return $false }
+        }
+        $tamanho = [long][Math]::Pow(2, 32 - $prefix)
+        $numero = ConvertTo-NetFirewallNumber $Matches['ip']
+        $primeiro = [long][Math]::Floor($numero / $tamanho) * $tamanho
+        $ultimo = $primeiro + $tamanho - 1
+        $faixas = @(
+            @(167772160, 184549375),
+            @(2886729728, 2887778303),
+            @(3232235520, 3232301055)
+        )
+        foreach ($f in $faixas) {
+            if ($primeiro -ge $f[0] -and $ultimo -le $f[1]) { return $true }
+        }
+        return $false
+    }
+
     function Add-NetFirewallRegra {
         if (-not (Test-NetFirewallBind $BindIp)) {
             Write-Status ERROR "BindIp is not a private IPv4 address: '$BindIp'."
@@ -41,7 +75,18 @@
             return
         }
 
-        $remotos = @($Allow -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
+        $remotos = @($Allow -split ',' | ForEach-Object { $_.Trim() })
+
+        if ($remotos.Count -gt $maxAllow) {
+            Write-Status ERROR "Allow has more than $maxAllow entries. Nothing was changed."
+            return
+        }
+        foreach ($entrada in $remotos) {
+            if (-not (Test-NetFirewallAllowEntry $entrada)) {
+                Write-Status ERROR "Allow has an entry that is not a private IPv4 or private CIDR (/8 to /32): '$entrada'. Nothing was changed."
+                return
+            }
+        }
 
         try {
             Get-NetFirewallRule -Group $group -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction Stop

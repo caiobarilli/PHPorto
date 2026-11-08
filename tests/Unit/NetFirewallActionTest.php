@@ -70,3 +70,18 @@ it('a ação nunca monta regra com perfil ou endereço mais largos', function ()
         ->and($script)->toContain('-RemoteAddress $remotos')
         ->and($script)->toContain('-Program $Program');
 });
+
+it('net-firewall e o estado limitam a allowlist a 16 entradas', function () {
+    $dezesseis = implode(',', array_map(static fn (int $i): string => '10.0.0.' . $i, range(1, 16)));
+    $dezessete = $dezesseis . ',10.0.0.17';
+    $base = ['SubAction' => 'add', 'BindIp' => '192.168.1.20', 'Port' => '4001', 'Program' => FW_PHP];
+
+    expect(WinAction::NetFirewall->validate($base + ['Allow' => $dezesseis])['Allow'])->toBe($dezesseis)
+        ->and(fn () => WinAction::NetFirewall->validate($base + ['Allow' => $dezessete]))->toThrow(InvalidArgumentException::class)
+        ->and(\App\Network\Manager::validate('192.168.1.20', 4001, explode(',', $dezessete)))->toContain('No máximo 16')
+        ->and(\App\Network\Manager::validate('192.168.1.20', 4001, explode(',', $dezesseis)))->toBeNull()
+        ->and(\App\Network\State::fromArray([
+            'enabled' => true, 'bind_ip' => '192.168.1.20', 'port' => 4001,
+            'allow' => explode(',', $dezessete), 'updated_at' => 'x',
+        ]))->toBeNull();
+});

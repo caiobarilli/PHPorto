@@ -883,6 +883,10 @@ enum WinAction: string
 
         $regras = explode(',', $allow);
 
+        if (count($regras) > \App\Network\State::MAX_ALLOW) {
+            throw new InvalidArgumentException('Allow tem itens demais.');
+        }
+
         foreach ($regras as $regra) {
             if (!\App\Network\Ipv4::isPrivateRule($regra)) {
                 throw new InvalidArgumentException('Allow tem um item que não é IPv4 ou CIDR privado.');

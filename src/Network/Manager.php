@@ -152,6 +152,10 @@ final class Manager
             return 'A lista de IPs liberados não pode ser vazia.';
         }
 
+        if (count($allow) > State::MAX_ALLOW) {
+            return 'No máximo ' . State::MAX_ALLOW . ' IPs ou faixas liberados.';
+        }
+
         foreach ($allow as $rule) {
             if (!Ipv4::isPrivateRule($rule)) {
                 return 'IP ou faixa liberada inválida (só IPv4 privado, sozinho ou em CIDR): ' . $rule;

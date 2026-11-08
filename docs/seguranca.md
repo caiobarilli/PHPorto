@@ -74,7 +74,8 @@ php phporto network off
 - **Só pelo terminal:** o `on` pergunta o IP de escuta (IPv4 privado de uma
   interface sua), a porta e os IPs liberados, mostra o risco e exige digitar
   `sim`. Não há flag para pular. Nenhuma tela liga a rede.
-- **Regra de firewall:** entrada TCP só no perfil Private, no IP e na porta
+- **Regra de firewall:** a allowlist tem até 16 entradas, só IPv4 privado ou CIDR
+  privado de /8 a /32, e é conferida de novo no script elevado. Entrada TCP só no perfil Private, no IP e na porta
   escolhidos, só para os IPs liberados e só para o `php.exe`. É criada com UAC,
   na hora do `on`, nunca no boot.
 - **Fail-closed:** o `php phporto serve` só sobe o listener de rede se o estado
