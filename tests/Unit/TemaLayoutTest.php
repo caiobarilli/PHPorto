@@ -130,9 +130,20 @@ it('só a /config grava o tema; as outras telas e o layout não gravam nada no n
             expect(substr_count($fonte, 'localStorage.setItem('))->toBe(1)
                 ->and(substr_count($fonte, 'localStorage.removeItem('))->toBe(1);
         } elseif ($nome === 'layout.php') {
-            expect($fonte)->not->toContain('setItem')
-                ->and(substr_count($fonte, 'localStorage.removeItem('))->toBe(1)
-                ->and($fonte)->toContain("localStorage.removeItem('phporto.wsl.console.tema')");
+            preg_match_all('/localStorage\.(?:setItem|removeItem)\(\s*([^,)]*)/', $fonte, $escritas);
+            $permitidas = ["'phporto.wsl.console.tema'", 'nome', 'chave'];
+
+            expect($fonte)->toContain("var prefixo = 'phporto.rede.aviso.';")
+                ->and($fonte)->toContain("var chave = prefixo + (aviso.getAttribute('data-chave') || '');")
+                ->and(substr_count($fonte, 'localStorage.setItem('))->toBe(1)
+                ->and($fonte)->toContain("localStorage.setItem(chave, '1')")
+                ->and(substr_count($fonte, 'localStorage.removeItem('))->toBe(2)
+                ->and($fonte)->toContain("localStorage.removeItem('phporto.wsl.console.tema')")
+                ->and($fonte)->toContain('localStorage.removeItem(nome)')
+                ->and(array_diff(array_map('trim', $escritas[1]), $permitidas))->toBe([])
+                ->and(substr_count($fonte, "'phporto.tema'"))->toBe(1)
+                ->and($fonte)->toContain("localStorage.getItem('phporto.tema')")
+                ->and(str_starts_with('phporto.tema', 'phporto.rede.aviso.'))->toBeFalse();
         } else {
             expect($fonte)->not->toContain('localStorage');
         }
