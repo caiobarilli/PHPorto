@@ -273,9 +273,9 @@ Describe 'worker - a allowlist do lado elevado' {
         $ok.params['Undo']  | Should -BeTrue
     }
 
-    It 'conhece as vinte e quatro acoes' {
+    It 'conhece as vinte e cinco acoes' {
         @($global:ALLOWLIST.Keys | Sort-Object) | Should -Be @(
-            'audit', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
+            'audit', 'autostart', 'debloat', 'dns', 'exporter', 'gdid', 'gpu', 'hyperv', 'hyperv-vm', 'install',
             'memory', 'net-firewall', 'network', 'openssh', 'optimize', 'performance', 'php-update', 'processes', 'rdp', 'ssh-keys', 'sunshine', 'tweaks', 'wsl', 'wsl-enable', 'wsl-install-distro'
         )
     }

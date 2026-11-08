@@ -89,6 +89,7 @@ $global:PhportoWinActions = [ordered]@{
     'wsl-install-distro' = 'Invoke-WslInstallDistro'
     'php-update'  = 'Invoke-PhpUpdate'
     'net-firewall' = 'Invoke-NetFirewall'
+    'autostart' = 'Invoke-Autostart'
 }
 
 function Invoke-PhportoWinAction {
