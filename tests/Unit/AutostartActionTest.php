@@ -6,22 +6,22 @@ use App\Win\WinAction;
 
 const AS_PHP = 'C:\\php\\php.exe';
 const AS_SCRIPT = 'C:\\Users\\dev\\code\\PHPorto\\phporto';
-const AS_USER = 'MAQUINA\\dev';
+const AS_SID = 'S-1-5-21-1111111111-2222222222-3333333333-1001';
 
 it('autostart on valida e devolve só os campos aceitos', function () {
     expect(WinAction::Autostart->validate([
-        'SubAction' => 'on', 'UserName' => AS_USER, 'Program' => AS_PHP, 'Script' => AS_SCRIPT, 'Extra' => 'x',
-    ]))->toBe(['SubAction' => 'on', 'UserName' => AS_USER, 'Program' => AS_PHP, 'Script' => AS_SCRIPT]);
+        'SubAction' => 'on', 'Sid' => AS_SID, 'Program' => AS_PHP, 'Script' => AS_SCRIPT, 'Extra' => 'x',
+    ]))->toBe(['SubAction' => 'on', 'Sid' => AS_SID, 'Program' => AS_PHP, 'Script' => AS_SCRIPT]);
 });
 
 it('autostart off não leva parâmetro e stop leva só o script', function () {
-    expect(WinAction::Autostart->validate(['SubAction' => 'off', 'UserName' => AS_USER]))->toBe(['SubAction' => 'off'])
+    expect(WinAction::Autostart->validate(['SubAction' => 'off', 'Sid' => AS_SID]))->toBe(['SubAction' => 'off'])
         ->and(WinAction::Autostart->validate(['SubAction' => 'stop', 'Script' => AS_SCRIPT, 'Program' => AS_PHP]))
         ->toBe(['SubAction' => 'stop', 'Script' => AS_SCRIPT]);
 });
 
 it('autostart recusa o que não é do formato', function (array $entrada) {
-    $base = ['SubAction' => 'on', 'UserName' => AS_USER, 'Program' => AS_PHP, 'Script' => AS_SCRIPT];
+    $base = ['SubAction' => 'on', 'Sid' => AS_SID, 'Program' => AS_PHP, 'Script' => AS_SCRIPT];
 
     expect(fn () => WinAction::Autostart->validate(array_replace($base, $entrada)))->toThrow(InvalidArgumentException::class);
 })->with([
@@ -32,10 +32,14 @@ it('autostart recusa o que não é do formato', function (array $entrada) {
     'script com subida' => [['Script' => 'C:\\x\\..\\phporto']],
     'script de rede' => [['Script' => '\\\\srv\\x\\phporto']],
     'script com aspas' => [['Script' => 'C:\\x"y\\phporto']],
-    'usuário sem domínio' => [['UserName' => 'dev']],
-    'usuário com barra vertical' => [['UserName' => 'M\\dev|calc']],
-    'usuário com ponto e vírgula' => [['UserName' => 'M\\dev;calc']],
-    'usuário vazio' => [['UserName' => '']],
+    'nome no lugar do SID' => [['Sid' => 'DESKTOP\\caiob']],
+    'SID vazio' => [['Sid' => '']],
+    'SID sem número' => [['Sid' => 'S-1-5-21-1-2-3']],
+    'SID com letra' => [['Sid' => 'S-1-5-21-1-2-3-abc']],
+    'SID com sufixo' => [['Sid' => AS_SID . ';calc']],
+    'SID de outra autoridade' => [['Sid' => 'S-1-5-18']],
+    'SID com quebra de linha' => [['Sid' => AS_SID . "\nx"]],
+    'SID sem o campo' => [['Sid' => null]],
     'programa fora de php.exe' => [['Program' => 'C:\\Windows\\notepad.exe']],
     'programa relativo' => [['Program' => 'php.exe']],
 ]);
@@ -49,7 +53,7 @@ it('o worker usa os mesmos formatos da ação autostart', function () {
 
     expect(preg_match("/^    'autostart'\s*=\s*@\{\r?\n(.*?)\r?\n    \}/ms", $worker, $bloco))->toBe(1)
         ->and($bloco[1])->toContain("valores = @('on', 'off', 'stop')")
-        ->and($bloco[1])->toContain("padrao = '" . WinAction::AUTOSTART_USER_PATTERN . "'")
+        ->and($bloco[1])->toContain("padrao = '" . WinAction::AUTOSTART_SID_PATTERN . "'")
         ->and($bloco[1])->toContain("padrao = '" . WinAction::AUTOSTART_SCRIPT_PATTERN . "'")
         ->and($bloco[1])->toContain("padrao = '" . WinAction::NET_FIREWALL_PROGRAM_PATTERN . "'");
 });

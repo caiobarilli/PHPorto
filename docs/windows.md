@@ -501,6 +501,13 @@ inicialização, na sua conta, mesmo sem sessão aberta (logon S4U, sem guardar
 senha), sem nível elevado, e roda `php.exe <raiz>\phporto serve`. Reinicia em
 falha e não deixa uma segunda instância. Nenhuma senha passa pelo PHPorto.
 
+A conta é identificada pelo SID do próprio processo PHP (`whoami /user`), não
+pelas variáveis `USERDOMAIN` e `USERNAME`: numa máquina sem domínio o
+`USERDOMAIN` pode dizer `WORKGROUP` enquanto o token diz `DESKTOP\usuario`. O
+script elevado recebe o SID, recusa se for diferente do SID do próprio processo
+e registra a tarefa com o nome que o Windows dá a essa conta. Sem conseguir ler
+o SID, nada é criado.
+
 - **Independente da rede:** ligar o início não liga a rede privada, e desligar a
   rede não desliga o início. O estado mora em `files/autostart.json`.
 - **Desligar:** `off` remove a tarefa e não derruba o servidor em execução. O
@@ -516,6 +523,18 @@ falha e não deixa uma segunda instância. Nenhuma senha passa pelo PHPorto.
   teto de tentativas.
 
 Decisão em `.ai/adr/0012-iniciar-com-o-windows.md`.
+
+### Validado no Windows real
+
+- O acesso pela rede funciona pelo notebook, depois do `fix/rede-server-addr`.
+- O `serve` iniciado pelo SSH sobrevive ao fim da sessão SSH: a árvore inteira
+  continua.
+- Num `serve` iniciado pelo SSH, o WSL aparece como "não ativado": o `wsl` não
+  funciona nessa sessão. Isso indica que o S4U pode ter o mesmo limite. O teste
+  do boot sem login vai confirmar.
+
+Ainda não validado: o boot sem login, o WSL e o Ollama na sessão S4U, e o
+restante da lista "Não testado" do ADR 0012.
 
 ## Onde as ações gravam
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Cli;
 
 use App\Autostart\History as AutostartHistory;
+use App\Autostart\Identity;
 use App\Autostart\Manager as AutostartManager;
 use App\Autostart\Store as AutostartStore;
 use App\Autostart\Task;
@@ -133,9 +134,6 @@ final class Main
     private function defaultAutostart(): AutostartManager
     {
         $oneShot = $this->oneShot();
-        $domain = getenv('USERDOMAIN');
-        $user = getenv('USERNAME');
-
         return new AutostartManager(
             new AutostartStore($this->filesDir()),
             new Task($this->filesDir()),
@@ -143,7 +141,7 @@ final class Main
             new AutostartHistory($this->serviceFactory()),
             $this->root,
             PHP_BINARY,
-            (is_string($domain) ? $domain : '') . '\\' . (is_string($user) ? $user : ''),
+            Identity::current(),
         );
     }
 

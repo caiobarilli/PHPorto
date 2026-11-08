@@ -37,3 +37,11 @@ Não está no log. Os merges medidos saltam de `#2` (`9321917`) para `#4` (`ea0d
 ## Aspa curva no worker
 
 PR #1 (`a50824b`): parâmetro como dado; aspa tipográfica deixava de ser dado e virava código. Por isso a proibição de aspas tipográficas e travessão em string de `.ps1`.
+
+## USERDOMAIN não é a identidade
+
+Numa máquina sem domínio, `$env:USERDOMAIN` pode dizer `WORKGROUP` enquanto `whoami` e `WindowsIdentity.GetCurrent().Name` dizem `DESKTOP\usuario` (medido no desktop do Maintainer, também elevado). Montar o nome com `USERDOMAIN` e `USERNAME` fazia o `php phporto autostart on` recusar sempre a conta.
+
+A identidade vem do token do processo, não do ambiente: `App\Autostart\Identity` lê o SID com `whoami /user`, e o script elevado compara com `GetCurrent().User.Value`.
+
+Evidência: `tests/Unit/AutostartIdentityTest.php`; `tests/Pester/Invoke-Autostart.Tests.ps1`.

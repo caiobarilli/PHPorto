@@ -140,7 +140,7 @@ $ALLOWLIST = @{
 
     'autostart' = @{
         'SubAction' = @{ tipo = 'set'; valores = @('on', 'off', 'stop') }
-        'UserName'  = @{ tipo = 'text'; max = 129; padrao = '\A[^\x5C\x2F\[\]:;|=,+*?<>"@\x00-\x1F]{1,64}\x5C[^\x5C\x2F\[\]:;|=,+*?<>"@\x00-\x1F]{1,64}\z' }
+        'Sid'       = @{ tipo = 'text'; max = 60; padrao = '\AS-1-5-21-[0-9]{1,10}-[0-9]{1,10}-[0-9]{1,10}-[0-9]{1,10}\z' }
         'Program'   = @{ tipo = 'text'; max = 260; padrao = '\A[A-Za-z]:(?:\x5C(?!\.{1,2}(?:\x5C|\z))[^\x5C\x2F:*?"<>|\x00-\x1F]+)+\x5Cphp\.exe\z' }
         'Script'    = @{ tipo = 'text'; max = 260; padrao = '\A[A-Za-z]:(?:\x5C(?!\.{1,2}(?:\x5C|\z))[^\x5C\x2F:*?"<>|\x00-\x1F]+)+\x5Cphporto\z' }
     }

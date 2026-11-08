@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Pages;
 
 use App\Autostart\History as AutostartHistory;
+use App\Autostart\Identity;
 use App\Autostart\Manager as AutostartManager;
 use App\Autostart\Store as AutostartStore;
 use App\Autostart\Task as AutostartTask;
@@ -440,8 +441,6 @@ final class ConfigPage extends Page
 
     private function handleAutostart(string $action): never
     {
-        $domain = getenv('USERDOMAIN');
-        $user = getenv('USERNAME');
         $oneShot = $this->oneShot;
         $gestor = new AutostartManager(
             new AutostartStore($this->filesDir),
@@ -450,7 +449,7 @@ final class ConfigPage extends Page
             new AutostartHistory($this->makeService),
             dirname($this->filesDir),
             PHP_BINARY,
-            (is_string($domain) ? $domain : '') . '\\' . (is_string($user) ? $user : ''),
+            Identity::current(),
         );
 
         $result = match ($action) {

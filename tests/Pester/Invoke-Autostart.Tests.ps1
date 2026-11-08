@@ -31,6 +31,7 @@ BeforeAll {
     Set-Content -Path $Script:PhpExe -Value 'x'
     Set-Content -Path $Script:Phporto -Value 'x'
     $Script:Eu = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $Script:EuSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 }
 
 AfterAll {
@@ -77,7 +78,7 @@ Describe "Invoke-Autostart - on" {
     }
 
     It "registers an at-startup task for the own account with S4U and RunLevel Limited" {
-        $output = (Invoke-Autostart -SubAction on -UserName $Script:Eu -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-String
+        $output = (Invoke-Autostart -SubAction on -Sid $Script:EuSid -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-String
 
         $output | Should -Match '\[ OK \]'
         Should -Invoke -CommandName New-ScheduledTaskPrincipal -Times 1 -Exactly -ParameterFilter {
@@ -90,29 +91,52 @@ Describe "Invoke-Autostart - on" {
 
     It "runs php.exe with the phporto script and the serve command" {
         Mock New-ScheduledTaskAction { [PSCustomObject]@{ Execute = $Execute; Argument = $Argument } }
-        (Invoke-Autostart -SubAction on -UserName $Script:Eu -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-Null
+        (Invoke-Autostart -SubAction on -Sid $Script:EuSid -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-Null
         Should -Invoke -CommandName New-ScheduledTaskAction -Times 1 -Exactly -ParameterFilter {
             $Execute -eq $Script:PhpExe -and $Argument -eq ('"' + $Script:Phporto + '" serve')
         }
     }
 
     It "refuses (<Caso>) without registering anything" -ForEach @(
-        @{ Caso = 'another account';  User = 'OUTRO\alguem'; Php = 'ok';      Roteiro = 'ok' }
-        @{ Caso = 'empty account';    User = '';             Php = 'ok';      Roteiro = 'ok' }
+        @{ Caso = 'another SID';       User = 'S-1-5-21-1-2-3-1001';  Php = 'ok'; Roteiro = 'ok' }
+        @{ Caso = 'empty SID';         User = '';                     Php = 'ok'; Roteiro = 'ok' }
+        @{ Caso = 'malformed SID';     User = 'S-1-5-21-1-2-3';       Php = 'ok'; Roteiro = 'ok' }
+        @{ Caso = 'account name';      User = 'nome';                 Php = 'ok'; Roteiro = 'ok' }
+        @{ Caso = 'trailing garbage';  User = 'eu;calc';              Php = 'ok'; Roteiro = 'ok' }
         @{ Caso = 'not php.exe';      User = 'eu';           Php = 'notepad'; Roteiro = 'ok' }
         @{ Caso = 'not phporto file'; User = 'eu';           Php = 'ok';      Roteiro = 'token.php' }
     ) {
-        $user = if ($User -eq 'eu') { $Script:Eu } else { $User }
+        $user = if ($User -eq 'eu') { $Script:EuSid } elseif ($User -eq 'eu;calc') { $Script:EuSid + ';calc' } elseif ($User -eq 'nome') { $Script:Eu } else { $User }
         $programa = if ($Php -eq 'ok') { $Script:PhpExe } else { Join-Path $Script:Pasta 'notepad.exe' }
         $arquivo = if ($Roteiro -eq 'ok') { $Script:Phporto } else { Join-Path $Script:Pasta $Roteiro }
-        $output = (Invoke-Autostart -SubAction on -UserName $user -Program $programa -Script $arquivo) 6>&1 | Out-String
+        $output = (Invoke-Autostart -SubAction on -Sid $user -Program $programa -Script $arquivo) 6>&1 | Out-String
         $output | Should -Match '\[ ERROR \]'
         Should -Invoke -CommandName Register-ScheduledTask -Times 0 -Exactly
     }
 
+    It "creates nothing when the SID differs, and says so" {
+        $output = (Invoke-Autostart -SubAction on -Sid 'S-1-5-21-1-2-3-1001' -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-String
+        $output | Should -Match '\[ ERROR \]'
+        $output | Should -Match 'does not match'
+        Should -Invoke -CommandName New-ScheduledTaskPrincipal -Times 0 -Exactly
+        Should -Invoke -CommandName Register-ScheduledTask -Times 0 -Exactly
+    }
+
+    It "does not depend on USERDOMAIN or USERNAME" {
+        $d = $env:USERDOMAIN; $u = $env:USERNAME
+        try {
+            $env:USERDOMAIN = 'DOMINIO-FALSO'; $env:USERNAME = 'outra-pessoa'
+            $output = (Invoke-Autostart -SubAction on -Sid $Script:EuSid -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-String
+        } finally {
+            $env:USERDOMAIN = $d; $env:USERNAME = $u
+        }
+        $output | Should -Match '\[ OK \]'
+        Should -Invoke -CommandName New-ScheduledTaskPrincipal -Times 1 -Exactly -ParameterFilter { $UserId -eq $Script:Eu }
+    }
+
     It "reports the failure when the registration throws" {
         Mock Register-ScheduledTask { throw 'acesso negado' }
-        $output = (Invoke-Autostart -SubAction on -UserName $Script:Eu -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-String
+        $output = (Invoke-Autostart -SubAction on -Sid $Script:EuSid -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-String
         $output | Should -Match '\[ ERROR \]'
         $output | Should -Not -Match '\[ OK \]'
     }
@@ -146,7 +170,7 @@ Describe "Invoke-Autostart - stop" {
         $Script:Colchetes = Join-Path $Script:Pasta 'a[1]b'
         New-Item -ItemType Directory -Path $Script:Colchetes | Out-Null
         $Script:PhportoColchetes = Join-Path $Script:Colchetes 'phporto'
-        Set-Content -Path $Script:PhportoColchetes -Value 'x'
+        Set-Content -LiteralPath $Script:PhportoColchetes -Value 'x'
         $Script:Outra = Join-Path $Script:Pasta 'outra'
         New-Item -ItemType Directory -Path $Script:Outra | Out-Null
         $Script:PhportoOutra = Join-Path $Script:Outra 'phporto'

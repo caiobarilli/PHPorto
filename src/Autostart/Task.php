@@ -53,6 +53,12 @@ final class Task
                     'TASK=presente'
                     'STATE=' + [string]\$t.State
                     'USER=' + [string]\$t.Principal.UserId
+                    \$sid = ''
+                    try {
+                        \$uid = [string]\$t.Principal.UserId
+                        if (\$uid -match '\AS-1-') { \$sid = \$uid } else { \$sid = ([Security.Principal.NTAccount]::new(\$uid)).Translate([Security.Principal.SecurityIdentifier]).Value }
+                    } catch { \$sid = '' }
+                    'SID=' + \$sid
                     'LOGON=' + [string]\$t.Principal.LogonType
                     'RUNLEVEL=' + [string]\$t.Principal.RunLevel
                     \$a = @(\$t.Actions)[0]

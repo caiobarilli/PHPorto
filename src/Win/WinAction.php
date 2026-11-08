@@ -141,11 +141,11 @@ enum WinAction: string
 
     public const AUTOSTART_SUBACTIONS = ['on', 'off', 'stop'];
 
-    public const AUTOSTART_USER_PATTERN = '\A[^\x5C\x2F\[\]:;|=,+*?<>"@\x00-\x1F]{1,64}\x5C[^\x5C\x2F\[\]:;|=,+*?<>"@\x00-\x1F]{1,64}\z';
+    public const AUTOSTART_SID_PATTERN = '\AS-1-5-21-[0-9]{1,10}-[0-9]{1,10}-[0-9]{1,10}-[0-9]{1,10}\z';
 
     public const AUTOSTART_SCRIPT_PATTERN = '\A[A-Za-z]:(?:\x5C(?!\.{1,2}(?:\x5C|\z))[^\x5C\x2F:*?"<>|\x00-\x1F]+)+\x5Cphporto\z';
 
-    public const AUTOSTART_USER_MAX = 129;
+    public const AUTOSTART_SID_MAX = 60;
 
     public const AUTOSTART_PATH_MAX = 260;
 
@@ -837,18 +837,18 @@ enum WinAction: string
             return ['SubAction' => $sub, 'Script' => $script];
         }
 
-        $usuario = trim($input['UserName'] ?? '');
+        $sid = trim($input['Sid'] ?? '');
         $programa = trim($input['Program'] ?? '');
 
-        if ($usuario === '' || strlen($usuario) > self::AUTOSTART_USER_MAX || preg_match('/' . self::AUTOSTART_USER_PATTERN . '/', $usuario) !== 1) {
-            throw new InvalidArgumentException('UserName não é DOMINIO\usuario.');
+        if ($sid === '' || strlen($sid) > self::AUTOSTART_SID_MAX || preg_match('/' . self::AUTOSTART_SID_PATTERN . '/', $sid) !== 1) {
+            throw new InvalidArgumentException('Sid não é um SID de conta S-1-5-21.');
         }
 
         if ($programa === '' || strlen($programa) > self::NET_FIREWALL_PROGRAM_MAX || preg_match('/' . self::NET_FIREWALL_PROGRAM_PATTERN . '/', $programa) !== 1) {
             throw new InvalidArgumentException('Program não é um php.exe local do Windows aceito.');
         }
 
-        return ['SubAction' => $sub, 'UserName' => $usuario, 'Program' => $programa, 'Script' => $script];
+        return ['SubAction' => $sub, 'Sid' => $sid, 'Program' => $programa, 'Script' => $script];
     }
 
     /**
