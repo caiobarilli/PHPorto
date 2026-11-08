@@ -182,3 +182,32 @@ it('não abre o histórico quando não há login de fora', function () {
         ->and($opened)->toBeFalse();
     networkLoginCleanup($dir);
 });
+
+it('o aviso de rede tem botão de fechar acessível, que só aparece com JavaScript, e o aviso nasce visível', function () {
+    $html = Respond::render('layout.php', new LayoutView('teste', '<div>x</div>', new State(true, '192.168.1.20', 4001, ['192.168.1.0/24'], '2026-11-08T10:00:00+00:00')));
+
+    preg_match('/<div class="aviso-rede"[^>]*>/', $html, $abertura);
+    preg_match('/<button[^>]*id="aviso-rede-fechar"[^>]*>/', $html, $botao);
+
+    expect($abertura[0] ?? '')->not->toContain('hidden')->toContain('data-chave="2026-11-08T10:00:00+00:00"')
+        ->and($botao[0] ?? '')->toContain('type="button"')->toContain('aria-label="Fechar o aviso de acesso pela rede"')->toContain(' hidden')
+        ->and($html)->toContain('botao.hidden = false;')
+        ->and($html)->toContain('phporto.rede.aviso.')
+        ->and($html)->toContain("if (localStorage.getItem(chave) === '1') { aviso.hidden = true; }")
+        ->and(substr_count($html, '} catch (e) {}'))->toBeGreaterThanOrEqual(2)
+        ->and($html)->toContain("try { localStorage.setItem(chave, '1'); } catch (e) {}");
+});
+
+it('a chave do aviso fechado muda com o updated_at e é escapada', function () {
+    $a = Respond::render('layout.php', new LayoutView('t', 'x', new State(true, '192.168.1.20', 4001, ['192.168.1.0/24'], 'um')));
+    $b = Respond::render('layout.php', new LayoutView('t', 'x', new State(true, '192.168.1.20', 4001, ['192.168.1.0/24'], 'dois"><x')));
+
+    expect($a)->toContain('data-chave="um"')
+        ->and($b)->toContain('data-chave="dois&quot;&gt;&lt;x"')->not->toContain('dois"><x');
+});
+
+it('sem estado de rede ligado não há aviso nem botão nem script do aviso', function () {
+    $html = Respond::render('layout.php', new LayoutView('t', 'x', new State(false, '192.168.1.20', 4001, ['192.168.1.0/24'], 'um')));
+
+    expect($html)->not->toContain('id="aviso-rede-fechar"')->not->toContain('phporto.rede.aviso.');
+});

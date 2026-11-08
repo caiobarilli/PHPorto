@@ -171,6 +171,15 @@ use App\Http\Respond;
     text-align: center;
   }
   .aviso-rede a { font-weight: 600; }
+  .aviso-rede[hidden] { display: none; }
+  .aviso-rede-fechar {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    border: 0; border-radius: 6px; background: none; color: inherit;
+    font-size: 18px; line-height: 1; padding: 4px 8px; cursor: pointer;
+  }
+  .aviso-rede-fechar[hidden] { display: none; }
+  .aviso-rede-fechar:hover { background: var(--btn-hover); color: var(--btn-fg); }
+  .aviso-rede-fechar:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
   .home {
     min-height: 100%;
@@ -447,10 +456,37 @@ use App\Http\Respond;
 </head>
 <body>
 <?php if ($view->network?->enabled === true): ?>
-<div class="aviso-rede" role="status">
+<div class="aviso-rede" id="aviso-rede" role="status" data-chave="<?= Respond::e($view->network->updatedAt ?? '') ?>">
   Acessível pela rede interna em <?= Respond::e($view->network->address()) ?>, permitido para: <?= Respond::e(implode(', ', $view->network->allow)) ?>.
   <a href="/config">Configurações</a>
+  <button type="button" class="aviso-rede-fechar" id="aviso-rede-fechar" aria-label="Fechar o aviso de acesso pela rede" hidden>&times;</button>
 </div>
+<script>
+(function () {
+  'use strict';
+
+  var aviso = document.getElementById('aviso-rede');
+  var botao = document.getElementById('aviso-rede-fechar');
+  if (!aviso || !botao) { return; }
+
+  var prefixo = 'phporto.rede.aviso.';
+  var chave = prefixo + (aviso.getAttribute('data-chave') || '');
+
+  try {
+    if (localStorage.getItem(chave) === '1') { aviso.hidden = true; }
+    for (var i = localStorage.length - 1; i >= 0; i--) {
+      var nome = localStorage.key(i);
+      if (nome && nome.indexOf(prefixo) === 0 && nome !== chave) { localStorage.removeItem(nome); }
+    }
+  } catch (e) {}
+
+  botao.hidden = false;
+  botao.addEventListener('click', function () {
+    aviso.hidden = true;
+    try { localStorage.setItem(chave, '1'); } catch (e) {}
+  });
+})();
+</script>
 <?php endif; ?>
 <main id="conteudo"><?= $view->content ?></main>
 
