@@ -160,6 +160,39 @@ use App\Wsl\Distro;
     </form>
   </section>
 
+  <section id="rede">
+    <h2>Rede privada</h2>
+
+    <p class="nota-estado">
+      <?php if ($view->networkEnabled): ?>
+        Ligada em <strong><?= Respond::e((string) $view->networkAddress) ?></strong>, só para
+        <strong><?= Respond::e(implode(', ', $view->networkAllow)) ?></strong>.
+        <?php if ($view->networkUpdatedAt !== null): ?>
+          Atualizada em <strong><?= Respond::e(Respond::dateTime($view->networkUpdatedAt, $view->tz)) ?></strong>.
+        <?php endif; ?>
+        O listener de rede só existe se o <code>php phporto serve</code> o subiu e a regra de firewall confere.
+      <?php else: ?>
+        Desligada. Nada escuta fora do loopback. Para ligar, rode <code>php phporto network on</code> num terminal:
+        a confirmação é digitada lá, nunca nesta tela.
+      <?php endif; ?>
+    </p>
+
+    <?php if ($view->networkEnabled): ?>
+      <form method="post" id="form-rede-desligar" data-sem-reload>
+        <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+        <input type="hidden" name="acao" value="rede-desligar">
+        <div class="linha-acao">
+          <button type="submit" class="btn btn-danger btn-sm" id="btn-rede-desligar">Desligar já</button>
+        </div>
+        <p class="nota-estado">
+          Fecha a rede na hora e pede o UAC para remover a regra de firewall. Se o UAC for recusado,
+          a rede já ficou desligada e o painel recusa tudo pela rede, mas a regra fica para remover.
+          Para ver o estado completo: <code>php phporto network status</code>.
+        </p>
+      </form>
+    <?php endif; ?>
+  </section>
+
   <?php if (!$view->wslEnabled): ?>
     <section id="wsl">
       <h2>WSL</h2>

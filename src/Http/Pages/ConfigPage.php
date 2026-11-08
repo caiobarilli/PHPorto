@@ -11,6 +11,12 @@ use App\Domain\ExecutionKind;
 use App\Http\ConfigView;
 use App\Http\Csrf;
 use App\Http\Respond;
+use App\Network\Firewall;
+use App\Network\History;
+use App\Network\Machine;
+use App\Network\Manager;
+use App\Network\Probe;
+use App\Network\Store as NetworkStore;
 use App\Win\Elevation;
 use App\Win\HypervGate;
 use App\Win\JobChannel;
@@ -77,6 +83,10 @@ final class ConfigPage extends Page
             wslRunning: $wslDistros === null ? null : $this->distroChecker->running(),
             wslEnabled: $wslEnabled,
             wslDistro: $this->distroChecker->name(),
+            networkEnabled: $this->network->enabled,
+            networkAddress: $this->network->enabled ? $this->network->address() : null,
+            networkAllow: $this->network->allow,
+            networkUpdatedAt: $this->network->updatedAt,
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view), $this->network);
@@ -117,6 +127,10 @@ final class ConfigPage extends Page
 
         if ($action === 'powershell') {
             $this->handlePowerShellToggle(($_POST['ps_enabled'] ?? '') === '1');
+        }
+
+        if ($action === 'rede-desligar') {
+            $this->handleNetworkOff();
         }
 
         if ($action === 'hyperv') {
@@ -410,6 +424,21 @@ final class ConfigPage extends Page
                 ? 'painel do Hyper-V desligado'
                 : 'FALHA ao apagar ' . $hyperv->statePath(),
         ];
+    }
+
+    private function handleNetworkOff(): never
+    {
+        $manager = new Manager(
+            new NetworkStore($this->filesDir),
+            new Machine(),
+            new Probe($this->filesDir),
+            Firewall::fromOneShot($this->oneShot),
+            new History($this->makeService),
+        );
+        $result = $manager->disable();
+
+        $this->flash(implode(' ', $result->lines));
+        Respond::redirect('/config');
     }
 
     private function handleHypervToggle(bool $ligar): never
