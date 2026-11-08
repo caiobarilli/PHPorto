@@ -31,7 +31,7 @@ final class Manager
         private History $history,
         private string $root,
         private string $phpBinary,
-        private string $userName,
+        private ?Identity $identity,
         ?Closure $responds = null,
     ) {
         $this->dispatch = $dispatch;
@@ -55,10 +55,14 @@ final class Manager
 
     public function enable(): Result
     {
+        if ($this->identity === null) {
+            return new Result(false, ['Não foi possível ler o SID da conta deste processo (whoami /user). Nada foi criado.']);
+        }
+
         try {
             $params = WinAction::Autostart->validate([
                 'SubAction' => 'on',
-                'UserName' => $this->userName,
+                'Sid' => $this->identity->sid,
                 'Program' => $this->phpBinary,
                 'Script' => $this->script(),
             ]);
@@ -68,7 +72,7 @@ final class Manager
 
         $observed = $this->task->observe();
 
-        if ($observed->matches($this->userName, $this->phpBinary, $this->script())) {
+        if ($observed->matches($this->identity->sid, $this->phpBinary, $this->script())) {
             $this->store->set(true);
 
             return new Result(true, ['O início com o Windows já estava ligado. Nada a fazer.']);
@@ -86,7 +90,7 @@ final class Manager
         $this->history->record('ligado', 'tarefa ' . Task::NAME . ' criada (na inicialização, conta do próprio usuário, logon S4U)');
 
         return new Result(true, [
-            'Início com o Windows ligado: a tarefa ' . Task::NAME . ' sobe o php phporto serve na inicialização, como ' . $this->userName . ', sem nível elevado.',
+            'Início com o Windows ligado: a tarefa ' . Task::NAME . ' sobe o php phporto serve na inicialização, como ' . $this->identity->name . ', sem nível elevado.',
             'Isso não liga a rede privada, e a rede privada não liga isto.',
         ]);
     }
@@ -137,7 +141,7 @@ final class Manager
         return new Report(
             $this->store->enabled(),
             $observed,
-            $observed->matches($this->userName, $this->phpBinary, $this->script()),
+            $this->identity !== null && $observed->matches($this->identity->sid, $this->phpBinary, $this->script()),
             ($this->responds)($port),
         );
     }

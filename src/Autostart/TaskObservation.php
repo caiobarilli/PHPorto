@@ -59,17 +59,17 @@ final readonly class TaskObservation
         return $this->fields['STATE'] ?? null;
     }
 
-    public function matches(string $userName, string $program, string $script): bool
+    public function matches(string $sid, string $program, string $script): bool
     {
         if (!$this->present()) {
             return false;
         }
 
-        $user = $this->fields['USER'] ?? '';
-        $expected = strtolower($userName);
-        $actual = strtolower($user);
+        $actual = $this->fields['SID'] ?? '';
 
-        return ($actual === $expected || str_ends_with($expected, '\\' . $actual))
+        return Identity::validSid($sid)
+            && Identity::validSid($actual)
+            && hash_equals(strtoupper($sid), strtoupper($actual))
             && strtolower($this->fields['EXEC'] ?? '') === strtolower($program)
             && ($this->fields['ARGS'] ?? '') === '"' . $script . '" serve'
             && strtolower($this->fields['LOGON'] ?? '') === 's4u'

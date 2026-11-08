@@ -162,7 +162,7 @@ function Stop-PhportoTree {
 function Invoke-Autostart {
     param(
         [string]$SubAction,
-        [string]$UserName,
+        [string]$Sid,
         [string]$Program,
         [string]$Script
     )
@@ -183,9 +183,13 @@ function Invoke-Autostart {
     }
 
     function Test-AutostartUser {
-        $atual = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-        if ([string]::IsNullOrWhiteSpace($UserName) -or $UserName -ne $atual) {
-            Write-Status ERROR "UserName does not match the account of this process. Nothing was created."
+        if ([string]::IsNullOrWhiteSpace($Sid) -or $Sid -notmatch '\AS-1-5-21-[0-9]{1,10}-[0-9]{1,10}-[0-9]{1,10}-[0-9]{1,10}\z') {
+            Write-Status ERROR "Sid is not an account SID. Nothing was created."
+            return $false
+        }
+        $atual = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        if ($Sid -cne $atual) {
+            Write-Status ERROR "Sid does not match the account of this process. Nothing was created."
             return $false
         }
         return $true
@@ -200,9 +204,10 @@ function Invoke-Autostart {
             $trigger   = New-ScheduledTaskTrigger -AtStartup
             $settings  = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
                 -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-            $principal = New-ScheduledTaskPrincipal -UserId $UserName -LogonType S4U -RunLevel Limited
+            $conta     = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+            $principal = New-ScheduledTaskPrincipal -UserId $conta -LogonType S4U -RunLevel Limited
             Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-            Write-Status OK "Scheduled task '$taskName' registered (at startup, $UserName, S4U, RunLevel Limited, no password stored)."
+            Write-Status OK "Scheduled task '$taskName' registered (at startup, $conta, S4U, RunLevel Limited, no password stored)."
         } catch {
             Write-Status ERROR "Failed to register scheduled task: $($_.Exception.Message)"
         }

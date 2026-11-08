@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Autostart\History;
+use App\Autostart\Identity;
 use App\Autostart\Manager;
 use App\Autostart\Store;
 use App\Autostart\Task;
@@ -16,10 +17,11 @@ use App\Win\PsResult;
 use App\Win\WinAction;
 use Tests\Fakes\FakeProvider;
 
-const ASM_USER = 'MAQUINA\\dev';
+const ASM_SID = 'S-1-5-21-1111111111-2222222222-3333333333-1001';
+const ASM_NAME = 'DESKTOP\\dev';
 const ASM_PHP = 'C:\\php\\php.exe';
 const ASM_ROOT = 'C:\\Users\\dev\\code\\PHPorto';
-const ASM_TASK_OK = "TASK=presente\nSTATE=Ready\nUSER=MAQUINA\\dev\nLOGON=S4U\nRUNLEVEL=Limited\nEXEC=C:\\php\\php.exe\nARGS=\"C:\\Users\\dev\\code\\PHPorto\\phporto\" serve\nTRIGGERS=MSFT_TaskBootTrigger\n";
+const ASM_TASK_OK = "TASK=presente\nSTATE=Ready\nUSER=WORKGROUP\\dev\nSID=S-1-5-21-1111111111-2222222222-3333333333-1001\nLOGON=S4U\nRUNLEVEL=Limited\nEXEC=C:\\php\\php.exe\nARGS=\"C:\\Users\\dev\\code\\PHPorto\\phporto\" serve\nTRIGGERS=MSFT_TaskBootTrigger\n";
 
 /**
  * @return array{dir: string, provider: FakeProvider, calls: ArrayObject<int, array<string, mixed>>, store: Store, manager: Manager, probes: ArrayObject<int, string>}
@@ -51,7 +53,7 @@ function asManager(string $probe = 'TASK=ausente', bool $uac = true, string $dis
         new History(static fn (): ExecutionLogService => new ExecutionLogService($provider)),
         ASM_ROOT,
         ASM_PHP,
-        ASM_USER,
+        new Identity(ASM_NAME, ASM_SID),
         static fn (int $port): bool => $serving,
     );
 
@@ -76,7 +78,7 @@ it('ligar cria a tarefa uma vez, grava o estado próprio e registra sem segredo'
     expect($r->ok)->toBeTrue()
         ->and($a['store']->enabled())->toBeTrue()
         ->and($a['calls']->getArrayCopy())->toBe([[
-            'SubAction' => 'on', 'UserName' => ASM_USER, 'Program' => ASM_PHP, 'Script' => ASM_ROOT . '\\phporto',
+            'SubAction' => 'on', 'Sid' => ASM_SID, 'Program' => ASM_PHP, 'Script' => ASM_ROOT . '\\phporto',
         ]])
         ->and(array_map(static fn ($e): string => $e->command, $a['provider']->inserted))->toBe(['iniciar com o Windows ligado'])
         ->and(implode("\n", array_map(static fn ($e): string => $e->output, $a['provider']->inserted)))->not->toMatch('/senha|password|credential|token/i')
@@ -225,15 +227,36 @@ it('o relatório é só leitura: lê a tarefa e o loopback e não pede UAC', fun
     asClean($a['dir']);
 });
 
-it('a observação reconhece o usuário sem domínio e recusa a tarefa de outro usuário', function () {
-    $semDominio = TaskObservation::parse(str_replace('USER=MAQUINA\\dev', 'USER=dev', ASM_TASK_OK));
-    $outro = TaskObservation::parse(str_replace('USER=MAQUINA\\dev', 'USER=outro', ASM_TASK_OK));
+it('a observação compara pelo SID do principal, não pelo nome da conta', function () {
+    $nomeDiferente = TaskObservation::parse(str_replace('USER=WORKGROUP\\dev', 'USER=DESKTOP\\outro-nome', ASM_TASK_OK));
+    $outroSid = TaskObservation::parse(str_replace('1001', '1002', ASM_TASK_OK));
+    $semSid = TaskObservation::parse(str_replace("SID=S-1-5-21-1111111111-2222222222-3333333333-1001\n", "SID=\n", ASM_TASK_OK));
+    $minusculo = TaskObservation::parse(ASM_TASK_OK);
 
-    expect($semDominio->matches(ASM_USER, ASM_PHP, ASM_ROOT . '\\phporto'))->toBeTrue()
-        ->and($outro->matches(ASM_USER, ASM_PHP, ASM_ROOT . '\\phporto'))->toBeFalse()
-        ->and(TaskObservation::unknown()->matches(ASM_USER, ASM_PHP, ASM_ROOT . '\\phporto'))->toBeFalse();
+    expect($nomeDiferente->matches(ASM_SID, ASM_PHP, ASM_ROOT . '\\phporto'))->toBeTrue()
+        ->and($outroSid->matches(ASM_SID, ASM_PHP, ASM_ROOT . '\\phporto'))->toBeFalse()
+        ->and($semSid->matches(ASM_SID, ASM_PHP, ASM_ROOT . '\\phporto'))->toBeFalse()
+        ->and($minusculo->matches('nao-e-sid', ASM_PHP, ASM_ROOT . '\\phporto'))->toBeFalse()
+        ->and(TaskObservation::unknown()->matches(ASM_SID, ASM_PHP, ASM_ROOT . '\\phporto'))->toBeFalse();
 });
 
+it('sem o SID da conta, ligar falha com o motivo e nada é criado', function () {
+    $a = asManager();
+    $r = (new ReflectionClass(Manager::class))->newInstanceArgs([
+        $a['store'], new Task($a['dir'], static fn (): string => 'TASK=ausente'), static function () use ($a): PsResult {
+            $a['calls'][] = [];
+
+            return new PsResult("[ OK ] feito\\n", 0, false, 1);
+        }, new History(static fn (): ExecutionLogService => new ExecutionLogService($a['provider'])), ASM_ROOT, ASM_PHP, null,
+    ])->enable();
+
+    expect($r->ok)->toBeFalse()
+        ->and(implode(' ', $r->lines))->toContain('SID')->toContain('Nada foi criado')
+        ->and(count($a['calls']))->toBe(0)
+        ->and($a['store']->enabled())->toBeFalse();
+
+    asClean($a['dir']);
+});
 it('o script da sonda do Agendador só lê', function () {
     expect(Task::script())->toContain('Get-ScheduledTask')->not->toMatch('/\b(New|Set|Remove|Register|Unregister|Start|Stop|Disable|Enable)-/');
 });
