@@ -11,8 +11,11 @@ travas que existem e o que cada uma cobre.
 O servidor deve escutar **só em `127.0.0.1`**:
 
 ```bash
-php -S 127.0.0.1:4001 -t public public/router.php
+php phporto serve
 ```
+
+O `php phporto serve` fixa o endereço em `127.0.0.1`. O equivalente manual
+(`php -S 127.0.0.1:4001 -t public public/router.php`) continua valendo.
 
 Nunca `0.0.0.0`, o IP da rede ou um proxy que o exponha. O token de acesso não
 muda isso: ele viaja em texto puro no formulário e no HTTP Basic da API (base64
@@ -112,7 +115,7 @@ A aba **Chaves SSH** (ação `ssh-keys`) cuida das chaves do túnel:
 
 Toda requisição, telas e API, passa por um portão único antes do roteamento.
 
-- **Geração:** `php token.php` cria 32 bytes aleatórios em hexadecimal, imprime
+- **Geração:** `php phporto token` cria 32 bytes aleatórios em hexadecimal, imprime
   e grava em `PHPORTO_AUTH_TOKEN` no `.env`. Trocar um token existente pede
   confirmação. O script roda só na linha de comando e mora fora de `public/`.
 - **Entrada nas telas:** um formulário do próprio PHPorto, com o token num campo
@@ -131,7 +134,7 @@ Toda requisição, telas e API, passa por um portão único antes do roteamento.
 - **Sem token configurado:** a aplicação responde 503 a tudo, com credencial ou
   sem. A falha cai para o lado fechado.
 - **Sem logout:** para sair, apague o cookie `phporto_auth` do navegador ou
-  troque o token com `php token.php`.
+  troque o token com `php phporto token`.
 
 ## Limite de tentativas
 
@@ -518,7 +521,7 @@ sai do caminho do serviço `SunshineService`), senão a ação recusa.
 
 O processo web nunca escreve no `.env`, que guarda credencial de banco. O que a
 tela `/config` alterna vai para `storage/flags.json`, que só contém booleanos e
-tem allowlist de chaves. A única escrita no `.env` é a do `php token.php`,
+tem allowlist de chaves. A única escrita no `.env` é a do `php phporto token`,
 rodado à mão.
 
 ## A seção C da `/php` roda código com os seus poderes

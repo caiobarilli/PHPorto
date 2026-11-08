@@ -26,7 +26,7 @@ function semComentarioArquivos(string $raiz): array
     foreach (glob("$raiz/*.php") ?: [] as $f) {
         $arquivos[] = str_replace('\\', '/', $f);
     }
-    foreach (['.php-cs-fixer.php', '.php-cs-fixer.dist.php'] as $f) {
+    foreach (['phporto', '.php-cs-fixer.php', '.php-cs-fixer.dist.php'] as $f) {
         if (is_file("$raiz/$f")) {
             $arquivos[] = "$raiz/$f";
         }

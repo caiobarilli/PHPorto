@@ -222,7 +222,7 @@ it('SEM PHPORTO_AUTH_TOKEN a aplicação RECUSA SERVIR, mesmo com credencial', f
     [$status, , $corpo] = $GLOBALS['auth_sem']->request('GET', $caminho, $senha);
 
     expect($status)->toBe(503)
-        ->and($corpo)->toContain('php token.php');
+        ->and($corpo)->toContain('php phporto token');
 })->with([
     ['/', null],
     ['/', ''],
@@ -235,5 +235,5 @@ it('SEM PHPORTO_AUTH_TOKEN o formulário também recusa, com 503', function () {
     [$status, , $corpo] = $GLOBALS['auth_sem']->request('POST', '/config', null, [Login::FIELD => 'qualquer']);
 
     expect($status)->toBe(503)
-        ->and($corpo)->toContain('php token.php');
+        ->and($corpo)->toContain('php phporto token');
 });

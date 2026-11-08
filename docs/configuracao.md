@@ -10,21 +10,27 @@ O formato é o do phpdotenv: uma variável por linha, `CHAVE=valor`; linha com
 (`tests/Unit/EnvExampleTest.php`) confere que toda chave lida está no
 `.env.example` e que toda chave do exemplo é lida por alguém.
 
-O processo web nunca escreve no `.env`. A única exceção é o `php token.php`,
+O processo web nunca escreve no `.env`. A única exceção é o `php phporto token`,
 rodado à mão na linha de comando.
 
 ## Acesso
+
+### `PHPORTO_PORT`
+
+A porta do `php phporto serve`, sempre em `127.0.0.1`. Padrão: `4001`. Valor de 1
+a 65535; qualquer outro faz o comando sair com código 78. Sem `CORS_ORIGIN`, a
+origem padrão da API acompanha esta porta.
 
 ### `PHPORTO_AUTH_TOKEN`
 
 O token de acesso, colado no formulário de entrada das telas e enviado no campo
 de senha do HTTP Basic pela API.
 
-- **Formato:** texto. O `php token.php` gera 32 bytes aleatórios em hexadecimal
+- **Formato:** texto. O `php phporto token` gera 32 bytes aleatórios em hexadecimal
   (64 caracteres), grava aqui e imprime. Se já houver um valor, pede
   confirmação antes de trocar.
 - **Se faltar:** vazio ou ausente, a aplicação responde **503** a tudo — telas e
-  API, com credencial ou sem —, dizendo para rodar `php token.php`. A falha cai
+  API, com credencial ou sem —, dizendo para rodar `php phporto token`. A falha cai
   para o lado fechado: um `.env` incompleto não vira uma ferramenta de shell
   aberta.
 

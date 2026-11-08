@@ -79,7 +79,7 @@ Opcionais, por recurso:
 4. Gere o token de acesso:
 
    ```bash
-   php token.php
+   php phporto token
    ```
 
    O token é impresso e gravado no `.env`. No navegador, cole-o no campo de
@@ -88,8 +88,12 @@ Opcionais, por recurso:
 5. Suba o servidor:
 
    ```bash
-   php -S 127.0.0.1:4001 -t public public/router.php
+   php phporto serve
    ```
+
+   O comando funciona de qualquer pasta e sobe só em `127.0.0.1`, na porta de
+   `PHPORTO_PORT` (padrão 4001). Ctrl+C encerra. O `php -S 127.0.0.1:4001 -t public
+   public/router.php` continua valendo, só no loopback.
 
    E abra <http://127.0.0.1:4001>. O painel recusa conexões que não venham da própria máquina.
 

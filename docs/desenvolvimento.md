@@ -34,7 +34,8 @@ tests/
   Fakes/, Support/   provider falso e o auxiliar que sobe o php -S
 tools/
   cs-check-lf.php    o PHP-CS-Fixer sobre uma cópia em LF
-token.php            gera o token de acesso
+phporto             a entrada única de comandos (serve, token)
+token.php            atalho para php phporto token
 docs/                esta documentação
 ```
 

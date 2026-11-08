@@ -5,6 +5,7 @@ parameters:
         - src
         - public
         - token.php
+        - phporto
     excludePaths:
         - tests
         - vendor

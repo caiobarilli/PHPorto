@@ -92,7 +92,7 @@ final class Respond
 
         echo match ($decision->outcome) {
             AuthOutcome::NotConfigured => "PHPORTO_AUTH_TOKEN não está configurado no .env, e sem ele nada é servido.\n"
-                . "Rode na raiz do projeto:  php token.php\n",
+                . "Rode na raiz do projeto:  php phporto token\n",
             AuthOutcome::Locked => self::lockedMessage($decision->retryAfter),
             default => "Token ausente ou errado. Mande o token no campo de senha do Basic (curl -u :TOKEN); o usuário é ignorado.\n",
         };

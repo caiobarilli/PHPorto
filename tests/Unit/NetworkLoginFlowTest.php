@@ -103,7 +103,6 @@ it('mostra o aviso somente com rede ligada e escapa todo o endereço e a allow',
         '192.168.1.20<',
         4001,
         ['192.168.1.0/24<script>alert(1)</script>'],
-        false,
         'agora',
     )));
 
@@ -119,7 +118,7 @@ it('mostra o aviso somente com rede ligada e escapa todo o endereço e a allow',
 })->with([true, false]);
 
 it('o aviso usa um link de configurações escapado', function () {
-    $html = Respond::render('layout.php', new LayoutView('teste', '<div>conteúdo</div>', new State(true, '192.168.1.20', 4001, ['192.168.1.0/24'], false, 'agora')));
+    $html = Respond::render('layout.php', new LayoutView('teste', '<div>conteúdo</div>', new State(true, '192.168.1.20', 4001, ['192.168.1.0/24'], 'agora')));
 
     expect($html)->toContain('position: fixed;', 'top: 0;', '<a href="/config">Configurações</a>');
 });

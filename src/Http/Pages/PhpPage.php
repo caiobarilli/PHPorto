@@ -52,7 +52,7 @@ final class PhpPage extends Page
                 $ativo,
                 PhpProbe::windows(),
                 static fn (): ?string => PhpReleases::cached(
-                    dirname(__DIR__, 2) . '/storage/php-releases.json',
+                    dirname(__DIR__, 3) . '/storage/php-releases.json',
                     time(),
                     static fn (): ?string => PhpReleases::fetch(PhpReleases::LISTING_URL),
                 ),
