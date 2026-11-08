@@ -493,23 +493,51 @@ de tipo `windows`; o do WSL fica.
 ```bash
 php phporto autostart on
 php phporto autostart status
+php phporto autostart restart
 php phporto autostart off
 ```
 
-O `on` cria a tarefa `PHPorto` no Agendador de Tarefas, com UAC: dispara na
-inicialização, na sua conta, mesmo sem sessão aberta (logon S4U, sem guardar
-senha), sem nível elevado, e roda `php.exe <raiz>\phporto serve`. Reinicia em
-falha e não deixa uma segunda instância. Nenhuma senha passa pelo PHPorto.
+O `on` **não cria a tarefa sozinho**. Ele gera `files/PHPorto-tarefa.xml` e você o
+importa no Agendador de Tarefas (`taskschd.msc`, como administrador, Ação,
+Importar Tarefa). A tarefa `PHPorto` dispara na inicialização, na sua conta,
+"com ou sem usuário conectado" (logon por senha), sem nível elevado
+(`RunLevel` Limited), e roda `php.exe <raiz>\phporto serve`. Reinicia em falha e
+não deixa uma segunda instância.
+
+**A senha é pedida só pelo diálogo do Windows.** O XML não leva senha, e o
+PHPorto nunca a lê, recebe ou guarda: nada de formulário, API, STDIN ou
+`Get-Credential`. Por que não o `schtasks /Create /RP *` nem o PowerShell com
+`Register-ScheduledTask -Password`: nesses, a senha entra num processo que o
+PHPorto abriu. No diálogo do `taskschd.msc` ela vai direto do usuário para o
+serviço do Agendador.
+
+Por que não S4U (sem senha): numa conta administradora, a S4U recebe o token
+completo, porque o Windows só divide o token do UAC em logon interativo. O
+`serve` subia em nível de integridade alto (medido no Windows real), e o canal
+do Ollama recusa isso. Por isso o `on` troca uma tarefa S4U antiga: ele a remove
+(UAC) antes de gerar o XML.
 
 A conta é identificada pelo SID do próprio processo PHP (`whoami /user`), não
 pelas variáveis `USERDOMAIN` e `USERNAME`: numa máquina sem domínio o
 `USERDOMAIN` pode dizer `WORKGROUP` enquanto o token diz `DESKTOP\usuario`. O
-script elevado recebe o SID, recusa se for diferente do SID do próprio processo
-e registra a tarefa com o nome que o Windows dá a essa conta. Sem conseguir ler
-o SID, nada é criado.
+XML leva o SID. Sem conseguir ler o SID, nada é gerado.
 
+- **O `serve` recusa subir elevado.** Em nível de integridade alto ou de
+  sistema, `php phporto serve` sai com falha e uma mensagem, sem subir nada, e
+  registra o motivo no histórico. Um painel elevado executaria ações de
+  administrador sem passar pelo UAC. Inicie por um terminal comum ou pela tarefa
+  (`schtasks /Run /TN PHPorto`). Uma sessão SSH de conta administradora é
+  elevada: use a tarefa. O limite vale para o `serve`; um `php -S` à mão sobre
+  `public/router.php` não passa por essa checagem.
 - **Independente da rede:** ligar o início não liga a rede privada, e desligar a
   rede não desliga o início. O estado mora em `files/autostart.json`.
+- **Na `/config`:** a seção mostra a tarefa (presente ou ausente, como o
+  esperado ou não), o logon dela (Password ou S4U) e o nível do servidor
+  (médio ou alto). Ligar fica desativado com a tarefa já como o esperado, e
+  Desligar e Reiniciar sem tarefa.
+- **Reiniciar pela tarefa:** `restart` e o botão encerram o servidor e rodam a
+  tarefa de novo (UAC). Serve para depois de uma atualização, sem terminal. O
+  painel fica fora do ar por alguns segundos.
 - **Desligar:** `off` remove a tarefa e não derruba o servidor em execução. O
   botão Parar agora da `/config` encerra qualquer `php phporto serve` deste
   projeto, inclusive um aberto à mão no terminal, junto com os `php -S` filhos.
@@ -526,15 +554,24 @@ Decisão em `.ai/adr/0012-iniciar-com-o-windows.md`.
 
 ### Validado no Windows real
 
+- O `autostart` com o SID funciona: a conta é reconhecida onde o nome por
+  `USERDOMAIN` falhava.
 - O acesso pela rede funciona pelo notebook, depois do `fix/rede-server-addr`.
-- O `serve` iniciado pelo SSH sobrevive ao fim da sessão SSH: a árvore inteira
-  continua.
-- Num `serve` iniciado pelo SSH, o WSL aparece como "não ativado": o `wsl` não
-  funciona nessa sessão. Isso indica que o S4U pode ter o mesmo limite. O teste
-  do boot sem login vai confirmar.
+- O boot sem login sobe o painel e a rede, mas a tarefa S4U sobe elevada (nível
+  de integridade alto, com o `svchost.exe` como pai). Por isso o plano B.
+- Uma sessão SSH de conta administradora é elevada. O `serve` iniciado pelo SSH
+  sobe em nível alto, o WSL aparece como "não ativado" e o canal do Ollama
+  recusa. O `serve` iniciado pelo SSH sobrevive ao fim da sessão: a árvore
+  inteira continua.
 
-Ainda não validado: o boot sem login, o WSL e o Ollama na sessão S4U, e o
-restante da lista "Não testado" do ADR 0012.
+### Ainda não testado (plano B)
+
+- O logon por senha com `RunLevel` Limited dar nível **médio** numa conta
+  administradora.
+- O diálogo de importação do `taskschd.msc` pedir a senha para o XML gerado, e
+  a tarefa importada ficar igual ao esperado no `status`.
+- `Start-ScheduledTask` iniciar o `serve` depois do `taskkill` do `restart`.
+- O boot sem login, com o WSL e o Ollama na sessão da tarefa com senha.
 
 ## Onde as ações gravam
 

@@ -47,12 +47,11 @@ Describe "Invoke-Autostart - Sanity" {
         $errors.Count | Should -Be 0
     }
 
-    It "never stores or asks for a password, never runs as Highest" {
+    It "never stores or asks for a password, never creates a task" {
         $text = Get-Content -Path $Script:Acao -Raw
         $text | Should -Not -Match '-Password|Get-Credential|SecureString|LogonType\s+Password|Read-Host|RunAs'
         $text | Should -Not -Match 'RunLevel Highest'
-        $text | Should -Match '-LogonType S4U'
-        $text | Should -Match '-RunLevel Limited'
+        $text | Should -Not -CMatch '(?<!Un)Register-ScheduledTask|New-ScheduledTask|-LogonType|S4U|-RunLevel'
     }
 }
 
@@ -61,84 +60,12 @@ Describe "Invoke-Autostart - SubAction validation" {
     It "emits [ ERROR ] and lists the options when no subaction is given" {
         $output = (Invoke-Autostart) 6>&1 | Out-String
         $output | Should -Match '\[ ERROR \]'
-        $output | Should -Match 'on, off, stop'
+        $output | Should -Match 'off, stop, restart'
     }
 
     It "emits [ ERROR ] for an unrecognised subaction" {
         $output = (Invoke-Autostart -SubAction 'status') 6>&1 | Out-String
         $output | Should -Match '\[ ERROR \]'
-    }
-}
-
-Describe "Invoke-Autostart - on" {
-
-    BeforeEach {
-        Mock Register-ScheduledTask { }
-        Mock New-ScheduledTaskPrincipal { [PSCustomObject]@{ UserId = $UserId; LogonType = $LogonType; RunLevel = $RunLevel } }
-    }
-
-    It "registers an at-startup task for the own account with S4U and RunLevel Limited" {
-        $output = (Invoke-Autostart -SubAction on -Sid $Script:EuSid -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-String
-
-        $output | Should -Match '\[ OK \]'
-        Should -Invoke -CommandName New-ScheduledTaskPrincipal -Times 1 -Exactly -ParameterFilter {
-            $UserId -eq $Script:Eu -and $LogonType -eq 'S4U' -and $RunLevel -eq 'Limited'
-        }
-        Should -Invoke -CommandName Register-ScheduledTask -Times 1 -Exactly -ParameterFilter {
-            $TaskName -eq 'PHPorto' -and $Force
-        }
-    }
-
-    It "runs php.exe with the phporto script and the serve command" {
-        Mock New-ScheduledTaskAction { [PSCustomObject]@{ Execute = $Execute; Argument = $Argument } }
-        (Invoke-Autostart -SubAction on -Sid $Script:EuSid -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-Null
-        Should -Invoke -CommandName New-ScheduledTaskAction -Times 1 -Exactly -ParameterFilter {
-            $Execute -eq $Script:PhpExe -and $Argument -eq ('"' + $Script:Phporto + '" serve')
-        }
-    }
-
-    It "refuses (<Caso>) without registering anything" -ForEach @(
-        @{ Caso = 'another SID';       User = 'S-1-5-21-1-2-3-1001';  Php = 'ok'; Roteiro = 'ok' }
-        @{ Caso = 'empty SID';         User = '';                     Php = 'ok'; Roteiro = 'ok' }
-        @{ Caso = 'malformed SID';     User = 'S-1-5-21-1-2-3';       Php = 'ok'; Roteiro = 'ok' }
-        @{ Caso = 'account name';      User = 'nome';                 Php = 'ok'; Roteiro = 'ok' }
-        @{ Caso = 'trailing garbage';  User = 'eu;calc';              Php = 'ok'; Roteiro = 'ok' }
-        @{ Caso = 'not php.exe';      User = 'eu';           Php = 'notepad'; Roteiro = 'ok' }
-        @{ Caso = 'not phporto file'; User = 'eu';           Php = 'ok';      Roteiro = 'token.php' }
-    ) {
-        $user = if ($User -eq 'eu') { $Script:EuSid } elseif ($User -eq 'eu;calc') { $Script:EuSid + ';calc' } elseif ($User -eq 'nome') { $Script:Eu } else { $User }
-        $programa = if ($Php -eq 'ok') { $Script:PhpExe } else { Join-Path $Script:Pasta 'notepad.exe' }
-        $arquivo = if ($Roteiro -eq 'ok') { $Script:Phporto } else { Join-Path $Script:Pasta $Roteiro }
-        $output = (Invoke-Autostart -SubAction on -Sid $user -Program $programa -Script $arquivo) 6>&1 | Out-String
-        $output | Should -Match '\[ ERROR \]'
-        Should -Invoke -CommandName Register-ScheduledTask -Times 0 -Exactly
-    }
-
-    It "creates nothing when the SID differs, and says so" {
-        $output = (Invoke-Autostart -SubAction on -Sid 'S-1-5-21-1-2-3-1001' -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-String
-        $output | Should -Match '\[ ERROR \]'
-        $output | Should -Match 'does not match'
-        Should -Invoke -CommandName New-ScheduledTaskPrincipal -Times 0 -Exactly
-        Should -Invoke -CommandName Register-ScheduledTask -Times 0 -Exactly
-    }
-
-    It "does not depend on USERDOMAIN or USERNAME" {
-        $d = $env:USERDOMAIN; $u = $env:USERNAME
-        try {
-            $env:USERDOMAIN = 'DOMINIO-FALSO'; $env:USERNAME = 'outra-pessoa'
-            $output = (Invoke-Autostart -SubAction on -Sid $Script:EuSid -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-String
-        } finally {
-            $env:USERDOMAIN = $d; $env:USERNAME = $u
-        }
-        $output | Should -Match '\[ OK \]'
-        Should -Invoke -CommandName New-ScheduledTaskPrincipal -Times 1 -Exactly -ParameterFilter { $UserId -eq $Script:Eu }
-    }
-
-    It "reports the failure when the registration throws" {
-        Mock Register-ScheduledTask { throw 'acesso negado' }
-        $output = (Invoke-Autostart -SubAction on -Sid $Script:EuSid -Program $Script:PhpExe -Script $Script:Phporto) 6>&1 | Out-String
-        $output | Should -Match '\[ ERROR \]'
-        $output | Should -Not -Match '\[ OK \]'
     }
 }
 
@@ -318,6 +245,96 @@ Describe "Invoke-Autostart - stop" {
         Should -Invoke -CommandName Stop-PhportoTree -Times 1 -Exactly -ParameterFilter { $ProcessId -eq 201 }
         Should -Invoke -CommandName Stop-PhportoTree -Times 1 -Exactly -ParameterFilter { $ProcessId -eq 203 }
         Should -Invoke -CommandName Stop-PhportoTree -Times 0 -Exactly -ParameterFilter { $ProcessId -eq 202 }
+    }
+}
+
+Describe "Invoke-Autostart - restart" {
+
+    BeforeAll {
+        function global:New-FakePhpR([int]$Id, [string]$Linha) { [PSCustomObject]@{ ProcessId = $Id; CommandLine = $Linha } }
+    }
+
+    AfterAll {
+        Remove-Item -Path 'Function:\New-FakePhpR' -Force -ErrorAction SilentlyContinue
+    }
+
+    BeforeEach {
+        Mock Get-ScheduledTask { [PSCustomObject]@{ TaskName = 'PHPorto' } }
+        Mock Stop-ScheduledTask { }
+        Mock Start-ScheduledTask { }
+        Mock Stop-PhportoTree { }
+        Mock Get-PhportoProcessCwd { $null }
+        Mock Get-CimInstance { @() }
+    }
+
+    It "stops the serve trees and runs the task again" {
+        $linha = '"C:\php\php.exe" "' + $Script:Phporto + '" serve'
+        Mock Get-CimInstance { @(New-FakePhpR 4242 $linha) }
+
+        $output = (Invoke-Autostart -SubAction restart -Script $Script:Phporto) 6>&1 | Out-String
+
+        $output | Should -Match '\[ OK \]'
+        $output | Should -Match '1 process tree'
+        Should -Invoke -CommandName Stop-PhportoTree -Times 1 -Exactly -ParameterFilter { $ProcessId -eq 4242 }
+        Should -Invoke -CommandName Stop-ScheduledTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'PHPorto' }
+        Should -Invoke -CommandName Start-ScheduledTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'PHPorto' }
+    }
+
+    It "starts the task even when no serve is running" {
+        $output = (Invoke-Autostart -SubAction restart -Script $Script:Phporto) 6>&1 | Out-String
+
+        $output | Should -Match '\[ OK \]'
+        Should -Invoke -CommandName Stop-PhportoTree -Times 0 -Exactly
+        Should -Invoke -CommandName Start-ScheduledTask -Times 1 -Exactly
+    }
+
+    It "does not kill another project's serve" {
+        $outra = Join-Path $Script:Pasta 'outra-restart'
+        New-Item -ItemType Directory -Path $outra -Force | Out-Null
+        $linha = 'php.exe "' + (Join-Path $outra 'phporto') + '" serve'
+        Mock Get-CimInstance { @(New-FakePhpR 5151 $linha) }
+
+        $output = (Invoke-Autostart -SubAction restart -Script $Script:Phporto) 6>&1 | Out-String
+
+        $output | Should -Match '0 process tree'
+        Should -Invoke -CommandName Stop-PhportoTree -Times 0 -Exactly
+    }
+
+    It "refuses without the task and stops nothing" {
+        Mock Get-ScheduledTask { }
+        $linha = 'php.exe "' + $Script:Phporto + '" serve'
+        Mock Get-CimInstance { @(New-FakePhpR 4343 $linha) }
+
+        $output = (Invoke-Autostart -SubAction restart -Script $Script:Phporto) 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \]'
+        $output | Should -Match 'Nothing was stopped'
+        Should -Invoke -CommandName Stop-PhportoTree -Times 0 -Exactly
+        Should -Invoke -CommandName Start-ScheduledTask -Times 0 -Exactly
+    }
+
+    It "reports the failure when the task does not start" {
+        Mock Start-ScheduledTask { throw 'acesso negado' }
+
+        $output = (Invoke-Autostart -SubAction restart -Script $Script:Phporto) 6>&1 | Out-String
+
+        $output | Should -Match '\[ ERROR \]'
+        $output | Should -Not -Match '\[ OK \]'
+    }
+
+    It "needs the phporto script" {
+        $output = (Invoke-Autostart -SubAction restart -Script (Join-Path $Script:Pasta 'token.php')) 6>&1 | Out-String
+        $output | Should -Match '\[ ERROR \]'
+        Should -Invoke -CommandName Start-ScheduledTask -Times 0 -Exactly
+    }
+}
+
+Describe "Invoke-Autostart - no task creation" {
+
+    It "has no subaction that creates a task, so no S4U task can come from the elevated side" {
+        $output = (Invoke-Autostart -SubAction on -Script $Script:Phporto) 6>&1 | Out-String
+        $output | Should -Match '\[ ERROR \]'
+        $output | Should -Match 'Unknown subaction'
     }
 }
 

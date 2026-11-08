@@ -11,6 +11,7 @@ final readonly class Report
         public TaskObservation $task,
         public bool $matches,
         public bool $serving,
+        public ?string $level = null,
     ) {
     }
 }

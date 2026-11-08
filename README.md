@@ -99,11 +99,13 @@ Opcionais, por recurso:
 
 ## Iniciar com o Windows
 
-`php phporto autostart on` cria a tarefa `PHPorto` no Agendador (UAC): sobe o
-`php phporto serve` na inicialização, na sua conta, sem sessão aberta, sem nível
-elevado e sem guardar senha. `autostart off` remove a tarefa e `autostart status`
-mostra o estado. Também há a seção na `/config`. Não liga a rede privada. Detalhes
-em [docs/windows.md](docs/windows.md).
+`php phporto autostart on` gera o XML da tarefa `PHPorto` (logon por senha, sem
+nível elevado) e você o importa no Agendador de Tarefas: a senha é pedida só pelo
+diálogo do Windows, nunca pelo PHPorto. A tarefa sobe o `php phporto serve` na
+inicialização, sem sessão aberta. `autostart off` remove a tarefa, `autostart
+restart` reinicia o servidor pela tarefa e `autostart status` mostra o estado.
+Também há a seção na `/config`. O `serve` recusa subir em nível elevado. Não liga
+a rede privada. Detalhes em [docs/windows.md](docs/windows.md).
 
 ## Acesso pela rede privada
 

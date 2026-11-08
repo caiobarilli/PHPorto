@@ -277,6 +277,7 @@ function cliServeNet(array $net, ?Closure $runner = null): array
         new Launcher($net['store'], $net['machine'], $net['probe']),
         $net['history'],
         $net['store'],
+        static fn (): string => 'médio',
     );
     $code = $serve->run([]);
     rewind($out);

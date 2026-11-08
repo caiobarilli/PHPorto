@@ -52,3 +52,15 @@ O servidor embutido define `REMOTE_ADDR`, `SERVER_NAME` (o endereço do `-S`), `
 Medido num `php -S` real: com `Host` forjado pelo cliente, o `SERVER_NAME` continua sendo o endereço de escuta. Por isso o endereço de escuta é `SERVER_ADDR` quando existe e, senão, `SERVER_NAME`, só valendo se for IPv4 igual ao `bind_ip`.
 
 Evidência: `tests/Integration/ServerVarsTest.php` (SAPI real); `State::listenerAddress`.
+
+## S4U numa conta administradora sobe elevado
+
+O Windows só divide o token do UAC em logon interativo. Uma tarefa S4U (`LogonType S4U`, `RunLevel Limited`) de conta administradora recebe o token completo: o `serve` subiu com o `svchost.exe` como pai, em nível de integridade alto (`S-1-16-12288`), e o canal do Ollama recusou. Uma sessão SSH de administrador também é elevada (o `serve` iniciado por ela sobe em nível alto e o WSL aparece como "não ativado"). Medido no desktop do Maintainer.
+
+Por isso o `php phporto serve` lê o nível pelo `whoami /groups` (SID `S-1-16-…`) e recusa subir em nível alto, e a tarefa passou ao logon por senha. Logon com senha mais Limited dar nível médio é hipótese não testada.
+
+Evidência: `.ai/adr/0012-iniciar-com-o-windows.md`; `tests/Unit/AutostartManagerTest.php` (`Level`); `tests/Unit/CliTest.php` (recusa do `serve`).
+
+## whoami pelo PATH
+
+`proc_open(['whoami', …])` resolve pelo PATH. Num shell com o Git Bash à frente, `whoami` pode ser o do MSYS (`extra operand '/groups'`), e um PATH adulterado poderia trocar o binário. `Identity::whoami` usa `%SystemRoot%\System32\whoami.exe` quando existe.

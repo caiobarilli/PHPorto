@@ -59,6 +59,13 @@ final readonly class TaskObservation
         return $this->fields['STATE'] ?? null;
     }
 
+    public function logon(): ?string
+    {
+        $logon = $this->fields['LOGON'] ?? '';
+
+        return $logon === '' ? null : $logon;
+    }
+
     public function matches(string $sid, string $program, string $script): bool
     {
         if (!$this->present()) {
@@ -72,7 +79,7 @@ final readonly class TaskObservation
             && hash_equals(strtoupper($sid), strtoupper($actual))
             && strtolower($this->fields['EXEC'] ?? '') === strtolower($program)
             && ($this->fields['ARGS'] ?? '') === '"' . $script . '" serve'
-            && strtolower($this->fields['LOGON'] ?? '') === 's4u'
+            && strtolower($this->fields['LOGON'] ?? '') === 'password'
             && strtolower($this->fields['RUNLEVEL'] ?? '') === 'limited'
             && str_contains($this->fields['TRIGGERS'] ?? '', 'MSFT_TaskBootTrigger');
     }

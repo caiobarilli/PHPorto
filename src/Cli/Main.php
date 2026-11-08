@@ -116,6 +116,8 @@ final class Main
             new Launcher($store, $this->machine, new Probe($this->filesDir())),
             $this->history(),
             $store,
+            null,
+            new AutostartHistory($this->serviceFactory()),
         );
     }
 
