@@ -4,6 +4,17 @@ declare(strict_types=1);
 
 namespace App\Cli;
 
+use App\Network\Firewall;
+use App\Network\History;
+use App\Network\Launcher;
+use App\Network\Machine;
+use App\Network\Manager;
+use App\Network\Probe;
+use App\Network\Store;
+use App\Services\ExecutionLogService;
+use App\Win\Elevation;
+use App\Win\OneShot;
+use App\Win\UacPolicy;
 use Closure;
 
 final class Main
@@ -11,12 +22,22 @@ final class Main
     /** @var Closure(): Serve */
     private Closure $serve;
 
+    /** @var Closure(): Manager */
+    private Closure $manager;
+
+    private ?History $history = null;
+
+    private Machine $machine;
+
     /**
      * @param (Closure(): Serve)|null $serve
+     * @param (Closure(): Manager)|null $manager
      */
-    public function __construct(private string $root, private Console $console, ?Closure $serve = null)
+    public function __construct(private string $root, private Console $console, ?Closure $serve = null, ?Closure $manager = null, ?Machine $machine = null)
     {
-        $this->serve = $serve ?? fn (): Serve => new Serve($this->root, $this->console);
+        $this->machine = $machine ?? new Machine();
+        $this->serve = $serve ?? $this->defaultServe(...);
+        $this->manager = $manager ?? $this->defaultManager(...);
     }
 
     /**
@@ -36,8 +57,67 @@ final class Main
             'help' => $this->help($rest),
             'serve' => ($this->serve)()->run($rest),
             'token' => (new Token($this->root, $this->console))->run($rest),
+            'network' => (new NetworkCommand($this->root, $this->console, $this->manager, $this->machine))->run($rest),
             default => $this->unknown($command),
         };
+    }
+
+    private function filesDir(): string
+    {
+        return $this->root . DIRECTORY_SEPARATOR . 'files';
+    }
+
+    private function history(): History
+    {
+        return $this->history ??= new History(function (): ExecutionLogService {
+            $app = require $this->root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'bootstrap.php';
+            $make = is_array($app) ? ($app['makeService'] ?? null) : null;
+
+            if (!$make instanceof Closure) {
+                throw new \RuntimeException('Sem serviço de histórico.');
+            }
+
+            $service = $make();
+
+            if (!$service instanceof ExecutionLogService) {
+                throw new \RuntimeException('Sem serviço de histórico.');
+            }
+
+            return $service;
+        });
+    }
+
+    private function defaultServe(): Serve
+    {
+        $store = new Store($this->filesDir());
+
+        return new Serve(
+            $this->root,
+            $this->console,
+            null,
+            new Launcher($store, $this->machine, new Probe($this->filesDir())),
+            $this->history(),
+            $store,
+        );
+    }
+
+    private function defaultManager(): Manager
+    {
+        $winDir = $this->root . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Win';
+        $elevation = new Elevation(
+            filesDir: $this->filesDir(),
+            storageDir: $this->root . DIRECTORY_SEPARATOR . 'storage',
+            winDir: $winDir,
+        );
+        $oneShot = new OneShot($this->filesDir(), $winDir, $elevation, new UacPolicy());
+
+        return new Manager(
+            new Store($this->filesDir()),
+            $this->machine,
+            new Probe($this->filesDir()),
+            Firewall::fromOneShot($oneShot),
+            $this->history(),
+        );
     }
 
     /**

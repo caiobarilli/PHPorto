@@ -128,22 +128,23 @@ it('serve sobe só o loopback, na porta do .env, com caminhos absolutos da raiz'
     $public = $root . DIRECTORY_SEPARATOR . 'public';
 
     expect($code)->toBe(Status::OK)
-        ->and($visto)->toBe([[PHP_BINARY, '-S', '127.0.0.1:4555', '-t', $public, $public . DIRECTORY_SEPARATOR . 'router.php'], $root])
+        ->and($visto)->toBe([['loopback' => [PHP_BINARY, '-S', '127.0.0.1:4555', '-t', $public, $public . DIRECTORY_SEPARATOR . 'router.php']], $root])
         ->and($out)->toContain('http://127.0.0.1:4555');
 });
 
 it('serve usa 4001 sem PHPORTO_PORT, avisa da falta do token e nunca usa 0.0.0.0', function () {
     $root = cliRoot("DB_PROVIDER=sqlite\n");
     $visto = [];
-    [, , $err] = cliRun($root, ['serve'], '', static function (array $comando) use (&$visto): int {
-        $visto = $comando;
+    [, , $err] = cliRun($root, ['serve'], '', static function (array $filhos) use (&$visto): int {
+        $visto = $filhos;
 
         return 0;
     });
     cliClean($root);
 
-    expect($visto[2])->toBe('127.0.0.1:4001')
-        ->and(implode(' ', $visto))->not->toContain('0.0.0.0')
+    expect($visto['loopback'][2])->toBe('127.0.0.1:4001')
+        ->and(array_keys($visto))->toBe(['loopback'])
+        ->and(implode(' ', $visto['loopback']))->not->toContain('0.0.0.0')
         ->and($err)->toContain('PHPORTO_AUTH_TOKEN');
 });
 

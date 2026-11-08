@@ -5,23 +5,33 @@ declare(strict_types=1);
 namespace App\Cli;
 
 use App\Config\Config;
+use App\Network\History;
+use App\Network\Launcher;
+use App\Network\State;
+use App\Network\Store;
 use Closure;
-use Dotenv\Dotenv;
-use Dotenv\Exception\InvalidFileException;
 
 final class Serve
 {
     public const HOST = '127.0.0.1';
 
-    /** @var Closure(list<string>, string): int */
+    public const WATCH_S = 2;
+
+    /** @var Closure(array<string, list<string>>, string, Closure(): list<string>, Closure(string, string, ?int): void): int */
     private Closure $runner;
 
     /**
-     * @param (Closure(list<string>, string): int)|null $runner
+     * @param (Closure(array<string, list<string>>, string, Closure(): list<string>, Closure(string, string, ?int): void): int)|null $runner
      */
-    public function __construct(private string $root, private Console $console, ?Closure $runner = null)
-    {
-        $this->runner = $runner ?? Process::foreground(...);
+    public function __construct(
+        private string $root,
+        private Console $console,
+        ?Closure $runner = null,
+        private ?Launcher $launcher = null,
+        private ?History $history = null,
+        private ?Store $store = null,
+    ) {
+        $this->runner = $runner ?? Supervisor::run(...);
     }
 
     /**
@@ -41,7 +51,7 @@ final class Serve
             return Status::USAGE;
         }
 
-        $env = $this->env();
+        $env = EnvReader::load($this->root, $this->console);
 
         if (is_int($env)) {
             return $env;
@@ -59,9 +69,16 @@ final class Serve
             $this->console->err("Aviso: o .env não tem PHPORTO_AUTH_TOKEN, então nada será servido. Rode: php phporto token\n");
         }
 
+        $children = ['loopback' => self::command($this->root, $port)];
+        $network = $this->networkChild();
+
+        if ($network !== null) {
+            $children['rede'] = $network;
+        }
+
         $this->console->out('PHPorto em http://' . self::HOST . ':' . $port . "  (Ctrl+C encerra)\n");
 
-        return ($this->runner)(self::command($this->root, $port), $this->root);
+        return ($this->runner)($children, $this->root, $this->tick(...), $this->event(...));
     }
 
     /**
@@ -69,38 +86,100 @@ final class Serve
      */
     public static function command(string $root, int $port): array
     {
-        $public = $root . DIRECTORY_SEPARATOR . 'public';
-
-        return [PHP_BINARY, '-S', self::HOST . ':' . $port, '-t', $public, $public . DIRECTORY_SEPARATOR . 'router.php'];
+        return self::listen($root, self::HOST . ':' . $port);
     }
 
     /**
-     * @return array<string, string|null>|int
+     * @return list<string>
      */
-    private function env(): array|int
+    public static function networkCommand(string $root, State $state): array
     {
-        $file = $this->root . DIRECTORY_SEPARATOR . '.env';
+        return self::listen($root, $state->host());
+    }
 
-        if (!is_file($file)) {
-            $this->console->err('Não há .env em ' . $this->root . ". Copie o .env.example para .env e rode de novo.\n");
+    /**
+     * @return list<string>
+     */
+    private static function listen(string $root, string $address): array
+    {
+        $public = $root . DIRECTORY_SEPARATOR . 'public';
 
-            return Status::CONFIG;
+        return [PHP_BINARY, '-S', $address, '-t', $public, $public . DIRECTORY_SEPARATOR . 'router.php'];
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    private function networkChild(): ?array
+    {
+        if ($this->launcher === null) {
+            return null;
         }
 
-        $contents = file_get_contents($file);
+        $launch = $this->launcher->prepare();
 
-        if (!is_string($contents)) {
-            $this->console->err("Não foi possível ler o .env.\n");
+        if ($launch->start && $launch->state !== null) {
+            $this->listening = $launch->state;
 
-            return Status::CONFIG;
+            return self::networkCommand($this->root, $launch->state);
         }
 
-        try {
-            return Dotenv::parse($contents);
-        } catch (InvalidFileException) {
-            $this->console->err("O .env está inválido e não pôde ser lido. Confira cada linha, no formato CHAVE=valor.\n");
+        if ($launch->enabled) {
+            $reason = $launch->reason ?? 'motivo desconhecido';
+            $this->console->err('Rede: nenhum listener de rede sobe agora: ' . $reason . ".\n");
+            $this->history?->record('listener não subiu', $reason, false);
+        }
 
-            return Status::CONFIG;
+        return null;
+    }
+
+    private int $nextWatch = 0;
+
+    private ?State $listening = null;
+
+    /**
+     * @return list<string>
+     */
+    private function tick(): array
+    {
+        if ($this->store === null || time() < $this->nextWatch) {
+            return [];
+        }
+
+        $this->nextWatch = time() + self::WATCH_S;
+
+        return $this->store->load()->enabled ? [] : ['rede'];
+    }
+
+    private function event(string $name, string $kind, ?int $code): void
+    {
+        if ($name !== 'rede') {
+            return;
+        }
+
+        $address = $this->listening?->address() ?? 'rede';
+
+        switch ($kind) {
+            case 'start':
+                $this->console->out('Rede em ' . $address . "\n");
+                $this->history?->record('listener subiu', $address);
+
+                break;
+            case 'exit':
+                $this->console->err('Rede: o listener de rede caiu' . ($code === null ? '' : ' (código ' . $code . ')') . ". O loopback continua.\n");
+                $this->history?->record('listener caiu', 'código ' . ($code ?? '?'), false);
+
+                break;
+            case 'failed':
+                $this->console->err("Rede: o listener de rede não iniciou. O loopback continua.\n");
+                $this->history?->record('listener não iniciou', '', false);
+
+                break;
+            case 'stopped':
+                $this->console->out("Rede desligada: listener de rede encerrado.\n");
+                $this->history?->record('listener encerrado', 'rede desligada');
+
+                break;
         }
     }
 }
