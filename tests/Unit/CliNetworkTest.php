@@ -532,3 +532,16 @@ it('o serve e o supervisor nunca criam regra de firewall nem pedem elevação: o
         expect($texto)->not->toMatch('/Firewall\b|Firewall::|OneShot|Elevation|WinAction|dispatch|RunAs|New-NetFirewallRule/');
     }
 });
+
+it('network on confere o IP de escuta logo depois de perguntar, antes do risco e do sim', function () {
+    $net = cliNet();
+    [$code, $out, $err] = cliNetRun($net, ['network', 'on'], "192.168.1.99\n4001\n192.168.1.0/24\nsim\n");
+
+    expect($code)->toBe(Status::USAGE)
+        ->and($err)->toContain('192.168.1.99')->toContain('não pertence a nenhuma interface')->toContain('Nada foi feito')
+        ->and($out)->not->toContain('RISCO')->not->toContain('Digite "sim"')->not->toContain('Porta')
+        ->and($net['store']->load()->enabled)->toBeFalse()
+        ->and(count($net['calls']))->toBe(0);
+
+    cliNetClean($net['dir']);
+});

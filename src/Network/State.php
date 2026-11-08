@@ -67,14 +67,28 @@ final readonly class State
      */
     public function accepts(array $server): bool
     {
-        $listener = $server['SERVER_ADDR'] ?? null;
+        $listener = self::listenerAddress($server);
         $remote = $server['REMOTE_ADDR'] ?? null;
 
         return $this->enabled
-            && is_string($listener)
+            && $listener !== null
             && $this->bindIp !== null
             && hash_equals($this->bindIp, $listener)
             && $this->allowsIp($remote);
+    }
+
+    /**
+     * @param array<array-key, mixed> $server
+     */
+    public static function listenerAddress(array $server): ?string
+    {
+        $address = $server['SERVER_ADDR'] ?? $server['SERVER_NAME'] ?? null;
+
+        if (!is_string($address) || filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            return null;
+        }
+
+        return $address;
     }
 
     public function allowsIp(mixed $ip): bool

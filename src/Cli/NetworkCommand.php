@@ -75,6 +75,13 @@ final class NetworkCommand
 
         $default = count($ips) === 1 ? $ips[0] : '';
         $bind = $this->ask('IP de escuta', $default);
+
+        if (!$this->machine->owns($bind)) {
+            $this->console->err('O IP ' . $bind . " não pertence a nenhuma interface desta máquina. Nada foi feito.\n");
+
+            return Status::USAGE;
+        }
+
         $answer = $this->ask('Porta', (string) $port);
         $allow = array_values(array_filter(array_map('trim', explode(',', $this->ask('IPs ou faixas liberados, separados por vírgula (ex.: 192.168.1.0/24)', '')))));
 
