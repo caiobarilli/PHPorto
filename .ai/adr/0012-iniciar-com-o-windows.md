@@ -11,7 +11,7 @@ O painel só existia enquanto alguém rodava `php phporto serve` num terminal. O
 - **Ação elevada `autostart`** (`on`, `off`, `stop`), sensível, um UAC por ação (ADR 0001 e 0002). O `on` só registra a tarefa se o `UserName` recebido for igual à identidade do processo elevado, e só com `php.exe` e `phporto` existentes. Parâmetros validados no PHP e no worker com os mesmos formatos.
 - **Estado próprio:** `files/autostart.json` (`enabled`, `updated_at`), fora do `network.json`. O `network off` e o Desligar já da rede não mexem nele. Um `autostart` antigo no `network.json` migra uma vez para o arquivo novo. Ligar o início não liga a rede.
 - **Comandos:** `php phporto autostart on|off|status`. `on` e `off` são idempotentes: `on` não pede UAC se a tarefa já está igual ao esperado, e `off` não pede UAC se a tarefa não existe. `status` é só leitura.
-- **Desligar:** `off` remove a tarefa e não derruba o `serve` em execução. Parar agora (`stop`) encerra a árvore do `serve` iniciado pela tarefa e a própria tarefa.
+- **Desligar:** `off` remove a tarefa e não derruba o `serve` em execução. Parar agora (`stop`) encerra a árvore de qualquer `php phporto serve` deste PHPorto, o da tarefa ou um aberto à mão no terminal, e a própria tarefa. Para cada `php.exe`, lê a linha de comando (com as regras de aspas do Windows), acha o caminho do script seguido de `serve`, resolve o caminho para absoluto (pelo diretório de trabalho do processo, se for relativo) e compara com o script do projeto sem diferenciar maiúsculas, sem curinga, então colchetes no caminho não atrapalham. O `php.exe` cuja linha de comando ou diretório não pôde ser lido não é morto, e a mensagem diz quantos ficaram sem confirmação.
 - **Supervisão:** o `serve` reinicia o filho que cair, com espera de 1, 2, 4, 8 e 16 segundos, e as tentativas zeram depois de 60 segundos estável. Passado o teto, o listener de rede desiste sem derrubar o loopback, e o loopback desistindo faz o `serve` sair com falha, para o Agendador reiniciar. O principal que sai com 0 é parada pedida. A rede só volta se o IP, o perfil e a regra ainda conferirem.
 - **Sem sessão interativa:** as ações que pedem UAC falham fechadas, com o motivo na tela, dentro do prazo do uso único. O firewall nunca é criado no boot: o `serve` só lê.
 - **Tela:** seção Iniciar com o Windows na `/config`, separada da rede, com Ligar, Desligar e Parar agora.
@@ -26,7 +26,7 @@ Não testado no Windows real, só em testes automatizados com fakes:
 - o WSL e o Ollama funcionando na sessão S4U
 - o `serve` subindo no boot, sem ninguém logado
 - ler a tarefa (`Get-ScheduledTask`) sem elevação e o formato de `LogonType`, `RunLevel` e do tipo do disparo
-- `Stop-ScheduledTask` e o `taskkill` encerrando também os `php -S` filhos
+- `Stop-ScheduledTask` e o `taskkill` encerrando também os `php -S` filhos (a leitura do diretório de trabalho de outro processo funcionou no teste Pester, com um processo real do mesmo usuário; o resto não foi visto)
 - o que acontece com o `serve` em execução quando a tarefa é removida
 - o nome da conta (`USERDOMAIN\USERNAME`) bater com a identidade do processo elevado
 - o reinício em falha do Agendador depois que o `serve` desiste

@@ -216,8 +216,8 @@ use App\Wsl\Distro;
 
     <p class="nota-estado">
       Ligar e desligar pedem o UAC (a tarefa é criada ou removida com privilégio, mas roda sem). Sem alguém na
-      frente da tela, o UAC não é respondido e a ação falha com o motivo. <strong>Parar agora</strong> encerra o
-      servidor iniciado pela tarefa; desligar só remove a tarefa e não derruba o servidor em execução.
+      frente da tela, o UAC não é respondido e a ação falha com o motivo. <strong>Parar agora</strong> encerra
+      qualquer <code>php phporto serve</code> deste projeto, inclusive um aberto à mão; desligar só remove a tarefa e não derruba o servidor em execução.
     </p>
   </section>
 

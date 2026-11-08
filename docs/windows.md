@@ -504,7 +504,10 @@ falha e não deixa uma segunda instância. Nenhuma senha passa pelo PHPorto.
 - **Independente da rede:** ligar o início não liga a rede privada, e desligar a
   rede não desliga o início. O estado mora em `files/autostart.json`.
 - **Desligar:** `off` remove a tarefa e não derruba o servidor em execução. O
-  botão Parar agora da `/config` encerra o servidor iniciado pela tarefa.
+  botão Parar agora da `/config` encerra qualquer `php phporto serve` deste
+  projeto, inclusive um aberto à mão no terminal, junto com os `php -S` filhos.
+  Um `php.exe` cuja linha de comando não puder ser lida não é encerrado, e a
+  mensagem diz quantos ficaram sem confirmação.
 - **Sem ninguém na tela:** as ações que pedem UAC falham com o motivo, nunca
   ficam penduradas. O firewall nunca é criado no boot.
 - **Se o IP da rede mudar:** o `serve` do boot sobe só o loopback e o motivo vai
