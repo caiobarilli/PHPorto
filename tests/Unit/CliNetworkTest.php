@@ -453,3 +453,82 @@ it('o supervisor devolve 1 quando o principal sai com erro', function () {
 
     expect($code)->toBe(Status::FAILURE);
 });
+
+it('o servidor decide a volta: o loopback volta igual, e a rede só volta se tudo ainda conferir', function () {
+    $net = cliNet(rules: "RULES=1\n" . CLI_NET_RULE);
+    $net['store']->writeForCli(true, '192.168.1.20', 4001, ['192.168.1.0/24']);
+    $respawn = null;
+    cliServeNet($net, static function (array $children, string $cwd, Closure $t, Closure $e, Closure $r) use (&$respawn): int {
+        $respawn = $r;
+
+        return 0;
+    });
+
+    expect($respawn('loopback')[2])->toBe('127.0.0.1:4001')
+        ->and($respawn('rede')[2])->toBe('192.168.1.20:4001');
+
+    $net['store']->disableFromWeb();
+
+    expect($respawn('rede'))->toBeNull()
+        ->and(count($net['provider']->inserted))->toBe(0);
+
+    cliNetClean($net['dir']);
+});
+
+it('a rede não volta se o IP sumiu, e o motivo vai para o histórico', function () {
+    $net = cliNet(rules: "RULES=1\n" . CLI_NET_RULE);
+    $net['store']->writeForCli(true, '192.168.1.20', 4001, ['192.168.1.0/24']);
+    $respawn = null;
+    $serve = cliServeNet($net, static function (array $children, string $cwd, Closure $t, Closure $e, Closure $r) use (&$respawn): int {
+        $respawn = $r;
+
+        return 0;
+    });
+    $semIp = cliNet(rules: "RULES=1\n" . CLI_NET_RULE, ips: ['10.9.9.9']);
+    $semIp['store']->writeForCli(true, '192.168.1.20', 4001, ['192.168.1.0/24']);
+    $respawnSemIp = null;
+    cliServeNet($semIp, static function (array $children, string $cwd, Closure $t, Closure $e, Closure $r) use (&$respawnSemIp): int {
+        $respawnSemIp = $r;
+
+        return 0;
+    });
+
+    expect($respawnSemIp('rede'))->toBeNull()
+        ->and($semIp['provider']->inserted[1]->command)->toBe('rede listener não voltou')
+        ->and($semIp['provider']->inserted[1]->output)->toContain('não pertence mais');
+
+    cliNetClean($net['dir']);
+    cliNetClean($semIp['dir']);
+});
+
+it('reinício e desistência do listener de rede vão para o histórico sem segredo', function () {
+    $net = cliNet(rules: "RULES=1\n" . CLI_NET_RULE);
+    $net['store']->writeForCli(true, '192.168.1.20', 4001, ['192.168.1.0/24']);
+    $event = null;
+    cliServeNet($net, static function (array $children, string $cwd, Closure $t, Closure $e) use (&$event): int {
+        $event = $e;
+
+        return 0;
+    });
+
+    $event('rede', 'restart', 2);
+    $event('rede', 'gaveup', 5);
+    $event('loopback', 'exit', 1);
+
+    $comandos = array_map(static fn ($e): string => $e->command, $net['provider']->inserted);
+
+    expect($comandos)->toBe(['rede listener reiniciando', 'rede listener desistiu'])
+        ->and(implode(' ', array_map(static fn ($e): string => $e->output, $net['provider']->inserted)))->not->toMatch('/token|senha|password/i');
+
+    cliNetClean($net['dir']);
+});
+
+it('o serve e o supervisor nunca criam regra de firewall nem pedem elevação: o boot não toca no firewall', function () {
+    $raiz = dirname(__DIR__, 2);
+
+    foreach (['src/Cli/Serve.php', 'src/Cli/Supervisor.php', 'src/Network/Launcher.php', 'src/Network/Plan.php', 'src/Network/Probe.php'] as $arquivo) {
+        $texto = (string) file_get_contents($raiz . '/' . $arquivo);
+
+        expect($texto)->not->toMatch('/Firewall\b|Firewall::|OneShot|Elevation|WinAction|dispatch|RunAs|New-NetFirewallRule/');
+    }
+});

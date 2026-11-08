@@ -17,11 +17,14 @@ final class Serve
 
     public const WATCH_S = 2;
 
-    /** @var Closure(array<string, list<string>>, string, Closure(): list<string>, Closure(string, string, ?int): void): int */
+    /** @var Closure(array<string, list<string>>, string, Closure(): list<string>, Closure(string, string, ?int): void, Closure(string): ?list<string>): int */
     private Closure $runner;
 
+    /** @var list<string> */
+    private array $loopback = [];
+
     /**
-     * @param (Closure(array<string, list<string>>, string, Closure(): list<string>, Closure(string, string, ?int): void): int)|null $runner
+     * @param (Closure(array<string, list<string>>, string, Closure(): list<string>, Closure(string, string, ?int): void, Closure(string): ?list<string>): int)|null $runner
      */
     public function __construct(
         private string $root,
@@ -69,7 +72,8 @@ final class Serve
             $this->console->err("Aviso: o .env não tem PHPORTO_AUTH_TOKEN, então nada será servido. Rode: php phporto token\n");
         }
 
-        $children = ['loopback' => self::command($this->root, $port)];
+        $this->loopback = self::command($this->root, $port);
+        $children = ['loopback' => $this->loopback];
         $network = $this->networkChild();
 
         if ($network !== null) {
@@ -78,7 +82,7 @@ final class Serve
 
         $this->console->out('PHPorto em http://' . self::HOST . ':' . $port . "  (Ctrl+C encerra)\n");
 
-        return ($this->runner)($children, $this->root, $this->tick(...), $this->event(...));
+        return ($this->runner)($children, $this->root, $this->tick(...), $this->event(...), $this->respawn(...));
     }
 
     /**
@@ -133,6 +137,19 @@ final class Serve
         return null;
     }
 
+    private function loopbackEvent(string $kind, ?int $code): void
+    {
+        match ($kind) {
+            'exit' => $this->console->err('O servidor do loopback caiu' . ($code === null ? '' : ' (código ' . $code . ')') . ".
+"),
+            'restart' => $this->console->err('O servidor do loopback volta em instantes (tentativa ' . ($code ?? 0) . ").
+"),
+            'gaveup' => $this->console->err("O servidor do loopback não voltou depois de várias tentativas. Encerrando com falha.
+"),
+            default => null,
+        };
+    }
+
     private int $nextWatch = 0;
 
     private ?State $listening = null;
@@ -151,8 +168,45 @@ final class Serve
         return $this->store->load()->enabled ? [] : ['rede'];
     }
 
+    /**
+     * @return list<string>|null
+     */
+    private function respawn(string $name): ?array
+    {
+        if ($name === 'loopback') {
+            return $this->loopback;
+        }
+
+        if ($this->launcher === null) {
+            return null;
+        }
+
+        $launch = $this->launcher->prepare();
+
+        if ($launch->start && $launch->state !== null) {
+            $this->listening = $launch->state;
+
+            return self::networkCommand($this->root, $launch->state);
+        }
+
+        if ($launch->enabled) {
+            $reason = $launch->reason ?? 'motivo desconhecido';
+            $this->console->err('Rede: o listener de rede não volta: ' . $reason . ".
+");
+            $this->history?->record('listener não voltou', $reason, false);
+        }
+
+        return null;
+    }
+
     private function event(string $name, string $kind, ?int $code): void
     {
+        if ($name === 'loopback') {
+            $this->loopbackEvent($kind, $code);
+
+            return;
+        }
+
         if ($name !== 'rede') {
             return;
         }
@@ -173,6 +227,18 @@ final class Serve
             case 'failed':
                 $this->console->err("Rede: o listener de rede não iniciou. O loopback continua.\n");
                 $this->history?->record('listener não iniciou', '', false);
+
+                break;
+            case 'restart':
+                $this->console->err('Rede: o listener de rede volta em instantes (tentativa ' . ($code ?? 0) . ").
+");
+                $this->history?->record('listener reiniciando', 'tentativa ' . ($code ?? 0));
+
+                break;
+            case 'gaveup':
+                $this->console->err("Rede: o listener de rede não voltou depois de várias tentativas. O loopback continua.
+");
+                $this->history?->record('listener desistiu', 'tentativas esgotadas', false);
 
                 break;
             case 'stopped':
