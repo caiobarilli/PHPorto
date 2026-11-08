@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Pages;
 
+use App\Autostart\History as AutostartHistory;
+use App\Autostart\Manager as AutostartManager;
+use App\Autostart\Store as AutostartStore;
+use App\Autostart\Task as AutostartTask;
 use App\Config\Config;
 use App\Config\Flags;
 use App\Domain\Execution;
@@ -59,6 +63,8 @@ final class ConfigPage extends Page
         $wslEnabled = $this->distroChecker->enabled();
         $wslDistros = $wslEnabled ? $this->distroChecker->registered() : null;
 
+        $autostart = new AutostartStore($this->filesDir);
+
         $view = new ConfigView(
             provider: $provider === '' ? 'desconhecido' : $provider,
             details: $details,
@@ -87,6 +93,8 @@ final class ConfigPage extends Page
             networkAddress: $this->network->enabled ? $this->network->address() : null,
             networkAllow: $this->network->allow,
             networkUpdatedAt: $this->network->updatedAt,
+            autostartEnabled: $autostart->enabled(),
+            autostartUpdatedAt: $autostart->updatedAt(),
         );
 
         Respond::html('PHPorto — configuração', Respond::render('config.php', $view), $this->network);
@@ -127,6 +135,10 @@ final class ConfigPage extends Page
 
         if ($action === 'powershell') {
             $this->handlePowerShellToggle(($_POST['ps_enabled'] ?? '') === '1');
+        }
+
+        if (in_array($action, ['autostart-ligar', 'autostart-desligar', 'autostart-parar'], true)) {
+            $this->handleAutostart($action);
         }
 
         if ($action === 'rede-desligar') {
@@ -424,6 +436,31 @@ final class ConfigPage extends Page
                 ? 'painel do Hyper-V desligado'
                 : 'FALHA ao apagar ' . $hyperv->statePath(),
         ];
+    }
+
+    private function handleAutostart(string $action): never
+    {
+        $domain = getenv('USERDOMAIN');
+        $user = getenv('USERNAME');
+        $oneShot = $this->oneShot;
+        $gestor = new AutostartManager(
+            new AutostartStore($this->filesDir),
+            new AutostartTask($this->filesDir),
+            static fn (WinAction $a, array $params, int $timeout): PsResult => $oneShot->dispatch($a, $params, $timeout),
+            new AutostartHistory($this->makeService),
+            dirname($this->filesDir),
+            PHP_BINARY,
+            (is_string($domain) ? $domain : '') . '\\' . (is_string($user) ? $user : ''),
+        );
+
+        $result = match ($action) {
+            'autostart-ligar' => $gestor->enable(),
+            'autostart-desligar' => $gestor->disable(),
+            default => $gestor->stopNow(),
+        };
+
+        $this->flash(implode(' ', $result->lines));
+        Respond::redirect('/config');
     }
 
     private function handleNetworkOff(): never

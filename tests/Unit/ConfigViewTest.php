@@ -37,10 +37,10 @@ function configHtml(
     ));
 }
 
-it('sem reload: os quatro formulários da /config são marcados', function () {
+it('sem reload: os sete formulários da /config são marcados', function () {
     preg_match_all('/<form method="post"[^>]*>/', configHtml(), $m);
 
-    expect($m[0])->toHaveCount(4);
+    expect($m[0])->toHaveCount(7);
     foreach ($m[0] as $form) {
         expect($form)->toContain('data-sem-reload');
     }

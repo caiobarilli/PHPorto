@@ -193,6 +193,34 @@ use App\Wsl\Distro;
     <?php endif; ?>
   </section>
 
+  <section id="iniciar">
+    <h2>Iniciar com o Windows</h2>
+
+    <p class="nota-estado">
+      Estado: <strong><?= $view->autostartEnabled ? 'ligado' : 'desligado' ?></strong><?php if ($view->autostartUpdatedAt !== null): ?>
+        desde <strong><?= Respond::e(Respond::dateTime($view->autostartUpdatedAt, $view->tz)) ?></strong><?php endif; ?>.
+      Ligado, o Agendador de Tarefas sobe o <code>php phporto serve</code> na inicialização do Windows, na sua
+      conta, mesmo sem sessão aberta, sem nível elevado e sem guardar senha. É independente da rede privada:
+      ligar um não liga o outro. Pelo terminal: <code>php phporto autostart on|off|status</code>.
+    </p>
+
+    <div class="linha-acao">
+      <?php foreach ([['autostart-ligar', 'Ligar', 'btn-sm'], ['autostart-desligar', 'Desligar', 'btn-sm'], ['autostart-parar', 'Parar agora', 'btn-danger btn-sm']] as [$valor, $rotulo, $classe]): ?>
+        <form method="post" id="form-<?= Respond::e($valor) ?>" data-sem-reload>
+          <input type="hidden" name="<?= Respond::e($view->csrfField) ?>" value="<?= Respond::e($view->csrfToken) ?>">
+          <input type="hidden" name="acao" value="<?= Respond::e($valor) ?>">
+          <button type="submit" class="btn <?= Respond::e($classe) ?>" id="btn-<?= Respond::e($valor) ?>"><?= Respond::e($rotulo) ?></button>
+        </form>
+      <?php endforeach; ?>
+    </div>
+
+    <p class="nota-estado">
+      Ligar e desligar pedem o UAC (a tarefa é criada ou removida com privilégio, mas roda sem). Sem alguém na
+      frente da tela, o UAC não é respondido e a ação falha com o motivo. <strong>Parar agora</strong> encerra o
+      servidor iniciado pela tarefa; desligar só remove a tarefa e não derruba o servidor em execução.
+    </p>
+  </section>
+
   <?php if (!$view->wslEnabled): ?>
     <section id="wsl">
       <h2>WSL</h2>

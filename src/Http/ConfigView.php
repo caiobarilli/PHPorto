@@ -30,6 +30,8 @@ final readonly class ConfigView
      * @param bool $wslEnabled
      * @param string $wslDistro
      * @param list<string> $networkAllow
+     * @param bool $autostartEnabled
+     * @param ?string $autostartUpdatedAt
      */
     public function __construct(
         public string $provider,
@@ -59,6 +61,8 @@ final readonly class ConfigView
         public ?string $networkAddress = null,
         public array $networkAllow = [],
         public ?string $networkUpdatedAt = null,
+        public bool $autostartEnabled = false,
+        public ?string $autostartUpdatedAt = null,
     ) {
     }
 }
