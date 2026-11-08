@@ -50,14 +50,13 @@ final class Store
     /**
      * @param list<string> $allow
      */
-    public function writeForCli(bool $enabled, string $bindIp, int $port, array $allow, bool $autostart): State
+    public function writeForCli(bool $enabled, string $bindIp, int $port, array $allow): State
     {
         $state = State::fromArray([
             'enabled' => $enabled,
             'bind_ip' => $bindIp,
             'port' => $port,
             'allow' => $allow,
-            'autostart' => $autostart,
             'updated_at' => ($this->clock)(),
         ]);
 
@@ -70,27 +69,6 @@ final class Store
         return $state;
     }
 
-    public function setAutostartFromWeb(bool $autostart): State
-    {
-        $state = $this->load();
-
-        if ($state->updatedAt === null) {
-            throw new RuntimeException('O estado da rede está ausente ou inválido. Rode php network.php on pelo SSH.');
-        }
-
-        $next = new State(
-            $state->enabled,
-            $state->bindIp,
-            $state->port,
-            $state->allow,
-            $autostart,
-            ($this->clock)(),
-        );
-        $this->write($next);
-
-        return $next;
-    }
-
     public function disableFromWeb(): State
     {
         $state = $this->load();
@@ -99,10 +77,47 @@ final class Store
             return $state;
         }
 
-        $next = new State(false, $state->bindIp, $state->port, $state->allow, false, ($this->clock)());
+        $next = new State(false, $state->bindIp, $state->port, $state->allow, ($this->clock)());
         $this->write($next);
 
         return $next;
+    }
+
+    public function legacyAutostart(): ?bool
+    {
+        $data = $this->raw();
+
+        return is_array($data) && is_bool($data['autostart'] ?? null) ? $data['autostart'] : null;
+    }
+
+    public function dropLegacyAutostart(): void
+    {
+        $data = $this->raw();
+
+        if (!is_array($data) || !array_key_exists('autostart', $data)) {
+            return;
+        }
+
+        $state = State::fromArray($data);
+
+        if ($state !== null) {
+            $this->write($state);
+        }
+    }
+
+    private function raw(): mixed
+    {
+        $raw = is_file($this->path) ? file_get_contents($this->path) : false;
+
+        if (!is_string($raw)) {
+            return null;
+        }
+
+        try {
+            return json_decode($raw, true, 32, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return null;
+        }
     }
 
     private function write(State $state): void

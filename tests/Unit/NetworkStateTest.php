@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Autostart\Store as AutostartStore;
 use App\Network\Ipv4;
 use App\Network\State;
 use App\Network\Store;
@@ -18,7 +19,6 @@ function networkState(array $overrides = []): State
         'bind_ip' => '192.168.1.20',
         'port' => 4001,
         'allow' => ['192.168.1.0/24', '10.0.0.8'],
-        'autostart' => false,
         'updated_at' => '2026-11-06T12:00:00+00:00',
     ], $overrides));
     expect($state)->toBeInstanceOf(State::class);
@@ -67,7 +67,6 @@ it('lê o estado válido com todos os campos', function () {
         'bind_ip' => '192.168.1.20',
         'port' => 4001,
         'allow' => ['192.168.1.0/24'],
-        'autostart' => true,
         'updated_at' => '2026-11-06T12:00:00+00:00',
     ]));
 
@@ -77,7 +76,6 @@ it('lê o estado válido com todos os campos', function () {
         ->and($state->bindIp)->toBe('192.168.1.20')
         ->and($state->port)->toBe(4001)
         ->and($state->allow)->toBe(['192.168.1.0/24'])
-        ->and($state->autostart)->toBeTrue()
         ->and($state->updatedAt)->toBe('2026-11-06T12:00:00+00:00')
         ->and($store->path())->toBe($path);
 
@@ -117,7 +115,6 @@ it('qualquer campo inválido fecha a rede inteira', function (array $overrides) 
         'bind_ip' => '192.168.1.20',
         'port' => 4001,
         'allow' => ['192.168.1.0/24'],
-        'autostart' => false,
         'updated_at' => '2026-11-06T12:00:00+00:00',
     ], $overrides);
     file_put_contents($dir . DIRECTORY_SEPARATOR . Store::FILE, (string) json_encode($data));
@@ -139,12 +136,11 @@ it('qualquer campo inválido fecha a rede inteira', function (array $overrides) 
     'allow vazia' => [['allow' => []]],
     'allow pública' => [['allow' => ['8.8.8.8']]],
     'allow com valor inválido' => [['allow' => ['192.168.1.0/24', 1]]],
-    'autostart inteiro' => [['autostart' => 1]],
     'enabled string' => [['enabled' => 'true']],
     'data ausente' => [['updated_at' => null]],
 ]);
 
-it('só o CLI grava um estado novo e as operações web não ligam a rede', function () {
+it('só o CLI grava um estado novo e a operação web não liga a rede', function () {
     $dir = networkFiles('writes');
     mkdir($dir);
     $agora = '2026-11-06T15:00:00+00:00';
@@ -152,25 +148,18 @@ it('só o CLI grava um estado novo e as operações web não ligam a rede', func
         return $agora;
     });
 
-    expect(fn () => $store->setAutostartFromWeb(true))->toThrow(RuntimeException::class)
-        ->and($store->disableFromWeb()->enabled)->toBeFalse()
+    expect($store->disableFromWeb()->enabled)->toBeFalse()
         ->and(is_file($store->path()))->toBeFalse();
 
-    $created = $store->writeForCli(true, '192.168.1.20', 4001, ['192.168.1.0/24'], false);
+    $created = $store->writeForCli(true, '192.168.1.20', 4001, ['192.168.1.0/24']);
     expect($created->enabled)->toBeTrue()
         ->and($created->updatedAt)->toBe($agora)
-        ->and(is_file($store->path()))->toBeTrue();
-
-    $agora = '2026-11-06T15:01:00+00:00';
-    $auto = $store->setAutostartFromWeb(true);
-    expect($auto->autostart)->toBeTrue()
-        ->and($auto->enabled)->toBeTrue()
-        ->and($auto->updatedAt)->toBe($agora);
+        ->and(is_file($store->path()))->toBeTrue()
+        ->and((string) file_get_contents($store->path()))->not->toContain('autostart');
 
     $agora = '2026-11-06T15:02:00+00:00';
     $disabled = $store->disableFromWeb();
     expect($disabled->enabled)->toBeFalse()
-        ->and($disabled->autostart)->toBeFalse()
         ->and($disabled->bindIp)->toBe('192.168.1.20')
         ->and($disabled->allow)->toBe(['192.168.1.0/24']);
 
@@ -182,12 +171,110 @@ it('só o CLI grava um estado novo e as operações web não ligam a rede', func
     rmdir($dir);
 });
 
+it('network off e disableFromWeb não alteram o início com o Windows', function () {
+    $dir = networkFiles('autostart-isolado');
+    mkdir($dir);
+    $network = new Store($dir);
+    $autostart = new AutostartStore($dir);
+
+    $network->writeForCli(true, '192.168.1.20', 4001, ['192.168.1.0/24']);
+    $autostart->set(true);
+    $antes = (string) file_get_contents($autostart->path());
+
+    $network->disableFromWeb();
+    expect($autostart->enabled())->toBeTrue()
+        ->and((string) file_get_contents($autostart->path()))->toBe($antes);
+
+    $network->writeForCli(true, '192.168.1.20', 4001, ['192.168.1.0/24']);
+    expect($autostart->enabled())->toBeTrue();
+
+    $autostart->set(false);
+    expect($network->load()->enabled)->toBeTrue();
+
+    foreach (glob($dir . DIRECTORY_SEPARATOR . '*') ?: [] as $arquivo) {
+        unlink($arquivo);
+    }
+    rmdir($dir);
+});
+
+it('migra o autostart que estava no network.json para o estado próprio', function () {
+    $dir = networkFiles('migra');
+    mkdir($dir);
+    $network = new Store($dir);
+    $autostart = new AutostartStore($dir);
+    file_put_contents($network->path(), (string) json_encode([
+        'enabled' => true,
+        'bind_ip' => '192.168.1.20',
+        'port' => 4001,
+        'allow' => ['192.168.1.0/24'],
+        'autostart' => true,
+        'updated_at' => '2026-11-06T12:00:00+00:00',
+    ]));
+
+    expect($network->load()->enabled)->toBeTrue()
+        ->and($autostart->enabled())->toBeFalse()
+        ->and($autostart->migrate($network))->toBeTrue()
+        ->and($autostart->enabled())->toBeTrue()
+        ->and((string) file_get_contents($network->path()))->not->toContain('autostart')
+        ->and($network->load()->enabled)->toBeTrue()
+        ->and($autostart->migrate($network))->toBeFalse();
+
+    foreach (glob($dir . DIRECTORY_SEPARATOR . '*') ?: [] as $arquivo) {
+        unlink($arquivo);
+    }
+    rmdir($dir);
+});
+
+it('a migração não sobrescreve o estado próprio já existente nem mexe em network.json inválido', function () {
+    $dir = networkFiles('migra-existente');
+    mkdir($dir);
+    $network = new Store($dir);
+    $autostart = new AutostartStore($dir);
+    $autostart->set(false);
+    file_put_contents($network->path(), (string) json_encode([
+        'enabled' => true,
+        'bind_ip' => '192.168.1.20',
+        'port' => 4001,
+        'allow' => ['192.168.1.0/24'],
+        'autostart' => true,
+        'updated_at' => '2026-11-06T12:00:00+00:00',
+    ]));
+
+    expect($autostart->migrate($network))->toBeFalse()
+        ->and($autostart->enabled())->toBeFalse()
+        ->and((string) file_get_contents($network->path()))->not->toContain('autostart');
+
+    unlink($autostart->path());
+    file_put_contents($network->path(), '{"autostart": true}');
+    expect($autostart->migrate($network))->toBeTrue()
+        ->and($autostart->enabled())->toBeTrue()
+        ->and((string) file_get_contents($network->path()))->toContain('autostart')
+        ->and($network->load()->enabled)->toBeFalse();
+
+    foreach (glob($dir . DIRECTORY_SEPARATOR . '*') ?: [] as $arquivo) {
+        unlink($arquivo);
+    }
+    rmdir($dir);
+});
+
+it('o estado próprio do autostart ilegível vale desligado', function () {
+    $dir = networkFiles('autostart-ruim');
+    mkdir($dir);
+    $autostart = new AutostartStore($dir);
+    file_put_contents($autostart->path(), '{"enabled": "sim"}');
+
+    expect($autostart->enabled())->toBeFalse();
+
+    unlink($autostart->path());
+    rmdir($dir);
+});
+
 it('o CLI recusa estado fora das regras sem criar arquivo', function () {
     $dir = networkFiles('cli-invalid');
     mkdir($dir);
     $store = new Store($dir);
 
-    expect(fn () => $store->writeForCli(true, '127.0.0.1', 4001, ['0.0.0.0/0'], false))
+    expect(fn () => $store->writeForCli(true, '127.0.0.1', 4001, ['0.0.0.0/0']))
         ->toThrow(InvalidArgumentException::class)
         ->and(is_file($store->path()))->toBeFalse();
     rmdir($dir);

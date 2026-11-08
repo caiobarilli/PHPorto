@@ -40,6 +40,10 @@ enum WinAction: string
 
     case PhpUpdate = 'php-update';
 
+    case NetFirewall = 'net-firewall';
+
+    case Autostart = 'autostart';
+
     public const MAX_PARAM_BYTES = 4096;
 
     public const WINGET_ID_PATTERN = '/\A[A-Za-z0-9][A-Za-z0-9_+-]*(?:\.[A-Za-z0-9_+-]+)+\z/';
@@ -129,6 +133,22 @@ enum WinAction: string
 
     public const PHP_UPDATE_FIELDS = ['Version', 'Sha256', 'PhpDir'];
 
+    public const NET_FIREWALL_SUBACTIONS = ['add', 'remove'];
+
+    public const NET_FIREWALL_PROGRAM_PATTERN = '\A[A-Za-z]:(?:\x5C(?!\.{1,2}(?:\x5C|\z))[^\x5C\x2F:*?"<>|\x00-\x1F]+)+\x5Cphp\.exe\z';
+
+    public const NET_FIREWALL_PROGRAM_MAX = 260;
+
+    public const AUTOSTART_SUBACTIONS = ['on', 'off', 'stop'];
+
+    public const AUTOSTART_USER_PATTERN = '\A[^\x5C\x2F\[\]:;|=,+*?<>"@\x00-\x1F]{1,64}\x5C[^\x5C\x2F\[\]:;|=,+*?<>"@\x00-\x1F]{1,64}\z';
+
+    public const AUTOSTART_SCRIPT_PATTERN = '\A[A-Za-z]:(?:\x5C(?!\.{1,2}(?:\x5C|\z))[^\x5C\x2F:*?"<>|\x00-\x1F]+)+\x5Cphporto\z';
+
+    public const AUTOSTART_USER_MAX = 129;
+
+    public const AUTOSTART_PATH_MAX = 260;
+
     public const AUDIT_SUBACTIONS = ['run', 'open'];
 
     public const PERFORMANCE_STATES = ['on', 'off'];
@@ -148,6 +168,8 @@ enum WinAction: string
         'php-update' => '*',
         'wsl-enable' => '*',
         'wsl-install-distro' => '*',
+        'net-firewall' => '*',
+        'autostart' => '*',
     ];
 
     public const NETWORK_DURATION_MIN = 1;
@@ -186,6 +208,8 @@ enum WinAction: string
             self::HypervVm  => $this->hypervVm($input),
             self::Wsl       => ['SubAction' => $this->pick($input, 'SubAction', self::WSL_SUBACTIONS, obrigatorio: true)],
             self::PhpUpdate => $this->phpUpdate($input),
+            self::NetFirewall => $this->netFirewall($input),
+            self::Autostart => $this->autostart($input),
             self::WslInstallDistro => ['Distro' => self::wslDistro($input['Distro'] ?? '')],
         };
     }
@@ -788,6 +812,92 @@ enum WinAction: string
         }
 
         return ['Version' => $versao, 'Sha256' => $hash, 'PhpDir' => $dir];
+    }
+
+    /**
+     * @param array<string, string> $input
+     * @return array<string, string>
+     * @throws InvalidArgumentException
+     */
+    private function autostart(array $input): array
+    {
+        $sub = $this->pick($input, 'SubAction', self::AUTOSTART_SUBACTIONS, obrigatorio: true);
+
+        if ($sub === 'off') {
+            return ['SubAction' => $sub];
+        }
+
+        $script = trim($input['Script'] ?? '');
+
+        if ($script === '' || strlen($script) > self::AUTOSTART_PATH_MAX || preg_match('/' . self::AUTOSTART_SCRIPT_PATTERN . '/', $script) !== 1) {
+            throw new InvalidArgumentException('Script não é o arquivo phporto de uma pasta local do Windows.');
+        }
+
+        if ($sub === 'stop') {
+            return ['SubAction' => $sub, 'Script' => $script];
+        }
+
+        $usuario = trim($input['UserName'] ?? '');
+        $programa = trim($input['Program'] ?? '');
+
+        if ($usuario === '' || strlen($usuario) > self::AUTOSTART_USER_MAX || preg_match('/' . self::AUTOSTART_USER_PATTERN . '/', $usuario) !== 1) {
+            throw new InvalidArgumentException('UserName não é DOMINIO\usuario.');
+        }
+
+        if ($programa === '' || strlen($programa) > self::NET_FIREWALL_PROGRAM_MAX || preg_match('/' . self::NET_FIREWALL_PROGRAM_PATTERN . '/', $programa) !== 1) {
+            throw new InvalidArgumentException('Program não é um php.exe local do Windows aceito.');
+        }
+
+        return ['SubAction' => $sub, 'UserName' => $usuario, 'Program' => $programa, 'Script' => $script];
+    }
+
+    /**
+     * @param array<string, string> $input
+     * @return array<string, string|int>
+     * @throws InvalidArgumentException
+     */
+    private function netFirewall(array $input): array
+    {
+        $sub = $this->pick($input, 'SubAction', self::NET_FIREWALL_SUBACTIONS, obrigatorio: true);
+
+        if ($sub === 'remove') {
+            return ['SubAction' => $sub];
+        }
+
+        $bind = trim($input['BindIp'] ?? '');
+        $porta = trim($input['Port'] ?? '');
+        $allow = trim($input['Allow'] ?? '');
+        $programa = trim($input['Program'] ?? '');
+
+        if ($bind === '' || $porta === '' || $allow === '' || $programa === '') {
+            throw new InvalidArgumentException('Preencha BindIp, Port, Allow e Program.');
+        }
+
+        if (!\App\Network\Ipv4::isPrivate($bind) || str_contains($bind, '/')) {
+            throw new InvalidArgumentException('BindIp não é um IPv4 privado.');
+        }
+
+        if (preg_match('/\A[0-9]{1,5}\z/', $porta) !== 1 || (int) $porta < 1 || (int) $porta > 65535) {
+            throw new InvalidArgumentException('Port fora da faixa (1-65535).');
+        }
+
+        $regras = explode(',', $allow);
+
+        if (count($regras) > \App\Network\State::MAX_ALLOW) {
+            throw new InvalidArgumentException('Allow tem itens demais.');
+        }
+
+        foreach ($regras as $regra) {
+            if (!\App\Network\Ipv4::isPrivateRule($regra)) {
+                throw new InvalidArgumentException('Allow tem um item que não é IPv4 ou CIDR privado.');
+            }
+        }
+
+        if (strlen($programa) > self::NET_FIREWALL_PROGRAM_MAX || preg_match('/' . self::NET_FIREWALL_PROGRAM_PATTERN . '/', $programa) !== 1) {
+            throw new InvalidArgumentException('Program não é um php.exe local do Windows aceito.');
+        }
+
+        return ['SubAction' => $sub, 'BindIp' => $bind, 'Port' => (int) $porta, 'Allow' => implode(',', $regras), 'Program' => $programa];
     }
 
     /**

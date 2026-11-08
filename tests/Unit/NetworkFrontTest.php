@@ -22,7 +22,6 @@ function lanState(bool $enabled = true): State
         'bind_ip' => '192.168.1.20',
         'port' => 4001,
         'allow' => ['192.168.1.0/24'],
-        'autostart' => false,
         'updated_at' => '2026-11-06T12:00:00+00:00',
     ]);
     expect($state)->toBeInstanceOf(State::class);

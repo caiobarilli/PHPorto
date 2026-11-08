@@ -209,7 +209,7 @@ it('as dezessete ações do menu aparecem uma vez só na página, e as da /hyper
 
     $menu = array_filter(
         App\Win\WinAction::cases(),
-        static fn (App\Win\WinAction $a): bool => !in_array($a, [App\Win\WinAction::Hyperv, App\Win\WinAction::HypervVm, App\Win\WinAction::Wsl, App\Win\WinAction::WslEnable, App\Win\WinAction::WslInstallDistro, App\Win\WinAction::PhpUpdate], true),
+        static fn (App\Win\WinAction $a): bool => !in_array($a, [App\Win\WinAction::Hyperv, App\Win\WinAction::HypervVm, App\Win\WinAction::Wsl, App\Win\WinAction::WslEnable, App\Win\WinAction::WslInstallDistro, App\Win\WinAction::PhpUpdate, App\Win\WinAction::NetFirewall, App\Win\WinAction::Autostart], true),
     );
     $enum = array_map(static fn (App\Win\WinAction $a): string => $a->value, $menu);
     sort($enum);

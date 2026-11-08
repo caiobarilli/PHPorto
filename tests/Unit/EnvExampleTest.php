@@ -44,5 +44,5 @@ it('o .env.example não repete chave', function () {
 
 it('a leitura acha as chaves dos dois lados, e não uma lista vazia contra outra', function () {
     expect(envKeysRead())->toContain('PHPORTO_AUTH_TOKEN', 'PHPORTO_API_ENABLED', 'MYSQL_TEST_USER')
-        ->and(count(envExampleKeys()))->toBe(26);
+        ->and(count(envExampleKeys()))->toBe(27);
 });

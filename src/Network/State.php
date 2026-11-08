@@ -6,6 +6,8 @@ namespace App\Network;
 
 final readonly class State
 {
+    public const MAX_ALLOW = 16;
+
     /**
      * @param list<string> $allow
      */
@@ -14,14 +16,13 @@ final readonly class State
         public ?string $bindIp,
         public int $port,
         public array $allow,
-        public bool $autostart,
         public ?string $updatedAt,
     ) {
     }
 
     public static function closed(): self
     {
-        return new self(false, null, 4001, [], false, null);
+        return new self(false, null, 4001, [], null);
     }
 
     public static function fromArray(mixed $data): ?self
@@ -36,7 +37,7 @@ final readonly class State
             || !is_array($data['allow'] ?? null)
             || !array_is_list($data['allow'])
             || $data['allow'] === []
-            || !is_bool($data['autostart'] ?? null)
+            || count($data['allow']) > self::MAX_ALLOW
             || !is_string($data['updated_at'] ?? null)
             || $data['updated_at'] === '') {
             return null;
@@ -57,7 +58,6 @@ final readonly class State
             $data['bind_ip'],
             $data['port'],
             $allow,
-            $data['autostart'],
             $data['updated_at'],
         );
     }
@@ -101,7 +101,6 @@ final readonly class State
             'bind_ip' => $this->bindIp,
             'port' => $this->port,
             'allow' => $this->allow,
-            'autostart' => $this->autostart,
             'updated_at' => $this->updatedAt,
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
     }

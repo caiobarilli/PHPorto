@@ -32,7 +32,7 @@ final class Config
     {
         return [
             'db_provider' => self::env('DB_PROVIDER', 'sqlite'),
-            'cors_origin' => self::env('CORS_ORIGIN', 'http://127.0.0.1:4001'),
+            'cors_origin' => self::env('CORS_ORIGIN', 'http://127.0.0.1:' . self::port()),
             'mongo' => [
                 'uri'        => self::env('MONGODB_URI', ''),
                 'database'   => self::env('MONGO_DB_NAME', ''),
@@ -66,6 +66,26 @@ final class Config
             ),
             'auth_token'        => self::env('PHPORTO_AUTH_TOKEN', ''),
         ];
+    }
+
+    public const DEFAULT_PORT = 4001;
+
+    public static function port(): int
+    {
+        return self::parsePort(self::env('PHPORTO_PORT', (string) self::DEFAULT_PORT)) ?? self::DEFAULT_PORT;
+    }
+
+    public static function parsePort(?string $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return self::DEFAULT_PORT;
+        }
+
+        if (preg_match('/^[0-9]{1,5}$/', $value) !== 1 || (int) $value < 1 || (int) $value > 65535) {
+            return null;
+        }
+
+        return (int) $value;
     }
 
     private static function timeout(): int

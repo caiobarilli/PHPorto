@@ -47,6 +47,35 @@ final class Ipv4
         return false;
     }
 
+    public static function normalizeRule(string $rule): string
+    {
+        if (preg_match('#\A([0-9.]+)/([0-9]{1,3}(?:\.[0-9]{1,3}){3})\z#', $rule, $m) !== 1) {
+            return $rule;
+        }
+
+        $mask = self::number($m[2]);
+
+        if ($mask === null) {
+            return $rule;
+        }
+
+        $prefix = 32;
+
+        while ($prefix > 0 && ($mask & (1 << (32 - $prefix))) === 0) {
+            $prefix--;
+        }
+
+        $expected = $prefix === 0 ? 0 : (0xFFFFFFFF << (32 - $prefix)) & 0xFFFFFFFF;
+
+        return $mask === $expected ? $m[1] . '/' . $prefix : $rule;
+    }
+
+    /** @return array{int, int}|null */
+    public static function bounds(string $rule): ?array
+    {
+        return self::range(self::normalizeRule($rule));
+    }
+
     /** @return array{int, int}|null */
     private static function range(string $rule): ?array
     {

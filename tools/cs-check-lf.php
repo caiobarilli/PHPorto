@@ -29,7 +29,7 @@ function limpar(string $dir): void
 }
 
 $raiz = dirname(__DIR__);
-$alvo = ['src', 'public', 'tests', 'token.php'];
+$alvo = ['src', 'public', 'tests', 'token.php', 'phporto'];
 
 $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phporto-cs-' . bin2hex(random_bytes(6));
 
@@ -55,7 +55,7 @@ foreach ($alvo as $dir) {
     }
 
     foreach ($itens as $item) {
-        if (!$item instanceof SplFileInfo || $item->getExtension() !== 'php') {
+        if (!$item instanceof SplFileInfo || ($item->getExtension() !== 'php' && $item->getBasename() !== 'phporto')) {
             continue;
         }
 

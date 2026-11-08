@@ -11,10 +11,14 @@ travas que existem e o que cada uma cobre.
 O servidor deve escutar **só em `127.0.0.1`**:
 
 ```bash
-php -S 127.0.0.1:4001 -t public public/router.php
+php phporto serve
 ```
 
-Nunca `0.0.0.0`, o IP da rede ou um proxy que o exponha. O token de acesso não
+O `php phporto serve` fixa o endereço em `127.0.0.1`. O equivalente manual
+(`php -S 127.0.0.1:4001 -t public public/router.php`) continua valendo.
+
+Nunca `0.0.0.0` nem um proxy que o exponha. A única exceção é o acesso pela
+rede privada, opt-in, descrito mais abaixo. O token de acesso não
 muda isso: ele viaja em texto puro no formulário e no HTTP Basic da API (base64
 é codificação, não cifra).
 Quem enxergar o tráfego lê o token e, com ele, ganha execução de comando na
@@ -54,6 +58,36 @@ curl.exe -H "Host: evil:4001" http://127.0.0.1:4001/
 
 responde `421 Host recusado`. Pelo túnel SSH nada muda: o navegador continua
 pedindo `127.0.0.1:4001`.
+
+## Acesso pela rede privada (opcional)
+
+Por padrão nada escuta fora do loopback. Uma exceção, desligada de fábrica,
+permite o acesso de outro computador da mesma rede privada com o mesmo token
+(decisão registrada em `.ai/adr/0011-acesso-pela-rede-privada.md`).
+
+```bash
+php phporto network on
+php phporto network status
+php phporto network off
+```
+
+- **Só pelo terminal:** o `on` pergunta o IP de escuta (IPv4 privado de uma
+  interface sua), a porta e os IPs liberados, mostra o risco e exige digitar
+  `sim`. Não há flag para pular. Nenhuma tela liga a rede.
+- **Regra de firewall:** a allowlist tem até 16 entradas, só IPv4 privado ou CIDR
+  privado de /8 a /32, e é conferida de novo no script elevado. Entrada TCP só no perfil Private, no IP e na porta
+  escolhidos, só para os IPs liberados e só para o `php.exe`. É criada com UAC,
+  na hora do `on`, nunca no boot.
+- **Fail-closed:** o `php phporto serve` só sobe o listener de rede se o estado
+  for válido e ligado, o IP ainda for da máquina, o perfil da rede for Private
+  e a regra existir igual ao estado. Senão sobe só o loopback e diz o motivo.
+  Se o IP mudar, rode o `on` de novo.
+- **Sem TLS:** o token e o conteúdo do painel viajam em texto puro na rede. A
+  allowlist e o limite de tentativas por IP reduzem o alcance, mas não
+  substituem TLS.
+- **Desligar:** `php phporto network off` ou o botão Desligar já da `/config`.
+  O painel recusa tudo pela rede na hora; a regra é removida com UAC. Se o UAC
+  for recusado, a regra fica para remover e a tela diz isso.
 
 ## Acesso remoto: túnel SSH
 
@@ -112,7 +146,7 @@ A aba **Chaves SSH** (ação `ssh-keys`) cuida das chaves do túnel:
 
 Toda requisição, telas e API, passa por um portão único antes do roteamento.
 
-- **Geração:** `php token.php` cria 32 bytes aleatórios em hexadecimal, imprime
+- **Geração:** `php phporto token` cria 32 bytes aleatórios em hexadecimal, imprime
   e grava em `PHPORTO_AUTH_TOKEN` no `.env`. Trocar um token existente pede
   confirmação. O script roda só na linha de comando e mora fora de `public/`.
 - **Entrada nas telas:** um formulário do próprio PHPorto, com o token num campo
@@ -131,7 +165,7 @@ Toda requisição, telas e API, passa por um portão único antes do roteamento.
 - **Sem token configurado:** a aplicação responde 503 a tudo, com credencial ou
   sem. A falha cai para o lado fechado.
 - **Sem logout:** para sair, apague o cookie `phporto_auth` do navegador ou
-  troque o token com `php token.php`.
+  troque o token com `php phporto token`.
 
 ## Limite de tentativas
 
@@ -518,7 +552,7 @@ sai do caminho do serviço `SunshineService`), senão a ação recusa.
 
 O processo web nunca escreve no `.env`, que guarda credencial de banco. O que a
 tela `/config` alterna vai para `storage/flags.json`, que só contém booleanos e
-tem allowlist de chaves. A única escrita no `.env` é a do `php token.php`,
+tem allowlist de chaves. A única escrita no `.env` é a do `php phporto token`,
 rodado à mão.
 
 ## A seção C da `/php` roda código com os seus poderes

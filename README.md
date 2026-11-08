@@ -79,7 +79,7 @@ Opcionais, por recurso:
 4. Gere o token de acesso:
 
    ```bash
-   php token.php
+   php phporto token
    ```
 
    O token é impresso e gravado no `.env`. No navegador, cole-o no campo de
@@ -88,10 +88,29 @@ Opcionais, por recurso:
 5. Suba o servidor:
 
    ```bash
-   php -S 127.0.0.1:4001 -t public public/router.php
+   php phporto serve
    ```
 
+   O comando funciona de qualquer pasta e sobe só em `127.0.0.1`, na porta de
+   `PHPORTO_PORT` (padrão 4001). Ctrl+C encerra. O `php -S 127.0.0.1:4001 -t public
+   public/router.php` continua valendo, só no loopback.
+
    E abra <http://127.0.0.1:4001>. O painel recusa conexões que não venham da própria máquina.
+
+## Iniciar com o Windows
+
+`php phporto autostart on` cria a tarefa `PHPorto` no Agendador (UAC): sobe o
+`php phporto serve` na inicialização, na sua conta, sem sessão aberta, sem nível
+elevado e sem guardar senha. `autostart off` remove a tarefa e `autostart status`
+mostra o estado. Também há a seção na `/config`. Não liga a rede privada. Detalhes
+em [docs/windows.md](docs/windows.md).
+
+## Acesso pela rede privada
+
+Desligado de fábrica. `php phporto network on` (confirmação digitada, UAC para a
+regra de firewall no perfil Private) libera o painel para IPs da sua rede
+privada; `php phporto network status` mostra o estado e `php phporto network off`
+desliga. O HTTP não tem TLS. Detalhes em [docs/seguranca.md](docs/seguranca.md).
 
 ## Telas
 

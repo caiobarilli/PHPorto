@@ -70,6 +70,33 @@ final class PhpServer
         throw new RuntimeException('php -S não respondeu na porta ' . $porta);
     }
 
+    public static function freePort(): int
+    {
+        $sonda = stream_socket_server('tcp://127.0.0.1:0');
+
+        if ($sonda === false) {
+            throw new RuntimeException('sem porta livre');
+        }
+
+        $nome = (string) stream_socket_get_name($sonda, false);
+        fclose($sonda);
+
+        return (int) substr($nome, (int) strrpos($nome, ':') + 1);
+    }
+
+    /**
+     * @param array<string, string> $dotenv
+     */
+    public static function makeRoot(string $root, array $dotenv): string
+    {
+        return self::buildRoot($root, $dotenv);
+    }
+
+    public static function removeRoot(string $root): void
+    {
+        self::remove($root);
+    }
+
     /**
      * @param array<string, string> $form
      * @param list<string> $headers
@@ -128,7 +155,7 @@ final class PhpServer
             }
         }
 
-        foreach (['public/index.php', 'public/router.php', 'src/bootstrap.php'] as $arquivo) {
+        foreach (['public/index.php', 'public/router.php', 'src/bootstrap.php', 'phporto'] as $arquivo) {
             if (!copy($projeto . '/' . $arquivo, $root . '/' . $arquivo)) {
                 throw new RuntimeException('não copiou ' . $arquivo);
             }

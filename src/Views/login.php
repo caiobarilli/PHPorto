@@ -13,7 +13,7 @@ use App\Http\Respond;
   <div class="topbar">
     <h1>PHPorto</h1>
   </div>
-  <p class="sub">Cole o token de acesso para entrar. Quem gera é o <code>php token.php</code>.</p>
+  <p class="sub">Cole o token de acesso para entrar. Quem gera é o <code>php phporto token</code>.</p>
 
   <?php if ($view->aviso !== ''): ?>
     <div class="alert alert-block" role="alert"><?= Respond::e($view->aviso) ?></div>

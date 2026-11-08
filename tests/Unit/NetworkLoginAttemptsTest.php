@@ -90,7 +90,7 @@ it('o gate respeita o enabled, a allow e o listener configurados', function () {
 
 function loginNetworkFixture(bool $enabled = true): \App\Network\State
 {
-    return new \App\Network\State($enabled, '192.168.1.20', 4001, ['192.168.1.0/24'], false, 'agora');
+    return new \App\Network\State($enabled, '192.168.1.20', 4001, ['192.168.1.0/24'], 'agora');
 }
 
 function loginServerFixture(array $overrides = []): array
