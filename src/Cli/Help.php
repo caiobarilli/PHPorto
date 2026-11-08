@@ -6,7 +6,7 @@ namespace App\Cli;
 
 final class Help
 {
-    public const COMMANDS = ['serve', 'token', 'network', 'help'];
+    public const COMMANDS = ['serve', 'token', 'network', 'autostart', 'help'];
 
     public static function general(): string
     {
@@ -20,6 +20,7 @@ Comandos:
   serve    Sobe o painel em 127.0.0.1, na porta do .env.
   token    Gera o token de acesso e grava no .env.
   network  Liga, desliga e mostra o acesso pela rede privada (on, off, status).
+  autostart Liga, desliga e mostra o início com o Windows (on, off, status).
   help     Mostra esta ajuda.
 
 Use "php phporto <comando> --help" para os detalhes de um comando.
@@ -76,6 +77,22 @@ status  Só leitura: estado, se o IP ainda é desta máquina, perfil da rede,
         regra de firewall e se o listener responde.
 
 Não há flag para pular a confirmação do on.
+
+TXT,
+            'autostart' => <<<'TXT'
+Uso:
+  php phporto autostart on
+  php phporto autostart off
+  php phporto autostart status
+
+on      Cria a tarefa PHPorto no Agendador de Tarefas (UAC): dispara na inicialização do
+        Windows, na conta do próprio usuário, sem precisar de sessão aberta (logon S4U),
+        sem nível elevado, e roda php.exe <raiz>\phporto serve. Reinicia em falha e não
+        deixa uma segunda instância. Nenhuma senha é lida, recebida ou guardada.
+        Não liga a rede privada. Repetir não muda nada.
+off     Remove a tarefa (UAC). Pode ser repetido sem erro. Não derruba o servidor que
+        estiver rodando e não mexe na rede privada.
+status  Só leitura: o estado guardado, a tarefa do Agendador e se o servidor responde.
 
 TXT,
             'help' => <<<'TXT'

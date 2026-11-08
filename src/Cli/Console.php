@@ -20,6 +20,17 @@ final class Console
         return new self(STDIN, STDOUT, STDERR);
     }
 
+    public static function quiet(): self
+    {
+        $stream = fopen('php://memory', 'w+');
+
+        if ($stream === false) {
+            throw new \RuntimeException('Sem memória para o console silencioso.');
+        }
+
+        return new self($stream, $stream, $stream);
+    }
+
     public function out(string $text): void
     {
         fwrite($this->out, $text);

@@ -36,6 +36,23 @@ final class Store
         return $this->read() ?? false;
     }
 
+    public function updatedAt(): ?string
+    {
+        $raw = is_file($this->path) ? file_get_contents($this->path) : false;
+
+        if (!is_string($raw)) {
+            return null;
+        }
+
+        try {
+            $data = json_decode($raw, true, 8, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return null;
+        }
+
+        return is_array($data) && is_string($data['updated_at'] ?? null) ? $data['updated_at'] : null;
+    }
+
     public function set(bool $enabled): void
     {
         $directory = dirname($this->path);
