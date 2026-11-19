@@ -37,14 +37,14 @@ correntes e mostre o verdadeiro potencial da sua máquina.
 Por baixo, o PHPorto recebe um
 comando pelo navegador ou por HTTP, executa dentro da distro do WSL ou como ação
 do Windows, devolve a saída e grava cada execução num banco — SQLite por padrão,
-MySQL ou MongoDB por configuração. PHP 8.5 sem framework, servido pelo servidor
+MySQL ou MongoDB por configuração. PHP 8.5+ sem framework, servido pelo servidor
 embutido do PHP.
 
 ## Requisitos
 
 - Windows 11 (desenvolvido e testado nele)
-- PHP 8.5 na linha de comando, com as extensões `json`, `pdo`, `pdo_sqlite` e
-  `pdo_mysql`
+- PHP 8.5 ou superior na linha de comando (recomendado o 8.6.0), com as
+  extensões `json`, `pdo`, `pdo_sqlite` e `pdo_mysql`
 - Composer
 - WSL2 com uma distro instalada, visível em `wsl -l -q`
 - Windows PowerShell 5.1, para a tela `/win`
@@ -57,45 +57,100 @@ Opcionais, por recurso:
 - Ollama: placa NVIDIA com `nvidia-smi` recomendada; sem ela, a medição da
   memória de vídeo é aproximada
 
-## Instalação
+## Instalação no Windows zerado
 
-1. Clone o repositório:
+Roteiro testado num Windows 11 recém-instalado. Abra um PowerShell **novo**
+depois de cada passo, para ele enxergar o PATH atualizado, e use Administrador
+só onde estiver indicado.
 
-   ```bash
-   git clone https://github.com/caiobarilli/PHPorto.git
-   cd PHPorto
+1. Baixe o [PHP 8.6.0 NTS](https://downloads.php.net/~windows/releases/php-8.6.0-nts-Win32-vs18-x64.zip)
+   em `C:\` e instale o
+   [Visual C++ Redistributable](https://aka.ms/vc14/vc_redist.x64.exe).
+
+2. No PowerShell **como Administrador**, extraia o PHP e gere o `php.ini` com as
+   extensões:
+
+   ```powershell
+   Expand-Archive C:\php-8.6.0-nts-Win32-vs18-x64.zip C:\php; del C:\php-8.6.0-nts-Win32-vs18-x64.zip
+   (gc C:\php\php.ini-development) -replace '^;(extension_dir = "ext")','$1' | Set-Content C:\php\php.ini; 'curl','fileinfo','mbstring','openssl','pdo_mysql','pdo_sqlite','sqlite3','zip' | % { "extension=$_" } | Add-Content C:\php\php.ini
    ```
 
-2. Instale as dependências:
+3. Instale o Composer com o
+   [Composer-Setup.exe](https://getcomposer.org/Composer-Setup.exe), apontando
+   para `C:\php\php.exe` e marcando a opção de adicionar ao PATH. Confira:
 
-   ```bash
-   composer install
+   ```powershell
+   php -v; php -m; composer -V
    ```
 
-3. Copie o `.env.example` para `.env` e ajuste. O mínimo é `PHPORTO_WSL_ROOT`,
-   a pasta onde os comandos começam, vista de dentro do WSL. As chaves estão em
-   [docs/configuracao.md](docs/configuracao.md).
+4. No PowerShell **como Administrador**, tire a pasta do código e o cache do
+   Composer da varredura do Defender:
 
-4. Gere o token de acesso:
-
-   ```bash
-   php phporto token
+   ```powershell
+   Add-MpPreference -ExclusionPath "$HOME\code","$env:LOCALAPPDATA\Composer" -ExclusionProcess "C:\php\php.exe"
    ```
 
-   O token é impresso e gravado no `.env`. No navegador, cole-o no campo de
-   senha do diálogo de login; o usuário é ignorado.
+5. No PowerShell normal, baixe o PHPorto e instale as dependências:
 
-5. Suba o servidor:
-
-   ```bash
-   php phporto serve
+   ```powershell
+   mkdir ~\code -Force; cd ~\code; irm https://github.com/caiobarilli/PHPorto/archive/refs/heads/main.zip -OutFile p.zip; Expand-Archive p.zip .; ren PHPorto-main PHPorto; del p.zip; cd PHPorto; composer install; copy .env.example .env
    ```
 
-   O comando funciona de qualquer pasta e sobe só em `127.0.0.1`, na porta de
-   `PHPORTO_PORT` (padrão 4001). Ctrl+C encerra. O `php -S 127.0.0.1:4001 -t public
-   public/router.php` continua valendo, só no loopback.
+   As chaves do `.env` estão em [docs/configuracao.md](docs/configuracao.md).
 
-   E abra <http://127.0.0.1:4001>. O painel recusa conexões que não venham da própria máquina.
+6. No PowerShell normal, gere o token de acesso:
+
+   ```powershell
+   cd ~\code\PHPorto; php phporto token
+   ```
+
+   O token é impresso e gravado no `.env`.
+
+7. No PowerShell normal (**nunca** como Administrador: o `serve` se recusa a
+   rodar elevado), suba o servidor:
+
+   ```powershell
+   cd ~\code\PHPorto; php phporto serve
+   ```
+
+   Abra <http://127.0.0.1:4001> e cole o token no campo de senha do diálogo de
+   login; o usuário é ignorado. O servidor sobe só em `127.0.0.1`, na porta de
+   `PHPORTO_PORT` (padrão 4001), e Ctrl+C encerra.
+
+8. Em Configurações (`/config`), ligue **Windows — PowerShell elevado**.
+
+9. Na `/win`, aplique os **Ajustes**, o **Remover apps** e o **Otimizar** e, em
+   **DNS**, escolha a Cloudflare.
+
+10. Em Aplicativos, instale o Git.
+
+11. Ative o WSL e reinicie.
+
+12. Instale o Debian pela Microsoft Store.
+
+13. Instale o Docker e reinicie.
+
+14. Em Configurações (`/config`), ligue **Windows — Painel do Hyper-V** e
+    reinicie. O reboot conclui a instalação do Hyper-V.
+
+### Atualizar de 8.5 para 8.6
+
+Pare o `serve` (Ctrl+C), instale o
+[Visual C++ Redistributable](https://aka.ms/vc14/vc_redist.x64.exe) e, com o zip
+do [PHP 8.6.0 NTS](https://downloads.php.net/~windows/releases/php-8.6.0-nts-Win32-vs18-x64.zip)
+em `C:\`, rode no PowerShell **como Administrador**:
+
+```powershell
+rd C:\php -r -fo; Expand-Archive C:\php-8.6.0-nts-Win32-vs18-x64.zip C:\php; del C:\php-8.6.0-nts-Win32-vs18-x64.zip; (gc C:\php\php.ini-development) -replace '^;(extension_dir = "ext")','$1' | Set-Content C:\php\php.ini; 'curl','fileinfo','mbstring','openssl','pdo_mysql','pdo_sqlite','sqlite3','zip' | % { "extension=$_" } | Add-Content C:\php\php.ini
+```
+
+Depois, num PowerShell normal, reinstale as dependências e suba o `serve` de
+novo:
+
+```powershell
+cd ~\code\PHPorto; composer install
+cd ~\code\PHPorto; php phporto serve
+```
 
 ## Iniciar com o Windows
 
